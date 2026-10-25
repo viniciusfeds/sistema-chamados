@@ -15,7 +15,7 @@ from sqlalchemy import select  # noqa: E402
 from app.auth import hash_senha  # noqa: E402
 from app.db import SessionLocal, criar_tabelas  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Chamado, Cliente, Unidade, Usuario  # noqa: E402
+from app.models import Chamado, Cliente, EnvioWhatsApp, Unidade, Usuario  # noqa: E402
 from scripts.gerenciar import importar  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -468,3 +468,156 @@ def test_aviso_email_chamado_novo(monkeypatch):
                                                "contato": "11 96666-5555", "assunto": "Som baixo",
                                                "problema": "Caixa chiando", "csrf": tok})
     assert enviados and "Som baixo" in enviados[0][0] and "Carla" in enviados[0][1]
+
+
+# ------------------------------------------------------------------ v1.2: WhatsApp oficial (API simulada)
+@pytest.fixture
+def wa(monkeypatch):
+    from app import config, whatsapp
+    enviados = []
+    monkeypatch.setattr(config, "WHATSAPP_TOKEN", "tok")
+    monkeypatch.setattr(config, "WHATSAPP_PHONE_ID", "123456")
+    monkeypatch.setattr(config, "WHATSAPP_APP_SECRET", "segredo")
+    monkeypatch.setattr(config, "WHATSAPP_VERIFY_TOKEN", "verifica")
+    monkeypatch.setattr(whatsapp, "_em_segundo_plano", lambda fn, *a: fn(*a))
+    estado = {"falhar": False}
+
+    def _post(payload):
+        if estado["falhar"]:
+            raise whatsapp.ErroAPI("132001: Template name does not exist in the translation")
+        enviados.append(payload)
+        import uuid
+        return {"messages": [{"id": f"wamid.{uuid.uuid4().hex}"}]}
+    monkeypatch.setattr(whatsapp, "_post", _post)
+    return enviados, estado
+
+
+def _cadastrar_contatos_wa():
+    a = entrar("admin@t.com")
+    tok = _csrf(a.get("/admin/whatsapp").text)
+    with SessionLocal() as db:
+        cisper = db.scalar(select(Unidade).where(Unidade.nome == "SkyFit Cisper")).id
+    a.post("/admin/whatsapp/contatos", data={"cliente_id": IDS["sky"], "nome": "Gestora Geral",
+                                             "telefone": "(11) 95555-0001", "csrf": tok,
+                                             "eventos": ["abertura", "status", "conclusao"]})
+    a.post("/admin/whatsapp/contatos", data={"cliente_id": IDS["sky"], "unidade_id": IDS["carrao"],
+                                             "nome": "Alessandra Carrão", "telefone": "11955550002",
+                                             "csrf": tok, "eventos": ["conclusao"]})
+    a.post("/admin/whatsapp/contatos", data={"cliente_id": IDS["sky"], "unidade_id": cisper,
+                                             "nome": "Cisper", "telefone": "11955550003", "csrf": tok})
+    a.post("/admin/whatsapp/contatos", data={"cliente_id": IDS["sky"], "nome": "Ruim", "telefone": "123",
+                                             "csrf": tok})
+    return a
+
+
+def test_whatsapp_desligado_sem_configuracao():
+    _liberar_limite_ip()
+    with SessionLocal() as db:
+        antes = db.query(EnvioWhatsApp).count()
+    _abrir_publico(TestClient(app), IDS["sky_slug"], aceita_whatsapp="1")
+    with SessionLocal() as db:
+        assert db.query(EnvioWhatsApp).count() == antes
+    assert "Não configurado" in entrar("admin@t.com").get("/admin/whatsapp").text
+
+
+def test_whatsapp_fluxo_completo(wa):
+    enviados, estado = wa
+    a = _cadastrar_contatos_wa()
+    pag = a.get("/admin/whatsapp").text
+    assert "Gestora Geral" in pag and "Alessandra Carrão" in pag and "+5511955550002" in pag
+    assert "Ruim" not in pag  # telefone inválido recusado
+    # abertura pelo link, com opt-in: gestora geral + solicitante (Alessandra só recebe conclusão; Cisper é outra unidade)
+    _liberar_limite_ip()
+    r = _abrir_publico(TestClient(app), IDS["sky_slug"], aceita_whatsapp="1", contato="(11) 98888-1234")
+    assert r.status_code == 303
+    para = sorted(p["to"] for p in enviados)
+    assert para == ["5511955550001", "5511988881234"]
+    p0 = enviados[0]
+    assert p0["type"] == "template" and p0["template"]["name"] == "chamado_aberto"
+    assert p0["template"]["language"]["code"] == "pt_BR"
+    params = [x["text"] for x in p0["template"]["components"][0]["parameters"]]
+    assert len(params) == 5 and "SkyFit Carrão" in params and params[-1].startswith("http")
+    assert all("\n" not in x for x in params)
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.origem == "link").order_by(Chamado.numero.desc()))
+        url = f"/chamados/{ch.numero}"
+    # ação que não muda o status geral: nada é enviado
+    t = entrar("tec@t.com")
+    tok = _csrf(t.get(url).text)
+    enviados.clear()
+    t.post(f"{url}/acoes", data={"descricao": "Agendado com a recepção", "status": "Aguardando", "csrf": tok})
+    assert enviados == []
+    # muda para em andamento → "chamado_atualizado"
+    t.post(f"{url}/acoes", data={"descricao": "Técnico a caminho", "status": "Em andamento", "data": "2026-10-25",
+                                 "hora": "15:00", "csrf": tok})
+    assert {p["template"]["name"] for p in enviados} == {"chamado_atualizado"}
+    assert sorted(p["to"] for p in enviados) == ["5511955550001", "5511988881234"]
+    texto = [x["text"] for x in enviados[0]["template"]["components"][0]["parameters"]]
+    assert "Em andamento" in texto and any("Técnico a caminho" in x for x in texto)
+    # conclui tudo → "chamado_concluido", agora também para a Alessandra
+    enviados.clear()
+    p = t.get(url).text
+    for i in re.findall(url + r'/acoes/(\d+)"', p):
+        t.post(f"{url}/acoes/{i}", data={"descricao": "ok", "status": "Concluído", "data": "2026-10-25", "csrf": tok})
+    concl = [p for p in enviados if p["template"]["name"] == "chamado_concluido"]
+    assert concl and "5511955550002" in {p["to"] for p in concl}
+    # a Alessandra (só "conclusão") não recebeu nenhuma atualização intermediária
+    assert all(p["template"]["name"] == "chamado_concluido" for p in enviados if p["to"] == "5511955550002")
+    assert "Avisos automáticos de WhatsApp" in t.get(url).text
+
+
+def test_whatsapp_falha_reenvio_e_webhook(wa):
+    import hashlib
+    import hmac
+    import json as _json
+    enviados, estado = wa
+    _cadastrar_contatos_wa()
+    estado["falhar"] = True
+    _liberar_limite_ip()
+    _abrir_publico(TestClient(app), IDS["sky_slug"])
+    with SessionLocal() as db:
+        env = db.scalar(select(EnvioWhatsApp).order_by(EnvioWhatsApp.id.desc()))
+        eid = env.id
+        assert env.status == "falhou" and "Template name" in env.erro
+    a = entrar("admin@t.com")
+    assert "Falhou" in a.get("/admin/whatsapp").text
+    estado["falhar"] = False
+    tok = _csrf(a.get("/admin/whatsapp").text)
+    a.post(f"/whatsapp/envios/{eid}/reenviar", data={"csrf": tok})
+    with SessionLocal() as db:
+        env = db.get(EnvioWhatsApp, eid)
+        assert env.status == "enviado" and env.wamid
+        wamid = env.wamid
+    c = TestClient(app)
+    # verificação do webhook
+    assert c.get("/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=errado&hub.challenge=1").status_code == 403
+    assert c.get("/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=verifica&hub.challenge=777").text == "777"
+
+    def post(dados, assinar=True):
+        corpo = _json.dumps(dados).encode()
+        sig = "sha256=" + hmac.new(b"segredo", corpo, hashlib.sha256).hexdigest() if assinar else "sha256=x"
+        return c.post("/webhook/whatsapp", content=corpo, headers={"X-Hub-Signature-256": sig,
+                                                                   "Content-Type": "application/json"})
+    st = lambda s: {"entry": [{"changes": [{"value": {"statuses": [{"id": wamid, "status": s}]}}]}]}
+    assert post(st("delivered"), assinar=False).status_code == 403
+    assert post(st("read")).status_code == 200
+    assert post(st("delivered")).status_code == 200   # não volta de "lido" para "entregue"
+    with SessionLocal() as db:
+        assert db.get(EnvioWhatsApp, eid).status == "lido"
+    falha = {"entry": [{"changes": [{"value": {"statuses": [{"id": wamid, "status": "failed",
+             "errors": [{"code": 131026, "title": "Message undeliverable"}]}]}}]}]}
+    post(falha)
+    with SessionLocal() as db:
+        e = db.get(EnvioWhatsApp, eid)
+        assert e.status == "falhou" and "131026" in e.erro
+
+
+def test_whatsapp_teste_admin(wa):
+    enviados, _ = wa
+    a = entrar("admin@t.com")
+    tok = _csrf(a.get("/admin/whatsapp").text)
+    r = a.post("/admin/whatsapp/teste", data={"telefone": "11 94444-3333", "csrf": tok})
+    assert "teste enviada" in r.text and enviados[-1]["to"] == "5511944443333"
+    r = a.post("/admin/whatsapp/teste", data={"telefone": "99", "csrf": tok})
+    assert "Telefone inválido" in r.text
+    assert entrar("tec@t.com").get("/admin/whatsapp").status_code == 403

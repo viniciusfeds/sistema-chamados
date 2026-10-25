@@ -124,3 +124,8 @@ form.filtros .q{grid-column:span 2}
 @media (max-width:820px){form.filtros .q{grid-column:1/-1}}
 label.check{display:flex;gap:8px;align-items:flex-start;font-weight:600;color:var(--texto);font-size:.95rem;margin:4px 0 14px}
 label.check input{width:auto;margin-top:3px}
+
+/* --- v1.2: WhatsApp automático --- */
+.envio{font-weight:700;font-size:.85rem}
+.envio-pendente{color:#777}.envio-enviado{color:#1F5FA8}.envio-entregue{color:#2E7D4F}.envio-lido{color:#1F9E55}.envio-falhou{color:#B3261E}
+code{background:#F2F2F2;border-radius:4px;padding:1px 5px;font-size:.9em}

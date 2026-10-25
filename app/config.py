@@ -56,6 +56,17 @@ SMTP_SENHA = os.environ.get("SMTP_SENHA", "")
 SMTP_REMETENTE = os.environ.get("SMTP_REMETENTE", SMTP_USUARIO)
 AVISO_EMAILS = [e.strip() for e in os.environ.get("AVISO_EMAILS", "").split(",") if e.strip()]
 
+# WhatsApp — API oficial da Meta (Cloud API). Ver docs/WHATSAPP.md
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
+WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")
+WHATSAPP_API_VERSAO = os.environ.get("WHATSAPP_API_VERSAO", "v23.0")
+WHATSAPP_IDIOMA = os.environ.get("WHATSAPP_IDIOMA", "pt_BR")
+WHATSAPP_MODELO_ABERTO = os.environ.get("WHATSAPP_MODELO_ABERTO", "chamado_aberto")
+WHATSAPP_MODELO_ATUALIZADO = os.environ.get("WHATSAPP_MODELO_ATUALIZADO", "chamado_atualizado")
+WHATSAPP_MODELO_CONCLUIDO = os.environ.get("WHATSAPP_MODELO_CONCLUIDO", "chamado_concluido")
+WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")   # webhook (opcional)
+WHATSAPP_APP_SECRET = os.environ.get("WHATSAPP_APP_SECRET", "")       # webhook (opcional)
+
 if not SECRET_KEY:
     # Sem SECRET_KEY no .env: gera uma vez e guarda em dados/.secret_key,
     # para as sessões continuarem válidas depois de reiniciar (inclusive no Docker).

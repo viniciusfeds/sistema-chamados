@@ -122,6 +122,7 @@ class Chamado(Base):
     solicitante_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     token_publico: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True,
                                                       default=lambda: novo_token(18))
+    solicitante_aceita_whatsapp: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     prioridade: Mapped[str | None] = mapped_column(String(10), nullable=True, default="normal")
     tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
@@ -134,6 +135,8 @@ class Chamado(Base):
     tecnico = relationship("Usuario", foreign_keys=[tecnico_id])
     anexos = relationship("Anexo", back_populates="chamado", cascade="all, delete-orphan",
                           order_by="Anexo.id")
+    envios = relationship("EnvioWhatsApp", back_populates="chamado", cascade="all, delete-orphan",
+                          order_by="EnvioWhatsApp.id")
     acoes = relationship("Acao", back_populates="chamado", cascade="all, delete-orphan",
                          order_by="Acao.id")
 
@@ -209,3 +212,48 @@ class Anexo(Base):
     chamado = relationship("Chamado", back_populates="anexos")
     acao = relationship("Acao", back_populates="anexos")
     autor = relationship("Usuario")
+
+
+EVENTOS_AVISO = {
+    "abertura": "Chamado aberto",
+    "status": "Mudança de status",
+    "conclusao": "Chamado concluído",
+}
+
+
+class ContatoAviso(Base):
+    """Quem recebe os avisos automáticos de WhatsApp de um cliente (todas as unidades) ou de uma unidade."""
+    __tablename__ = "contatos_aviso"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), index=True)
+    unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id", ondelete="CASCADE"), nullable=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    telefone: Mapped[str] = mapped_column(String(20))       # só dígitos, com 55
+    eventos: Mapped[list | None] = mapped_column(JSON, nullable=True)  # ["abertura","status","conclusao"]
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente = relationship("Cliente")
+    unidade = relationship("Unidade")
+
+    def recebe(self, evento):
+        return self.ativo and evento in (self.eventos or list(EVENTOS_AVISO))
+
+
+class EnvioWhatsApp(Base):
+    """Histórico de cada mensagem automática enviada pela API oficial do WhatsApp."""
+    __tablename__ = "envios_whatsapp"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chamado_id: Mapped[int | None] = mapped_column(ForeignKey("chamados.id", ondelete="CASCADE"),
+                                                   nullable=True, index=True)
+    evento: Mapped[str] = mapped_column(String(20))
+    destino_nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    telefone: Mapped[str] = mapped_column(String(20))
+    modelo: Mapped[str] = mapped_column(String(80))
+    parametros: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente/enviado/entregue/lido/falhou
+    wamid: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tentativas: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    chamado = relationship("Chamado", back_populates="envios")

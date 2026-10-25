@@ -26,6 +26,8 @@
   {{ campo_fotos(maximo=max_fotos, rotulo="Fotos do problema") }}
   <label class="check"><input type="checkbox" name="urgente" value="1" {{ 'checked' if v.urgente }}>
     É urgente (equipamento parado, catraca sem liberar, sem imagem das câmeras…)</label>
+  <label class="check"><input type="checkbox" name="aceita_whatsapp" value="1" {{ 'checked' if v.aceita_whatsapp }}>
+    Quero receber as atualizações deste chamado pelo WhatsApp informado acima</label>
   <button class="btn" style="width:100%;justify-content:center">Enviar chamado</button>
 </form>
 {% endblock %}

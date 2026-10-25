@@ -1,4 +1,6 @@
 """Sistema de Chamados TecnosIT — aplicação web (FastAPI), multi-cliente."""
+import hmac
+import json
 import unicodedata
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
@@ -15,12 +17,12 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import avisos, config, fotos, pdf, regras
+from . import avisos, config, fotos, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
-from .models import (PAPEIS, PRIORIDADES, STATUS_ACAO, Acao, Anexo, Chamado, Cliente, Unidade, Usuario,
-                     novo_token)
+from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, Acao, Anexo, Chamado, Cliente,
+                     ContatoAviso, EnvioWhatsApp, Unidade, Usuario, novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -43,7 +45,8 @@ tpl = Jinja2Templates(directory=APP_DIR / "templates")
 tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
-                       CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, config=config)
+                       CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, EVENTOS_AVISO=EVENTOS_AVISO,
+                       ROTULO_ENVIO=whatsapp.ROTULO_ENVIO, config=config)
 tpl.env.filters["fmt"] = regras.para_html
 tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
 
@@ -120,11 +123,32 @@ def _diag_para_texto(d):
 
 def _opts_chamado():
     return (selectinload(Chamado.acoes), selectinload(Chamado.anexos), selectinload(Chamado.tecnico),
+            selectinload(Chamado.envios),
             selectinload(Chamado.unidade).selectinload(Unidade.cliente))
 
 
 def base_url(request) -> str:
     return config.URL_PUBLICA or str(request.base_url).rstrip("/")
+
+
+def link_acompanhar(request, ch) -> str:
+    return f"{base_url(request)}/acompanhar/{ch.token_publico}"
+
+
+def avisar_whatsapp(request, db, ch, antes=None):
+    """Dispara os avisos automáticos de WhatsApp conforme o que mudou no chamado."""
+    if antes is None:
+        evento = "abertura"
+    else:
+        depois = regras.status_geral(ch)
+        if depois == antes or depois == "cancelado":
+            return
+        evento = "conclusao" if depois == "concluido" else "status"
+    try:
+        whatsapp.disparar(db, ch, evento, link_acompanhar(request, ch))
+    except Exception as e:  # o aviso nunca impede o registro do chamado
+        import logging
+        logging.getLogger("chamados").warning("Falha ao preparar aviso de WhatsApp: %s", e)
 
 
 def tecnicos(db):
@@ -348,6 +372,7 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
     _, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="equipe" if u.equipe else "unidade",
                                   autor_id=u.id)
     db.commit()
+    avisar_whatsapp(request, db, ch)
     _flash_erros_fotos(request, erros, f"Ticket {ch.numero_fmt} aberto.")
     return voltar(f"/chamados/{ch.numero}")
 
@@ -394,6 +419,7 @@ def nova_acao(request: Request, numero: int, descricao: str = Form(...), status:
     _, erros = fotos.salvar_fotos(ch, fotos_enviadas, acao=acao, origem="equipe", autor_id=u.id)
     _apos_mudanca(ch, antes)
     db.commit()
+    avisar_whatsapp(request, db, ch, antes)
     _flash_erros_fotos(request, erros, "Ação registrada.")
     return voltar(f"/chamados/{numero}#acoes")
 
@@ -476,6 +502,7 @@ def editar_acao(request: Request, numero: int, acao_id: int, operacao: str = For
         msg = "Ação atualizada."
     _apos_mudanca(ch, antes)
     db.commit()
+    avisar_whatsapp(request, db, ch, antes)
     flash(request, msg)
     return voltar(f"/chamados/{numero}#acoes")
 
@@ -555,11 +582,13 @@ def publico_form(request: Request, slug: str, db: Session = Depends(get_db)):
 def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome: str = Form(""),
                   contato: str = Form(""), email: str = Form(""), assunto: str = Form(""),
                   problema: str = Form(""), urgente: str = Form(""), site: str = Form(""),
+                  aceita_whatsapp: str = Form(""),
                   fotos_enviadas: list[UploadFile] = File(default=[]), db: Session = Depends(get_db)):
     cli = _cliente_publico(db, slug)
     unidades = [x for x in cli.unidades if x.ativa]
     v = dict(unidade_id=_int(unidade_id), nome=nome.strip(), contato=contato.strip(),
-             email=email.strip(), assunto=assunto.strip(), problema=problema.strip(), urgente=bool(urgente))
+             email=email.strip(), assunto=assunto.strip(), problema=problema.strip(), urgente=bool(urgente),
+             aceita_whatsapp=bool(aceita_whatsapp))
     if site:  # campo invisível: só robôs preenchem
         raise HTTPException(400, "Não foi possível enviar o chamado.")
     un = next((x for x in unidades if x.id == v["unidade_id"]), None)
@@ -585,7 +614,8 @@ def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome:
                  problema=v["problema"][:5000], abertura=hoje, origem="link",
                  prioridade="alta" if v["urgente"] else "normal",
                  solicitante_nome=v["nome"][:120], solicitante_contato=v["contato"][:120],
-                 solicitante_email=v["email"][:160] or None, solicitante_ip=ip, criado_em=agora_utc())
+                 solicitante_email=v["email"][:160] or None, solicitante_ip=ip, criado_em=agora_utc(),
+                 solicitante_aceita_whatsapp=v["aceita_whatsapp"])
     ch.acoes.append(Acao(data=hoje, hora=hm, status="Concluído",
                          descricao=f"Abertura do chamado pelo link, por {v['nome'][:120]}"))
     ch.acoes.append(Acao(quando_texto="A agendar", descricao="Atendimento técnico", status="Aguardando"))
@@ -593,6 +623,7 @@ def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome:
     _, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="link", maximo=FOTOS_PUBLICO)
     db.commit()
     avisos.avisar_chamado_novo(ch, f"{base_url(request)}/chamados/{ch.numero}")
+    avisar_whatsapp(request, db, ch)
     request.session["aberto_agora"] = ch.token_publico
     if erros:
         request.session["flash"] = {"msg": "Chamado aberto, mas algumas fotos não foram aceitas: " + " ".join(erros),
@@ -788,6 +819,104 @@ def admin_usuario_op(request: Request, uid: int, operacao: str = Form(...), senh
         flash(request, f"Senha de {alvo.nome} alterada.")
     db.commit()
     return voltar("/admin#usuarios")
+
+
+# ---------------------------------------------------------------- WhatsApp (API oficial)
+@app.get("/admin/whatsapp", response_class=HTMLResponse)
+def admin_whatsapp(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    clientes = db.scalars(select(Cliente).order_by(Cliente.nome).options(selectinload(Cliente.unidades))).all()
+    contatos = db.scalars(select(ContatoAviso).order_by(ContatoAviso.cliente_id, ContatoAviso.nome)).all()
+    envios = db.scalars(select(EnvioWhatsApp).order_by(EnvioWhatsApp.id.desc()).limit(100)
+                        .options(selectinload(EnvioWhatsApp.chamado))).all()
+    return render(request, "admin_whatsapp.html", u=u, clientes=clientes, contatos=contatos, envios=envios,
+                  configurado=whatsapp.configurado(), textos=whatsapp.TEXTOS_MODELOS,
+                  nome_modelo=whatsapp.nome_modelo, webhook=f"{base_url(request)}/webhook/whatsapp")
+
+
+@app.post("/admin/whatsapp/contatos", dependencies=[Depends(checar_csrf)])
+def admin_contato(request: Request, cliente_id: int = Form(...), unidade_id: str = Form(""),
+                  nome: str = Form(...), telefone: str = Form(...), eventos: list[str] = Form(default=[]),
+                  u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    cli = db.get(Cliente, cliente_id)
+    un = db.get(Unidade, _int(unidade_id)) if _int(unidade_id) else None
+    tel = whatsapp.normalizar_telefone(telefone)
+    if not cli or (un and un.cliente_id != cli.id):
+        flash(request, "Selecione o cliente (e a unidade dele, se quiser).", "erro")
+    elif not tel:
+        flash(request, "Telefone inválido. Use DDD + número, ex.: 11 91234-5678.", "erro")
+    elif not nome.strip():
+        flash(request, "Informe o nome do contato.", "erro")
+    else:
+        evs = [e for e in eventos if e in EVENTOS_AVISO] or list(EVENTOS_AVISO)
+        db.add(ContatoAviso(cliente_id=cli.id, unidade_id=un.id if un else None, nome=nome.strip()[:120],
+                            telefone=tel, eventos=evs))
+        db.commit()
+        flash(request, f"Contato {nome.strip()} cadastrado.")
+    return voltar("/admin/whatsapp#contatos")
+
+
+@app.post("/admin/whatsapp/contatos/{cid}", dependencies=[Depends(checar_csrf)])
+def admin_contato_op(request: Request, cid: int, operacao: str = Form(...), u: Usuario = Depends(so_admin),
+                     db: Session = Depends(get_db)):
+    c = db.get(ContatoAviso, cid)
+    if not c:
+        raise HTTPException(404)
+    if operacao == "excluir":
+        db.delete(c); flash(request, "Contato removido.")
+    else:
+        c.ativo = not c.ativo; flash(request, f"Contato {'ativado' if c.ativo else 'pausado'}.")
+    db.commit()
+    return voltar("/admin/whatsapp#contatos")
+
+
+@app.post("/admin/whatsapp/teste", dependencies=[Depends(checar_csrf)])
+def admin_whatsapp_teste(request: Request, telefone: str = Form(...), u: Usuario = Depends(so_admin)):
+    if not whatsapp.configurado():
+        flash(request, "Configure WHATSAPP_TOKEN e WHATSAPP_PHONE_ID no .env primeiro.", "erro")
+    else:
+        try:
+            whatsapp.enviar_teste(telefone)
+            flash(request, "Mensagem de teste enviada. Confira o WhatsApp do número informado.")
+        except whatsapp.ErroAPI as e:
+            flash(request, f"A Meta recusou o envio: {e}", "erro")
+    return voltar("/admin/whatsapp")
+
+
+@app.post("/whatsapp/envios/{eid}/reenviar", dependencies=[Depends(checar_csrf)])
+def reenviar(request: Request, eid: int, voltar_para: str = Form("/admin/whatsapp"),
+             u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    env = db.get(EnvioWhatsApp, eid)
+    if not env:
+        raise HTTPException(404)
+    env.status, env.erro = "pendente", None
+    db.commit()
+    whatsapp.enviar(env.id)
+    db.refresh(env)
+    flash(request, "Reenviado." if env.status != "falhou" else f"Falhou de novo: {env.erro}",
+          "ok" if env.status != "falhou" else "erro")
+    return voltar(voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/")
+
+
+@app.get("/webhook/whatsapp", include_in_schema=False)
+def webhook_verificar(request: Request):
+    q = request.query_params
+    if (q.get("hub.mode") == "subscribe" and config.WHATSAPP_VERIFY_TOKEN
+            and hmac.compare_digest(q.get("hub.verify_token", ""), config.WHATSAPP_VERIFY_TOKEN)):
+        return Response(q.get("hub.challenge", ""), media_type="text/plain")
+    raise HTTPException(403, "Token de verificação inválido.")
+
+
+@app.post("/webhook/whatsapp", include_in_schema=False)
+async def webhook_receber(request: Request):
+    corpo = await request.body()
+    if not whatsapp.assinatura_valida(corpo, request.headers.get("x-hub-signature-256")):
+        raise HTTPException(403, "Assinatura inválida.")
+    try:
+        dados = json.loads(corpo or b"{}")
+    except ValueError:
+        raise HTTPException(400, "JSON inválido.")
+    whatsapp.processar_webhook(dados)
+    return {"ok": True}
 
 
 @app.get("/conta", response_class=HTMLResponse)

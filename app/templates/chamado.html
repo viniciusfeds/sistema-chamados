@@ -136,6 +136,26 @@
 
 {{ caixa_status(ch, sit, texto_padrao) }}
 
+{% if u.equipe and ch.envios %}
+<div class="card" id="envios">
+  <h3 style="margin-bottom:6px">Avisos automáticos de WhatsApp</h3>
+  <table class="resp">
+    <thead><tr><th>Evento</th><th>Para</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for e in ch.envios|reverse %}
+    <tr><td data-l="Evento">{{ EVENTOS_AVISO.get(e.evento, e.evento) }}</td>
+      <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
+      <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
+        {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>
+      <td>{% if e.status == 'falhou' %}<form method="post" action="/whatsapp/envios/{{ e.id }}/reenviar">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="/chamados/{{ ch.numero }}#envios">
+        <button class="btn peq sec">Reenviar</button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <div class="card">
   <h3 style="margin-bottom:6px">Link de acompanhamento</h3>
   <p class="dica" style="margin-top:0">Quem tiver este link vê o andamento e baixa o PDF, sem precisar de login. Ele também é mostrado a quem abriu o chamado pela página pública.</p>

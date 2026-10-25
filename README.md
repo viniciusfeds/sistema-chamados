@@ -9,7 +9,8 @@ Sistema web **multi-cliente** para abrir, acompanhar e registrar chamados técni
   - O chamado chega no painel da equipe marcado como **via link**, com o WhatsApp clicável.
   - Proteções: link difícil de adivinhar, campo invisível anti-robô, limite de 5 chamados por IP a cada 30 min e validação dos campos.
   - Em **Administração → Clientes** é possível copiar, desativar ou gerar um novo link (o anterior para de funcionar).
-- **WhatsApp**: no chamado, "Enviar no WhatsApp" abre o WhatsApp com a mensagem pronta (ticket, status, última ação e link de acompanhamento); é só escolher o grupo. "Avisar <nome>" manda direto para quem abriu pelo link.
+- **WhatsApp automático (API oficial da Meta)**: avisos enviados sozinhos na abertura, mudança de status e conclusão, para os contatos de cada cliente/unidade e para quem abriu pelo link (se optar). Histórico com entregue/lido e reenvio. Configuração em **Administração → WhatsApp automático** e passo a passo em [`docs/WHATSAPP.md`](docs/WHATSAPP.md).
+- **WhatsApp manual**: no chamado, "Enviar no WhatsApp" abre o WhatsApp com a mensagem pronta (ticket, status, última ação e link de acompanhamento); é só escolher o grupo. "Avisar <nome>" manda direto para quem abriu pelo link.
 - **Fotos**: nas ações, no próprio chamado e na página pública. São reduzidas (máx. 1600 px), perdem os metadados (GPS/modelo do celular) e aparecem no sistema, no acompanhamento e no PDF. Ficam em `dados/anexos/` (no Docker, dentro do volume).
 - **Prioridade e técnico responsável**: Urgente/Alta/Normal/Baixa, filtro "Meus chamados" e **alerta de chamado parado** quando passa do prazo da prioridade (4h/12h/48h/120h, configurável no `.env`).
 - **Aviso por e-mail** (opcional): configure `SMTP_*` e `AVISO_EMAILS` no `.env` para receber um e-mail a cada chamado aberto pelo link.

@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.2.0 — 2026-10-25
+- **WhatsApp automático pela API oficial da Meta (Cloud API)**: avisos enviados sozinhos quando o chamado é aberto, muda de status e é concluído
+- Contatos de aviso por cliente (todas as unidades) ou por unidade, escolhendo os eventos de cada um
+- Quem abre pelo link público pode optar por receber as atualizações no próprio WhatsApp
+- Histórico de envios (na fila, enviado, entregue, lido, falhou) com reenvio, no chamado e em Administração → WhatsApp automático
+- Envio de teste, textos dos modelos prontos para copiar e webhook com verificação de assinatura
+- Guia de configuração na Meta: `docs/WHATSAPP.md`
+
 ## 1.1.0 — 2026-10-25
 - **WhatsApp**: botão "Enviar no WhatsApp" no chamado com a mensagem pronta (ticket, status, última ação e link de acompanhamento) e botão "Avisar" para o WhatsApp de quem abriu pelo link
 - **Fotos**: nas ações, no chamado e na página pública (até 3); reduzidas automaticamente, sem metadados/GPS, com miniaturas; aparecem no sistema, na página de acompanhamento e no PDF

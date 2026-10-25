@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% from "_macros.html" import copiar %}
+{% block titulo %}WhatsApp{% endblock %}
+{% block conteudo %}
+<div class="cab"><div>
+  <div class="muted"><a href="/admin">← Administração</a></div>
+  <h1>Avisos automáticos por WhatsApp</h1>
+  <div class="muted">API oficial da Meta (WhatsApp Cloud API)</div>
+</div></div>
+
+<div class="card">
+  <h2>Situação</h2>
+  {% if configurado %}
+  <p><span class="selo" style="background:#2E7D4F">Conectado</span>
+    Número (Phone ID) <code>…{{ config.WHATSAPP_PHONE_ID[-4:] }}</code> · API {{ config.WHATSAPP_API_VERSAO }} · idioma {{ config.WHATSAPP_IDIOMA }}</p>
+  <form method="post" action="/admin/whatsapp/teste" class="classif">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div style="min-width:220px"><label>Enviar mensagem de teste para</label><input name="telefone" required placeholder="11 91234-5678" inputmode="tel"></div>
+    <div style="min-width:0"><button class="btn sec">Enviar teste</button></div>
+  </form>
+  <p class="dica">O teste usa o modelo <b>{{ nome_modelo('status') }}</b> com dados de exemplo.</p>
+  {% else %}
+  <p><span class="selo" style="background:#7A7A7A">Não configurado</span>
+    Os avisos automáticos ficam desligados até você preencher <code>WHATSAPP_TOKEN</code> e <code>WHATSAPP_PHONE_ID</code> no <code>.env</code> e reiniciar o sistema.
+    O passo a passo está em <code>docs/WHATSAPP.md</code>.</p>
+  {% endif %}
+  <details style="margin-top:10px"><summary>Modelos que precisam estar aprovados na Meta</summary>
+    <p class="dica">Categoria <b>Utilidade</b>, idioma <b>Português (BR)</b>. Copie o texto exatamente como está.</p>
+    {% for ev, txt in textos.items() %}
+    <div style="margin:10px 0"><b>{{ nome_modelo(ev) }}</b> <span class="muted">· {{ EVENTOS_AVISO[ev] }}</span>
+      <textarea readonly style="min-height:110px;margin-top:4px" onclick="this.select()">{{ txt }}</textarea></div>
+    {% endfor %}
+  </details>
+  <details style="margin-top:8px"><summary>Webhook (status entregue/lido) — opcional</summary>
+    <p class="dica">No app da Meta → WhatsApp → Configuração → Webhook, informe:</p>
+    <label>URL de retorno</label>{{ copiar(webhook, "Copiar") }}
+    <p class="dica">Token de verificação: o valor de <code>WHATSAPP_VERIFY_TOKEN</code> do .env. Assine o campo <b>messages</b>.
+      Também preencha <code>WHATSAPP_APP_SECRET</code> (chave secreta do app). A URL precisa ser HTTPS e acessível pela internet.</p>
+  </details>
+</div>
+
+<div class="card" id="contatos">
+  <h2>Quem recebe os avisos</h2>
+  <p class="dica" style="margin-top:0">Cadastre os responsáveis de cada cliente. Sem unidade = recebe de <b>todas</b> as unidades do cliente.
+    Quem abre chamado pelo link público recebe as atualizações do próprio chamado se marcar a opção no formulário.</p>
+  {% if contatos %}
+  <table class="resp" style="margin-bottom:14px">
+    <thead><tr><th>Nome</th><th>Telefone</th><th>Cliente / unidade</th><th>Recebe</th><th></th></tr></thead>
+    <tbody>
+    {% for c in contatos %}
+    <tr style="{{ 'opacity:.55' if not c.ativo }}">
+      <td data-l="Nome"><b>{{ c.nome }}</b>{% if not c.ativo %} <span class="tag cinza">pausado</span>{% endif %}</td>
+      <td data-l="Telefone">+{{ c.telefone }}</td>
+      <td data-l="Cliente / unidade">{{ c.cliente.nome }} · {{ c.unidade.nome_curto if c.unidade else 'todas as unidades' }}</td>
+      <td data-l="Recebe">{% for e in (c.eventos or EVENTOS_AVISO.keys()) %}<span class="tag cinza">{{ EVENTOS_AVISO[e] }}</span> {% endfor %}</td>
+      <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" style="display:flex;gap:6px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq sec" name="operacao" value="alternar">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
+        <button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Remover {{ c.nome }}?')">Remover</button></form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum contato cadastrado.</p>{% endif %}
+  <details {{ 'open' if not contatos }}><summary>+ Novo contato</summary>
+  <form method="post" action="/admin/whatsapp/contatos" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid2">
+      <div class="campo"><label>Nome</label><input name="nome" required placeholder="Ex.: Alessandra (gerente Carrão)"></div>
+      <div class="campo"><label>WhatsApp</label><input name="telefone" required inputmode="tel" placeholder="11 91234-5678"></div>
+      <div class="campo"><label>Cliente</label><select name="cliente_id" required><option value="">Selecione…</option>
+        {% for cli in clientes if cli.ativo %}<option value="{{ cli.id }}">{{ cli.nome }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Unidade <span class="muted">(opcional)</span></label><select name="unidade_id"><option value="">Todas as unidades</option>
+        {% for cli in clientes if cli.ativo %}<optgroup label="{{ cli.nome }}">{% for un in cli.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</optgroup>{% endfor %}</select></div>
+    </div>
+    <div class="campo"><label>Avisar quando</label>
+      {% for k, r in EVENTOS_AVISO.items() %}<label class="check" style="margin:4px 0"><input type="checkbox" name="eventos" value="{{ k }}" checked> {{ r }}</label>{% endfor %}</div>
+    <p class="dica">A pessoa precisa ter concordado em receber mensagens da {{ config.EMPRESA_NOME }} por WhatsApp (regra da Meta).</p>
+    <button class="btn">Cadastrar contato</button>
+  </form></details>
+</div>
+
+<div class="card" id="historico">
+  <h2>Últimos envios</h2>
+  {% if envios %}
+  <table class="resp">
+    <thead><tr><th>Quando</th><th>Ticket</th><th>Para</th><th>Evento</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for e in envios %}
+    <tr>
+      <td data-l="Quando" class="muted">{{ e.criado_em.strftime('%d/%m %H:%M') if e.criado_em }} UTC</td>
+      <td data-l="Ticket">{% if e.chamado %}<a class="num" href="/chamados/{{ e.chamado.numero }}">{{ e.chamado.numero_fmt }}</a>{% endif %}</td>
+      <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
+      <td data-l="Evento">{{ EVENTOS_AVISO.get(e.evento, e.evento) }}</td>
+      <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
+        {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>
+      <td>{% if e.status == 'falhou' %}<form method="post" action="/whatsapp/envios/{{ e.id }}/reenviar">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="/admin/whatsapp#historico">
+        <button class="btn peq sec">Reenviar</button></form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum envio ainda.</p>{% endif %}
+</div>
+{% endblock %}

@@ -17,7 +17,7 @@ def _sem_markdown(t):
 
 def texto_whatsapp(ch, link: str, para_solicitante=False) -> str:
     st = regras.status_geral(ch)
-    ult = ch.acoes_ordenadas[-1] if ch.acoes else None
+    ult = max(ch.acoes, key=lambda a: a.id or 0) if ch.acoes else None  # a registrada por último
     linhas = [f"*Ticket {ch.numero_fmt} · {ch.unidade.nome}*",
               _sem_markdown(ch.assunto),
               f"Status: *{regras.rotulo(st)}*"]
