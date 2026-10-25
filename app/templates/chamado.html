@@ -1,15 +1,37 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, caixa_status, copiar %}
+{% from "_macros.html" import select_unidades, caixa_status, copiar, prio, galeria, campo_fotos %}
 {% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
 {% block conteudo %}
 <div class="cab">
   <div>
     <div class="muted"><a href="/">← Painel</a></div>
-    <h1>Ticket <span class="num">{{ ch.numero_fmt }}</span> <span class="selo" style="background:{{ cor(sit) }};vertical-align:middle">{{ rotulo(sit) }}</span></h1>
+    <h1>Ticket <span class="num">{{ ch.numero_fmt }}</span> <span class="selo" style="background:{{ cor(sit) }};vertical-align:middle">{{ rotulo(sit) }}</span> {{ prio(ch.prioridade_ok) }}</h1>
     <div class="sub">{{ ch.titulo|fmt }}</div>
+    {% if ch.tecnico %}<div class="muted">Técnico: <b>{{ ch.tecnico.nome }}</b></div>{% endif %}
   </div>
-  <a class="btn" href="/chamados/{{ ch.numero }}/pdf" target="_blank">Baixar PDF</a>
+  <div class="acoes-topo">
+    {% if u.equipe %}
+    <a class="btn wa" href="{{ wa_grupo }}" target="_blank" rel="noopener" title="Abre o WhatsApp com a mensagem pronta para escolher o grupo">Enviar no WhatsApp</a>
+    {% if wa_solicitante %}<a class="btn sec" href="{{ wa_solicitante }}" target="_blank" rel="noopener">Avisar {{ ch.solicitante_nome.split()[0] }}</a>{% endif %}
+    {% endif %}
+    <a class="btn" href="/chamados/{{ ch.numero }}/pdf" target="_blank">Baixar PDF</a>
+  </div>
 </div>
+
+{% if parado and u.equipe %}
+<div class="flash erro">⏱ Chamado sem nova ação há {{ horas }}h, acima do prazo da prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}.</div>
+{% endif %}
+
+{% if u.equipe and not ch.cancelado %}
+<form class="card classif" method="post" action="/chamados/{{ ch.numero }}/classificar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div><label for="cl_prio">Prioridade</label><select id="cl_prio" name="prioridade">
+    {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if k == ch.prioridade_ok }}>{{ p[0] }}</option>{% endfor %}</select></div>
+  <div><label for="cl_tec">Técnico responsável</label><select id="cl_tec" name="tecnico_id"><option value="">A definir</option>
+    {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if t.id == ch.tecnico_id }}>{{ t.nome }}</option>{% endfor %}</select></div>
+  <div style="min-width:0"><button class="btn sec">Salvar</button></div>
+</form>
+{% endif %}
 
 {% if ch.cancelado %}
 <div class="caixa" style="background:#F0F0F0;border-color:#DADADA;margin-bottom:16px">
@@ -80,7 +102,7 @@
   {% else %}<p class="muted">Nenhuma ação registrada.</p>{% endif %}
 
   {% if u.equipe and not ch.cancelado %}
-  <form method="post" action="/chamados/{{ ch.numero }}/acoes" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:14px">
+  <form method="post" action="/chamados/{{ ch.numero }}/acoes" enctype="multipart/form-data" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:14px">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <h3>Registrar nova ação</h3>
     <div class="campo"><label for="descricao">Ação realizada ou prevista</label>
@@ -93,7 +115,21 @@
     </div>
     <div class="dica" style="margin:-4px 0 10px">Para algo ainda sem data, apague a data e escreva, por exemplo, “A agendar”:
       <input name="quando_texto" placeholder="A agendar" style="max-width:220px;padding:5px 8px;margin-left:4px"></div>
+    {{ campo_fotos(rotulo="Fotos desta ação") }}
     <button class="btn">Registrar ação</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card" id="fotos">
+  <h2>Fotos {% if ch.anexos %}<span class="muted" style="font-weight:400">({{ ch.anexos|length }})</span>{% endif %}</h2>
+  {% if ch.anexos %}{{ galeria(ch.anexos, '/fotos/', csrf, ('/chamados/' ~ ch.numero ~ '/fotos/') if u.equipe else None) }}
+  {% else %}<p class="muted">Nenhuma foto ainda.</p>{% endif %}
+  {% if not ch.cancelado %}
+  <form method="post" action="/chamados/{{ ch.numero }}/fotos" enctype="multipart/form-data" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {{ campo_fotos(rotulo="Adicionar fotos") }}
+    <button class="btn sec">Enviar fotos</button>
   </form>
   {% endif %}
 </div>
@@ -104,6 +140,12 @@
   <h3 style="margin-bottom:6px">Link de acompanhamento</h3>
   <p class="dica" style="margin-top:0">Quem tiver este link vê o andamento e baixa o PDF, sem precisar de login. Ele também é mostrado a quem abriu o chamado pela página pública.</p>
   {{ copiar(link_publico) }}
+  {% if u.equipe %}
+  <details style="margin-top:10px"><summary>Ver mensagem para o grupo</summary>
+    <textarea readonly style="min-height:130px;margin-top:8px" onclick="this.select()">{{ texto_wa }}</textarea>
+    <div class="dica">O botão “Enviar no WhatsApp” abre o WhatsApp com esta mensagem; é só escolher o grupo.</div>
+  </details>
+  {% endif %}
 </div>
 
 {% if u.equipe %}

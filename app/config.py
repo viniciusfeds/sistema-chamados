@@ -32,6 +32,30 @@ EMPRESA_RODAPE = os.environ.get(
 EMPRESA_WHATSAPP = os.environ.get("EMPRESA_WHATSAPP", "(11) 96153-8947")
 RESPONSAVEL_PADRAO = os.environ.get("RESPONSAVEL_PADRAO", "TecnosIT — Segurança Eletrônica")
 
+DADOS_DIR = Path(os.environ.get("DADOS_DIR", BASE_DIR / "dados"))
+ANEXOS_DIR = DADOS_DIR / "anexos"
+
+# Alerta de chamado parado: horas sem nova ação (por prioridade)
+ALERTA_HORAS = {"urgente": int(os.environ.get("ALERTA_HORAS_URGENTE", "4")),
+                "alta": int(os.environ.get("ALERTA_HORAS_ALTA", "12")),
+                "normal": int(os.environ.get("ALERTA_HORAS_NORMAL", "48")),
+                "baixa": int(os.environ.get("ALERTA_HORAS_BAIXA", "120"))}
+
+# Fotos
+FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
+FOTO_MAX_POR_ENVIO = int(os.environ.get("FOTO_MAX_POR_ENVIO", "6"))
+
+# Endereço público do sistema (usado nos links de WhatsApp/e-mail). Ex.: https://chamados.tecnosit.com.br
+URL_PUBLICA = os.environ.get("URL_PUBLICA", "").rstrip("/")
+
+# Aviso por e-mail de chamado aberto pelo link (opcional)
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORTA = int(os.environ.get("SMTP_PORTA", "587"))
+SMTP_USUARIO = os.environ.get("SMTP_USUARIO", "")
+SMTP_SENHA = os.environ.get("SMTP_SENHA", "")
+SMTP_REMETENTE = os.environ.get("SMTP_REMETENTE", SMTP_USUARIO)
+AVISO_EMAILS = [e.strip() for e in os.environ.get("AVISO_EMAILS", "").split(",") if e.strip()]
+
 if not SECRET_KEY:
     # Sem SECRET_KEY no .env: gera uma vez e guarda em dados/.secret_key,
     # para as sessões continuarem válidas depois de reiniciar (inclusive no Docker).

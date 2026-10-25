@@ -14,6 +14,13 @@ PAPEIS = {
     "unidade": "Unidade",
 }
 
+PRIORIDADES = {  # chave -> (rótulo, cor, ordem)
+    "urgente": ("Urgente", "#B3261E", 0),
+    "alta": ("Alta", "#D9480F", 1),
+    "normal": ("Normal", "#5F6B7A", 2),
+    "baixa": ("Baixa", "#8A94A3", 3),
+}
+
 # Status de cada ação (linha da tabela "Ações")
 STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando"]
 
@@ -115,13 +122,18 @@ class Chamado(Base):
     solicitante_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     token_publico: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True,
                                                       default=lambda: novo_token(18))
+    prioridade: Mapped[str | None] = mapped_column(String(10), nullable=True, default="normal")
+    tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(),
                                                     onupdate=func.now())
 
     unidade = relationship("Unidade", back_populates="chamados")
-    criado_por = relationship("Usuario")
+    criado_por = relationship("Usuario", foreign_keys=[criado_por_id])
+    tecnico = relationship("Usuario", foreign_keys=[tecnico_id])
+    anexos = relationship("Anexo", back_populates="chamado", cascade="all, delete-orphan",
+                          order_by="Anexo.id")
     acoes = relationship("Acao", back_populates="chamado", cascade="all, delete-orphan",
                          order_by="Acao.id")
 
@@ -132,6 +144,18 @@ class Chamado(Base):
     @property
     def cliente(self):
         return self.unidade.cliente if self.unidade else None
+
+    @property
+    def prioridade_ok(self):
+        return self.prioridade if self.prioridade in PRIORIDADES else "normal"
+
+    @property
+    def ultima_movimentacao(self):
+        """Momento da última ação registrada (pelo criado_em), para o alerta de chamado parado."""
+        datas = [a.criado_em for a in self.acoes if a.criado_em]
+        if self.criado_em:
+            datas.append(self.criado_em)
+        return max(datas) if datas else None
 
     @property
     def acoes_ordenadas(self):
@@ -153,6 +177,7 @@ class Acao(Base):
 
     chamado = relationship("Chamado", back_populates="acoes")
     autor = relationship("Usuario")
+    anexos = relationship("Anexo", back_populates="acao", order_by="Anexo.id")
 
     @property
     def quando(self):
@@ -162,3 +187,25 @@ class Acao(Base):
         if self.hora:
             s += " · " + self.hora.strftime("%H:%M")
         return s
+
+
+class Anexo(Base):
+    """Foto anexada ao chamado (opcionalmente a uma ação). Arquivos ficam em dados/anexos/."""
+    __tablename__ = "anexos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chamado_id: Mapped[int] = mapped_column(ForeignKey("chamados.id", ondelete="CASCADE"), index=True)
+    acao_id: Mapped[int | None] = mapped_column(ForeignKey("acoes.id", ondelete="SET NULL"), nullable=True)
+    arquivo: Mapped[str] = mapped_column(String(200))        # caminho relativo à pasta de anexos
+    miniatura: Mapped[str] = mapped_column(String(200))
+    nome_original: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    largura: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    altura: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    legenda: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    origem: Mapped[str | None] = mapped_column(String(20), nullable=True)   # equipe / unidade / link
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    chamado = relationship("Chamado", back_populates="anexos")
+    acao = relationship("Acao", back_populates="anexos")
+    autor = relationship("Usuario")

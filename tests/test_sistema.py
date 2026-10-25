@@ -186,6 +186,14 @@ def test_cancelar_e_reativar():
 
 
 # ------------------------------------------------------------------ página pública
+def _liberar_limite_ip():
+    """Os testes usam sempre o mesmo IP; zera o histórico para não esbarrar no limite."""
+    with SessionLocal() as db:
+        for ch in db.scalars(select(Chamado).where(Chamado.solicitante_ip.is_not(None))).all():
+            ch.solicitante_ip = "antigo"
+        db.commit()
+
+
 def _abrir_publico(c, slug, **dados):
     tok = _csrf(c.get(f"/abrir/{slug}").text)
     base = {"unidade_id": str(IDS["carrao"]), "nome": "Ana Recepção", "contato": "(11) 91234-5678",
@@ -230,6 +238,7 @@ def test_publico_validacoes_e_robo():
 
 
 def test_publico_limite_por_ip():
+    _liberar_limite_ip()
     c = TestClient(app)
     codigos = [_abrir_publico(c, IDS["top_slug"], unidade_id=str(IDS["torre"])).status_code for _ in range(7)]
     assert codigos.count(303) <= 5 and codigos[-1] == 200
@@ -298,3 +307,164 @@ def test_migracao_de_banco_antigo(tmp_path):
     out = subprocess.run([sys.executable, "-c", cod], cwd=RAIZ, env=env, capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "SkyFit Academia Cisper True sistema"
+
+
+# ------------------------------------------------------------------ v1.1: prioridade, técnico, fotos, WhatsApp
+def _foto(cor="red", tam=(1200, 900), fmt="JPEG", exif_gps=True):
+    from io import BytesIO
+    from PIL import Image
+    img = Image.new("RGB", tam, cor)
+    b = BytesIO()
+    if exif_gps and fmt == "JPEG":
+        ex = Image.Exif()
+        ex[0x0110] = "iPhone Teste"   # modelo da câmera
+        img.save(b, fmt, exif=ex)
+    else:
+        img.save(b, fmt)
+    return b.getvalue()
+
+
+def test_prioridade_tecnico_e_meus_chamados():
+    c = entrar("tec@t.com")
+    tok = _csrf(c.get("/chamados/novo").text)
+    with SessionLocal() as db:
+        tec_id = db.scalar(select(Usuario).where(Usuario.email == "tec@t.com")).id
+    r = c.post("/chamados/novo", data={"assunto": "DVR sem gravar", "problema": "HD cheio", "unidade_id":
+                                       str(IDS["carrao"]), "prioridade": "urgente", "tecnico_id": str(tec_id),
+                                       "csrf": tok}, follow_redirects=False)
+    url = r.headers["location"]
+    IDS["urg"] = url
+    p = c.get(url).text
+    assert "Urgente" in p and "Técnico: <b>Tec</b>" in p
+    assert url.split("/")[-1].zfill(4) in c.get("/?tecnico=eu").text
+    assert "DVR sem gravar" in c.get("/?prioridade=urgente").text
+    assert "DVR sem gravar" not in c.get("/?prioridade=baixa").text
+    # muda pelo formulário rápido
+    c.post(f"{url}/classificar", data={"prioridade": "baixa", "tecnico_id": "", "csrf": tok})
+    p = c.get(url).text
+    assert "Baixa" in p and "Técnico: <b>" not in p
+    # técnico inválido (usuário de unidade) é ignorado
+    with SessionLocal() as db:
+        uni_id = db.scalar(select(Usuario).where(Usuario.email == "carrao@t.com")).id
+    c.post(f"{url}/classificar", data={"prioridade": "alta", "tecnico_id": str(uni_id), "csrf": tok})
+    assert "Técnico: <b>" not in c.get(url).text
+    assert c.get(f"{url}/pdf").content[:4] == b"%PDF"
+
+
+def test_chamado_parado_aparece_no_painel():
+    from datetime import datetime, timedelta, timezone
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == int(IDS["urg"].split("/")[-1])))
+        velho = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=3)
+        from app.models import Acao
+        ch.prioridade, ch.criado_em = "alta", velho
+        ch.acoes.append(Acao(quando_texto="A agendar", descricao="Troca do HD", status="Aguardando"))
+        db.flush()
+        for a in ch.acoes:
+            a.criado_em = velho
+        db.commit()
+    c = entrar("tec@t.com")
+    assert "parado(s)" in c.get("/").text
+    assert "DVR sem gravar" in c.get("/?parado=1").text
+    assert "sem nova ação há" in c.get(IDS["urg"]).text
+
+
+def test_fotos_em_acao_reduzidas_sem_exif_e_com_permissao():
+    from io import BytesIO
+    from PIL import Image
+    c = entrar("tec@t.com")
+    url = IDS["urg"]
+    tok = _csrf(c.get(url).text)
+    r = c.post(f"{url}/acoes", data={"descricao": "Troca do HD", "status": "Concluído", "data": "2026-10-25",
+                                     "csrf": tok},
+               files=[("fotos_enviadas", ("antes.jpg", _foto("red", (4000, 3000)), "image/jpeg")),
+                      ("fotos_enviadas", ("depois.png", _foto("green", fmt="PNG"), "image/png")),
+                      ("fotos_enviadas", ("virus.jpg", b"isto nao e imagem", "image/jpeg"))],
+               follow_redirects=False)
+    assert r.status_code == 303
+    p = c.get(url)
+    assert "não é uma imagem válida" in p.text  # o arquivo falso foi recusado, os outros aceitos
+    ids = re.findall(r'/fotos/(\d+)\?mini=1', p.text)
+    assert len(ids) == 2
+    foto = c.get(f"/fotos/{ids[0]}")
+    img = Image.open(BytesIO(foto.content))
+    assert foto.headers["content-type"] == "image/jpeg" and max(img.size) <= 1600
+    assert not img.getexif().get(0x0110)          # metadados removidos
+    assert c.get(f"/fotos/{ids[0]}?mini=1").status_code == 200
+    # outro cliente não acessa a foto
+    assert entrar("top@t.com").get(f"/fotos/{ids[0]}").status_code == 404
+    # sem login também não
+    assert TestClient(app).get(f"/fotos/{ids[0]}", follow_redirects=False).status_code == 303
+    # unidade dona do chamado vê e pode adicionar foto, mas não excluir
+    un = entrar("carrao@t.com")
+    assert un.get(f"/fotos/{ids[0]}").status_code == 200
+    tok_u = _csrf(un.get(url).text)
+    un.post(f"{url}/fotos", data={"csrf": tok_u}, files=[("fotos_enviadas", ("x.jpg", _foto("blue"), "image/jpeg"))])
+    assert len(re.findall(r'/fotos/(\d+)\?mini=1', c.get(url).text)) == 3
+    assert un.post(f"{url}/fotos/{ids[0]}/excluir", data={"csrf": tok_u}).status_code == 403
+    # equipe exclui
+    c.post(f"{url}/fotos/{ids[0]}/excluir", data={"csrf": tok})
+    assert len(re.findall(r'/fotos/(\d+)\?mini=1', c.get(url).text)) == 2
+    # PDF continua sendo gerado com as fotos
+    assert c.get(f"{url}/pdf").content[:4] == b"%PDF"
+
+
+def test_publico_com_fotos_e_urgente():
+    _liberar_limite_ip()
+    c = TestClient(app)
+    tok = _csrf(c.get(f"/abrir/{IDS['sky_slug']}").text)
+    r = c.post(f"/abrir/{IDS['sky_slug']}",
+               data={"unidade_id": str(IDS["carrao"]), "nome": "Bruno", "contato": "11 97777-6666",
+                     "assunto": "Catraca travada", "problema": "Não gira de jeito nenhum", "urgente": "1",
+                     "csrf": tok},
+               files=[("fotos_enviadas", (f"f{i}.jpg", _foto(), "image/jpeg")) for i in range(5)],
+               follow_redirects=False)
+    assert r.status_code == 303
+    p = c.get(r.headers["location"]).text
+    assert "no máximo 3 fotos" in p
+    ids = re.findall(r'/fotos/(\d+)\?mini=1', p)
+    assert len(ids) == 3
+    tok_link = r.headers["location"].split("/")[-1]
+    assert c.get(f"/acompanhar/{tok_link}/fotos/{ids[0]}").status_code == 200
+    num = re.search(r"Ticket <span class=\"num\">(\d+)", p).group(1)
+    t = entrar("tec@t.com")
+    assert "Alta" in t.get(f"/chamados/{int(num)}").text
+    # foto de um chamado não é acessível pelo token de outro
+    with SessionLocal() as db:
+        outro = db.scalar(select(Chamado).where(Chamado.numero == 1)).token_publico
+    assert c.get(f"/acompanhar/{outro}/fotos/{ids[0]}").status_code == 404
+
+
+def test_whatsapp_links():
+    from urllib.parse import unquote
+    t = entrar("tec@t.com")
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.origem == "link").order_by(Chamado.numero.desc()))
+        n, tok = ch.numero, ch.token_publico
+    p = t.get(f"/chamados/{n}").text
+    grupo = re.search(r'href="(https://wa\.me/\?text=[^"]+)"', p).group(1)
+    texto = unquote(grupo.split("text=")[1].replace("&amp;", "&"))
+    assert f"*Ticket {n:04d}" in texto and f"/acompanhar/{tok}" in texto and "Status:" in texto
+    assert re.search(r'href="https://wa\.me/55\d{10,11}\?text=', p)  # avisar solicitante
+    # unidade não vê os botões de WhatsApp da equipe
+    assert "Enviar no WhatsApp" not in entrar("carrao@t.com").get(f"/chamados/{n}").text
+
+
+def test_aviso_email_chamado_novo(monkeypatch):
+    from app import avisos, config
+    enviados = []
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.teste")
+    monkeypatch.setattr(config, "AVISO_EMAILS", ["equipe@t.com"])
+    monkeypatch.setattr(avisos, "_enviar", lambda a, c: enviados.append((a, c)))
+
+    class _T:
+        def __init__(self, target, args, daemon): self.f, self.a = target, args
+        def start(self): self.f(*self.a)
+    monkeypatch.setattr(avisos.threading, "Thread", _T)
+    _liberar_limite_ip()
+    c = TestClient(app)
+    tok = _csrf(c.get(f"/abrir/{IDS['sky_slug']}").text)
+    c.post(f"/abrir/{IDS['sky_slug']}", data={"unidade_id": str(IDS["carrao"]), "nome": "Carla",
+                                               "contato": "11 96666-5555", "assunto": "Som baixo",
+                                               "problema": "Caixa chiando", "csrf": tok})
+    assert enviados and "Som baixo" in enviados[0][0] and "Carla" in enviados[0][1]

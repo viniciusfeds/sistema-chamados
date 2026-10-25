@@ -1,10 +1,11 @@
 {% extends "publico_base.html" %}
+{% from "_macros.html" import campo_fotos %}
 {% block titulo %}Abrir chamado — {{ cli.nome }}{% endblock %}
 {% block cabecalho %}{{ cli.nome }}{% endblock %}
 {% block conteudo %}
 <h1>Abrir chamado técnico</h1>
 <p class="muted" style="margin-top:-4px">Preencha os dados abaixo. Você recebe o número do chamado e um link para acompanhar o atendimento.</p>
-<form class="card" method="post" action="/abrir/{{ cli.slug_publico }}">
+<form class="card" method="post" action="/abrir/{{ cli.slug_publico }}" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div class="hp" aria-hidden="true"><label>Site <input name="site" tabindex="-1" autocomplete="off"></label></div>
   <div class="campo"><label for="unidade_id">Unidade</label>
@@ -22,6 +23,9 @@
     <input id="assunto" name="assunto" required maxlength="200" value="{{ v.assunto or '' }}" placeholder="Ex.: Catraca 02 não libera a entrada"></div>
   <div class="campo"><label for="problema">Descreva o problema</label>
     <textarea id="problema" name="problema" required maxlength="5000" placeholder="O que está acontecendo, desde quando, em qual equipamento…">{{ v.problema or '' }}</textarea></div>
+  {{ campo_fotos(maximo=max_fotos, rotulo="Fotos do problema") }}
+  <label class="check"><input type="checkbox" name="urgente" value="1" {{ 'checked' if v.urgente }}>
+    É urgente (equipamento parado, catraca sem liberar, sem imagem das câmeras…)</label>
   <button class="btn" style="width:100%;justify-content:center">Enviar chamado</button>
 </form>
 {% endblock %}

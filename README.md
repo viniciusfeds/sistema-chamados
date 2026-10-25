@@ -9,6 +9,10 @@ Sistema web **multi-cliente** para abrir, acompanhar e registrar chamados técni
   - O chamado chega no painel da equipe marcado como **via link**, com o WhatsApp clicável.
   - Proteções: link difícil de adivinhar, campo invisível anti-robô, limite de 5 chamados por IP a cada 30 min e validação dos campos.
   - Em **Administração → Clientes** é possível copiar, desativar ou gerar um novo link (o anterior para de funcionar).
+- **WhatsApp**: no chamado, "Enviar no WhatsApp" abre o WhatsApp com a mensagem pronta (ticket, status, última ação e link de acompanhamento); é só escolher o grupo. "Avisar <nome>" manda direto para quem abriu pelo link.
+- **Fotos**: nas ações, no próprio chamado e na página pública. São reduzidas (máx. 1600 px), perdem os metadados (GPS/modelo do celular) e aparecem no sistema, no acompanhamento e no PDF. Ficam em `dados/anexos/` (no Docker, dentro do volume).
+- **Prioridade e técnico responsável**: Urgente/Alta/Normal/Baixa, filtro "Meus chamados" e **alerta de chamado parado** quando passa do prazo da prioridade (4h/12h/48h/120h, configurável no `.env`).
+- **Aviso por e-mail** (opcional): configure `SMTP_*` e `AVISO_EMAILS` no `.env` para receber um e-mail a cada chamado aberto pelo link.
 - **Painel**: cartões por status (Em andamento, Pendente, Aberto, Agendado, Concluído) e lista de chamados, com busca e filtros por cliente, unidade e período.
 - **Abrir chamado (logado)**: numeração sequencial e automática (0001, 0002…), única para todos os clientes.
 - **Ações com data e horário**: cada ação tem um status próprio. O **status geral é calculado sozinho**:
@@ -121,7 +125,6 @@ Para trocar o QR Code ou o logo do PDF, substitua `app/assets/qr.png` e `app/ass
 
 ## Próximos passos sugeridos
 
-- Fotos de antes e depois nas ações (inclusive enviadas pelo link público)
 - Logo e cores próprias por cliente na página pública
 - Aviso automático no WhatsApp ou por e-mail quando o chamado mudar de status
 - Migrações de banco (Alembic) quando o modelo de dados começar a mudar

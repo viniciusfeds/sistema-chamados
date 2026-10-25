@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, selo %}
+{% from "_macros.html" import select_unidades, selo, prio %}
 {% block titulo %}Painel{% endblock %}
 {% block conteudo %}
 <div class="cab">
@@ -7,16 +7,23 @@
     <h1>Painel de chamados</h1>
     <div class="muted">{% if u.equipe %}Todos os clientes{% else %}{{ u.descricao_escopo }}{% endif %}</div>
   </div>
-  <a class="btn" href="/chamados/novo">+ Abrir chamado</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    {% if u.equipe %}<a class="btn sec" href="/?tecnico=eu">Meus chamados</a>{% endif %}
+    <a class="btn" href="/chamados/novo">+ Abrir chamado</a>
+  </div>
 </div>
 
 {% if novos_link and u.equipe %}
 <div class="flash aviso">{{ novos_link }} chamado(s) aberto(s) pelo link público aguardando atendimento.
   <a href="?status=aberto{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}">Ver</a></div>
 {% endif %}
+{% if parados and u.equipe and not f.parado %}
+<div class="flash erro">⏱ {{ parados|length }} chamado(s) parado(s) há mais tempo que o prazo da prioridade.
+  <a href="?parado=1{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}">Ver</a></div>
+{% endif %}
 
 {% macro qs(st) -%}
-?status={{ st }}{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}{% if f.unidade %}&unidade={{ f.unidade }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.de %}&de={{ f.de }}{% endif %}{% if f.ate %}&ate={{ f.ate }}{% endif %}
+?status={{ st }}{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}{% if f.unidade %}&unidade={{ f.unidade }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.de %}&de={{ f.de }}{% endif %}{% if f.ate %}&ate={{ f.ate }}{% endif %}{% if f.prioridade %}&prioridade={{ f.prioridade }}{% endif %}{% if f.tecnico %}&tecnico={{ f.tecnico }}{% endif %}
 {%- endmacro %}
 <div class="cards">
   {% set total = contagem.values()|sum - contagem['cancelado'] %}
@@ -41,9 +48,19 @@
       {% if f.cliente %}{% set gs = gs|selectattr('0.id', 'equalto', f.cliente)|list %}{% endif %}
       {{ select_unidades(gs, 'unidade', f.unidade, 'Todas', False) }}</div>
     {% endif %}
+    <div><label for="prioridade">Prioridade</label>
+      <select id="prioridade" name="prioridade"><option value="">Todas</option>
+      {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if f.prioridade == k }}>{{ p[0] }}</option>{% endfor %}</select></div>
+    {% if u.equipe %}
+    <div><label for="tecnico">Técnico</label>
+      <select id="tecnico" name="tecnico"><option value="">Todos</option>
+      <option value="eu" {{ 'selected' if f.tecnico == 'eu' }}>Eu</option>
+      {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if f.tecnico == t.id|string }}>{{ t.nome }}</option>{% endfor %}</select></div>
+    {% endif %}
     <div><label for="de">Aberto de</label><input id="de" type="date" name="de" value="{{ f.de }}"></div>
     <div><label for="ate">até</label><input id="ate" type="date" name="ate" value="{{ f.ate }}"></div>
     <input type="hidden" name="status" value="{{ f.status }}">
+    {% if f.parado %}<input type="hidden" name="parado" value="1">{% endif %}
     <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/">Limpar</a></div>
   </form>
 </div>
@@ -51,18 +68,19 @@
 <div class="card" style="padding:0;overflow:hidden">
 {% if chamados %}
 <table class="resp">
-  <thead><tr><th>Ticket</th>{% if u.equipe %}<th>Cliente</th>{% endif %}<th>Unidade</th><th>Assunto</th><th>Abertura</th><th>Última ação</th><th>Status</th></tr></thead>
+  <thead><tr><th>Ticket</th>{% if u.equipe %}<th>Cliente</th>{% endif %}<th>Unidade</th><th>Assunto</th><th>Prioridade</th>{% if u.equipe %}<th>Técnico</th>{% endif %}<th>Última ação</th><th>Status</th></tr></thead>
   <tbody>
   {% for c in chamados %}
   {% set s = sits[c.id] %}
   {% set ult = c.acoes_ordenadas[-1] if c.acoes else None %}
-  <tr class="link" onclick="location.href='/chamados/{{ c.numero }}'">
+  <tr class="link {{ 'parado' if c.id in parados }}" onclick="location.href='/chamados/{{ c.numero }}'">
     <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
     {% if u.equipe %}<td data-l="Cliente">{{ c.unidade.cliente.nome_curto or c.unidade.cliente.nome }}</td>{% endif %}
     <td data-l="Unidade">{{ c.unidade.nome_curto }}</td>
-    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}</td>
-    <td data-l="Abertura">{{ c.abertura|data }}</td>
-    <td data-l="Última ação" class="muted">{% if ult %}{{ ult.quando }}{% endif %}</td>
+    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}{% if c.anexos %} <span class="tag cinza" title="Fotos">📷 {{ c.anexos|length }}</span>{% endif %}</td>
+    <td data-l="Prioridade">{{ prio(c.prioridade_ok) }}</td>
+    {% if u.equipe %}<td data-l="Técnico">{{ c.tecnico.nome if c.tecnico else '—' }}</td>{% endif %}
+    <td data-l="Última ação" class="muted">{% if ult %}{{ ult.quando }}{% endif %}{% if c.id in parados %}<br><span class="tag alerta">parado {{ horas_parado(c) }}h</span>{% endif %}</td>
     <td data-l="Status">{{ selo(s) }}</td>
   </tr>
   {% endfor %}

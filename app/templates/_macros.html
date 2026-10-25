@@ -46,3 +46,28 @@
 <span class="copiar"><input readonly value="{{ texto }}" onclick="this.select()">
 <button type="button" class="btn peq sec" onclick="var i=this.previousElementSibling;i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);this.textContent='Copiado!'">{{ rotulo }}</button></span>
 {%- endmacro %}
+
+{% macro prio(k) -%}
+{% set p = PRIORIDADES[k] %}<span class="prio" style="--pc:{{ p[1] }}">{{ p[0] }}</span>
+{%- endmacro %}
+
+{# Galeria de fotos. url_base: prefixo para montar o endereço da foto (ex.: "/fotos/" ou "/acompanhar/TOKEN/fotos/") #}
+{% macro galeria(anexos, url_base, csrf=None, excluir_de=None) -%}
+<div class="galeria">
+  {% for an in anexos %}
+  <figure>
+    <a href="{{ url_base }}{{ an.id }}" target="_blank" rel="noopener"><img src="{{ url_base }}{{ an.id }}?mini=1" alt="Foto {{ loop.index }}" loading="lazy"></a>
+    <figcaption>{% if an.acao %}{{ an.acao.quando }}{% elif an.origem == 'link' %}Enviada na abertura{% endif %}
+      {% if excluir_de %}<form method="post" action="{{ excluir_de }}{{ an.id }}/excluir" onsubmit="return confirm('Excluir esta foto?')" style="display:inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn">excluir</button></form>{% endif %}</figcaption>
+  </figure>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro campo_fotos(nome="fotos_enviadas", maximo=6, rotulo="Fotos") -%}
+<div class="campo"><label>{{ rotulo }} <span class="muted">(opcional, até {{ maximo }})</span></label>
+  <input type="file" name="{{ nome }}" accept="image/*" multiple
+         onchange="if(this.files.length>{{ maximo }}){alert('Selecione no máximo {{ maximo }} fotos.');this.value='';}">
+  <div class="dica">Tire a foto na hora ou escolha da galeria. As fotos são reduzidas automaticamente.</div></div>
+{%- endmacro %}

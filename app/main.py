@@ -5,8 +5,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
@@ -15,11 +15,12 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import config, pdf, regras
+from . import avisos, config, fotos, pdf, regras
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
-from .models import PAPEIS, STATUS_ACAO, Acao, Chamado, Cliente, Unidade, Usuario, novo_token
+from .models import (PAPEIS, PRIORIDADES, STATUS_ACAO, Acao, Anexo, Chamado, Cliente, Unidade, Usuario,
+                     novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -42,7 +43,7 @@ tpl = Jinja2Templates(directory=APP_DIR / "templates")
 tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
-                       CAIXAS=pdf.CAIXA, config=config)
+                       CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, config=config)
 tpl.env.filters["fmt"] = regras.para_html
 tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
 
@@ -118,8 +119,47 @@ def _diag_para_texto(d):
 
 
 def _opts_chamado():
-    return (selectinload(Chamado.acoes),
+    return (selectinload(Chamado.acoes), selectinload(Chamado.anexos), selectinload(Chamado.tecnico),
             selectinload(Chamado.unidade).selectinload(Unidade.cliente))
+
+
+def base_url(request) -> str:
+    return config.URL_PUBLICA or str(request.base_url).rstrip("/")
+
+
+def tecnicos(db):
+    return db.scalars(select(Usuario).where(Usuario.ativo, Usuario.papel.in_(("admin", "tecnico")))
+                      .order_by(Usuario.nome)).all()
+
+
+def esta_parado(c, sit=None) -> bool:
+    """Chamado em aberto sem nova ação há mais tempo do que o limite da sua prioridade."""
+    sit = sit or regras.status_geral(c)
+    if sit in ("concluido", "cancelado", "agendado"):
+        return False
+    ult = c.ultima_movimentacao
+    return bool(ult) and agora_utc() - ult > timedelta(hours=config.ALERTA_HORAS[c.prioridade_ok])
+
+
+def horas_parado(c) -> int:
+    ult = c.ultima_movimentacao
+    return int((agora_utc() - ult).total_seconds() // 3600) if ult else 0
+
+
+def _prioridade(v, padrao="normal"):
+    return v if v in PRIORIDADES else padrao
+
+
+def _tecnico_valido(db, tid):
+    t = db.get(Usuario, tid) if tid else None
+    return t.id if t and t.equipe and t.ativo else None
+
+
+def _flash_erros_fotos(request, erros, ok_msg):
+    if erros:
+        flash(request, ok_msg + " Atenção: " + " ".join(erros), "erro")
+    else:
+        flash(request, ok_msg)
 
 
 def buscar_chamado(db, numero, u) -> Chamado:
@@ -234,38 +274,52 @@ def sair(request: Request):
 # ---------------------------------------------------------------- painel
 @app.get("/", response_class=HTMLResponse)
 def painel(request: Request, cliente: str = "", unidade: str = "", status: str = "", q: str = "",
-           de: str = "", ate: str = "", u: Usuario = Depends(usuario_atual),
-           db: Session = Depends(get_db)):
+           de: str = "", ate: str = "", prioridade: str = "", tecnico: str = "", parado: str = "",
+           u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     cliente, unidade = _int(cliente), _int(unidade)
     if status not in regras.STATUS_GERAL:
         status = ""
+    prioridade = prioridade if prioridade in PRIORIDADES else ""
+    tec_id = u.id if tecnico == "eu" else _int(tecnico)
     lista = _filtrar(db, u, cliente, unidade, _data(de), _data(ate), q.strip() or None)
+    if prioridade:
+        lista = [c for c in lista if c.prioridade_ok == prioridade]
+    if tec_id and u.equipe:
+        lista = [c for c in lista if c.tecnico_id == tec_id]
     sits = {c.id: regras.status_geral(c) for c in lista}
+    parados = {c.id for c in lista if esta_parado(c, sits[c.id])}
     contagem = {k: sum(1 for c in lista if sits[c.id] == k) for k in regras.STATUS_GERAL}
     if status:
         lista = [c for c in lista if sits[c.id] == status]
     elif not q:
         lista = [c for c in lista if sits[c.id] != "cancelado"]
+    if parado:
+        lista = [c for c in lista if c.id in parados]
     novos_link = sum(1 for c in lista if c.origem == "link" and sits[c.id] == "aberto")
     grupos = unidades_permitidas(db, u) if u.papel != "unidade" else []
     return render(request, "painel.html", u=u, chamados=lista, sits=sits, contagem=contagem,
                   grupos=grupos, clientes=clientes_ativos(db) if u.equipe else [],
-                  novos_link=novos_link,
-                  f=dict(cliente=cliente, unidade=unidade, status=status, q=q, de=de, ate=ate))
+                  tecnicos=tecnicos(db) if u.equipe else [], novos_link=novos_link,
+                  parados=parados, horas_parado=horas_parado,
+                  f=dict(cliente=cliente, unidade=unidade, status=status, q=q, de=de, ate=ate,
+                         prioridade=prioridade, tecnico=tecnico, parado=parado))
 
 
 # ---------------------------------------------------------------- novo chamado (logado)
 @app.get("/chamados/novo", response_class=HTMLResponse)
 def novo_form(request: Request, u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     return render(request, "novo.html", u=u, grupos=unidades_permitidas(db, u), hoje=agora().date(),
-                  agora_hora=agora().strftime("%H:%M"), proximo=proximo_numero(db))
+                  agora_hora=agora().strftime("%H:%M"), proximo=proximo_numero(db),
+                  tecnicos=tecnicos(db) if u.equipe else [])
 
 
 @app.post("/chamados/novo", dependencies=[Depends(checar_csrf)])
 def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
          unidade_id: str = Form(""), titulo: str = Form(""), abertura: str = Form(""),
+         prioridade: str = Form("normal"), tecnico_id: str = Form(""),
          acao_descricao: str = Form(""), acao_status: str = Form("Concluído"),
          acao_data: str = Form(""), acao_hora: str = Form(""),
+         fotos_enviadas: list[UploadFile] = File(default=[]),
          u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     un = db.get(Unidade, u.unidade_id if u.papel == "unidade" else (_int(unidade_id) or 0))
     if not pode_usar_unidade(u, un):
@@ -275,7 +329,8 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
     hoje, hm = _agora_hm()
     ch = Chamado(unidade_id=un.id, assunto=assunto.strip()[:200],
                  titulo=((titulo.strip() if u.equipe else "") or assunto.strip())[:200],
-                 problema=problema.strip(), origem="sistema",
+                 problema=problema.strip(), origem="sistema", prioridade=_prioridade(prioridade),
+                 tecnico_id=_tecnico_valido(db, _int(tecnico_id)) if u.equipe else None,
                  abertura=_data(abertura, hoje) if u.equipe else hoje, criado_por_id=u.id,
                  solicitante_nome=None if u.equipe else u.nome)
     quem = "pela equipe técnica" if u.equipe else f"por {u.nome}"
@@ -290,7 +345,10 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
         ch.acoes.append(Acao(quando_texto="A agendar", descricao="Atendimento técnico",
                              status="Aguardando", autor_id=u.id))
     salvar_novo_chamado(db, ch)
-    flash(request, f"Ticket {ch.numero_fmt} aberto.")
+    _, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="equipe" if u.equipe else "unidade",
+                                  autor_id=u.id)
+    db.commit()
+    _flash_erros_fotos(request, erros, f"Ticket {ch.numero_fmt} aberto.")
     return voltar(f"/chamados/{ch.numero}")
 
 
@@ -299,12 +357,20 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
 def detalhe(request: Request, numero: int, u: Usuario = Depends(usuario_atual),
             db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
-    link_publico = str(request.base_url).rstrip("/") + f"/acompanhar/{ch.token_publico}"
-    return render(request, "chamado.html", u=u, ch=ch, sit=regras.status_geral(ch),
+    sit = regras.status_geral(ch)
+    link_publico = f"{base_url(request)}/acompanhar/{ch.token_publico}"
+    wa_grupo = avisos.link_whatsapp(avisos.texto_whatsapp(ch, link_publico))
+    num_sol = avisos.numero_whatsapp(ch.solicitante_contato)
+    wa_solicitante = avisos.link_whatsapp(avisos.texto_whatsapp(ch, link_publico, True), num_sol) \
+        if num_sol else None
+    return render(request, "chamado.html", u=u, ch=ch, sit=sit,
                   grupos=unidades_permitidas(db, u) if u.equipe else [],
+                  tecnicos=tecnicos(db) if u.equipe else [],
                   hoje=agora().date(), agora_hora=agora().strftime("%H:%M"),
                   diag_texto=_diag_para_texto(ch.diagnostico), texto_padrao=regras.TEXTO_PADRAO,
-                  link_publico=link_publico)
+                  link_publico=link_publico, wa_grupo=wa_grupo, wa_solicitante=wa_solicitante,
+                  texto_wa=avisos.texto_whatsapp(ch, link_publico),
+                  parado=esta_parado(ch, sit), horas=horas_parado(ch))
 
 
 @app.get("/chamados/{numero}/pdf")
@@ -316,18 +382,76 @@ def baixar_pdf(numero: int, u: Usuario = Depends(usuario_atual), db: Session = D
 @app.post("/chamados/{numero}/acoes", dependencies=[Depends(checar_csrf)])
 def nova_acao(request: Request, numero: int, descricao: str = Form(...), status: str = Form(...),
               data: str = Form(""), hora: str = Form(""), quando_texto: str = Form(""),
+              fotos_enviadas: list[UploadFile] = File(default=[]),
               u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
     if status not in STATUS_ACAO or not descricao.strip():
         raise HTTPException(400, "Preencha a ação e o status.")
     antes = regras.status_geral(ch)
-    ch.acoes.append(Acao(data=_data(data), hora=_hora(hora), descricao=descricao.strip(), status=status,
-                         quando_texto=(quando_texto.strip() or None) if not data else None,
-                         autor_id=u.id))
+    acao = Acao(data=_data(data), hora=_hora(hora), descricao=descricao.strip(), status=status,
+                quando_texto=(quando_texto.strip() or None) if not data else None, autor_id=u.id)
+    ch.acoes.append(acao)
+    _, erros = fotos.salvar_fotos(ch, fotos_enviadas, acao=acao, origem="equipe", autor_id=u.id)
     _apos_mudanca(ch, antes)
     db.commit()
-    flash(request, "Ação registrada.")
+    _flash_erros_fotos(request, erros, "Ação registrada.")
     return voltar(f"/chamados/{numero}#acoes")
+
+
+@app.post("/chamados/{numero}/classificar", dependencies=[Depends(checar_csrf)])
+def classificar(request: Request, numero: int, prioridade: str = Form("normal"), tecnico_id: str = Form(""),
+                u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    ch = buscar_chamado(db, numero, u)
+    ch.prioridade = _prioridade(prioridade)
+    ch.tecnico_id = _tecnico_valido(db, _int(tecnico_id))
+    db.commit()
+    flash(request, "Prioridade e técnico atualizados.")
+    return voltar(f"/chamados/{numero}")
+
+
+@app.post("/chamados/{numero}/fotos", dependencies=[Depends(checar_csrf)])
+def adicionar_fotos(request: Request, numero: int, fotos_enviadas: list[UploadFile] = File(default=[]),
+                    u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    ch = buscar_chamado(db, numero, u)
+    if ch.cancelado:
+        raise HTTPException(400, "Chamado cancelado.")
+    novos, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="equipe" if u.equipe else "unidade",
+                                      autor_id=u.id)
+    db.commit()
+    _flash_erros_fotos(request, erros, f"{len(novos)} foto(s) adicionada(s)." if novos else "Nenhuma foto enviada.")
+    return voltar(f"/chamados/{numero}#fotos")
+
+
+@app.post("/chamados/{numero}/fotos/{anexo_id}/excluir", dependencies=[Depends(checar_csrf)])
+def excluir_foto(request: Request, numero: int, anexo_id: int, u: Usuario = Depends(so_equipe),
+                 db: Session = Depends(get_db)):
+    ch = buscar_chamado(db, numero, u)
+    an = next((a for a in ch.anexos if a.id == anexo_id), None)
+    if not an:
+        raise HTTPException(404, "Foto não encontrada.")
+    fotos.apagar_arquivos(an)
+    db.delete(an)
+    db.commit()
+    flash(request, "Foto excluída.")
+    return voltar(f"/chamados/{numero}#fotos")
+
+
+def _servir_foto(an, mini):
+    try:
+        p = fotos.caminho(an, mini)
+    except fotos.FotoInvalida:
+        raise HTTPException(404, "Foto não encontrada.")
+    if not p.exists():
+        raise HTTPException(404, "Foto não encontrada.")
+    return FileResponse(p, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/fotos/{anexo_id}")
+def ver_foto(anexo_id: int, mini: int = 0, u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    an = db.get(Anexo, anexo_id)
+    if not an or not pode_ver(u, an.chamado):
+        raise HTTPException(404, "Foto não encontrada.")
+    return _servir_foto(an, bool(mini))
 
 
 @app.post("/chamados/{numero}/acoes/{acao_id}", dependencies=[Depends(checar_csrf)])
@@ -417,21 +541,25 @@ def _ip(request: Request) -> str:
     return (request.client.host if request.client else "")[:64]
 
 
+FOTOS_PUBLICO = 3
+
+
 @app.get("/abrir/{slug}", response_class=HTMLResponse)
 def publico_form(request: Request, slug: str, db: Session = Depends(get_db)):
     cli = _cliente_publico(db, slug)
-    return render(request, "publico_abrir.html", cli=cli,
+    return render(request, "publico_abrir.html", cli=cli, max_fotos=FOTOS_PUBLICO,
                   unidades=[x for x in cli.unidades if x.ativa], v={})
 
 
 @app.post("/abrir/{slug}", dependencies=[Depends(checar_csrf)])
 def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome: str = Form(""),
                   contato: str = Form(""), email: str = Form(""), assunto: str = Form(""),
-                  problema: str = Form(""), site: str = Form(""), db: Session = Depends(get_db)):
+                  problema: str = Form(""), urgente: str = Form(""), site: str = Form(""),
+                  fotos_enviadas: list[UploadFile] = File(default=[]), db: Session = Depends(get_db)):
     cli = _cliente_publico(db, slug)
     unidades = [x for x in cli.unidades if x.ativa]
     v = dict(unidade_id=_int(unidade_id), nome=nome.strip(), contato=contato.strip(),
-             email=email.strip(), assunto=assunto.strip(), problema=problema.strip())
+             email=email.strip(), assunto=assunto.strip(), problema=problema.strip(), urgente=bool(urgente))
     if site:  # campo invisível: só robôs preenchem
         raise HTTPException(400, "Não foi possível enviar o chamado.")
     un = next((x for x in unidades if x.id == v["unidade_id"]), None)
@@ -450,18 +578,25 @@ def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome:
         erro = "Muitos chamados enviados em pouco tempo. Aguarde alguns minutos ou fale com a TecnosIT pelo WhatsApp."
     if erro:
         request.session["flash"] = {"msg": erro, "tipo": "erro"}
-        return render(request, "publico_abrir.html", cli=cli, unidades=unidades, v=v)
+        return render(request, "publico_abrir.html", cli=cli, unidades=unidades, v=v, max_fotos=FOTOS_PUBLICO)
 
     hoje, hm = _agora_hm()
     ch = Chamado(unidade_id=un.id, assunto=v["assunto"][:200], titulo=v["assunto"][:200],
                  problema=v["problema"][:5000], abertura=hoje, origem="link",
+                 prioridade="alta" if v["urgente"] else "normal",
                  solicitante_nome=v["nome"][:120], solicitante_contato=v["contato"][:120],
                  solicitante_email=v["email"][:160] or None, solicitante_ip=ip, criado_em=agora_utc())
     ch.acoes.append(Acao(data=hoje, hora=hm, status="Concluído",
                          descricao=f"Abertura do chamado pelo link, por {v['nome'][:120]}"))
     ch.acoes.append(Acao(quando_texto="A agendar", descricao="Atendimento técnico", status="Aguardando"))
     salvar_novo_chamado(db, ch)
+    _, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="link", maximo=FOTOS_PUBLICO)
+    db.commit()
+    avisos.avisar_chamado_novo(ch, f"{base_url(request)}/chamados/{ch.numero}")
     request.session["aberto_agora"] = ch.token_publico
+    if erros:
+        request.session["flash"] = {"msg": "Chamado aberto, mas algumas fotos não foram aceitas: " + " ".join(erros),
+                                    "tipo": "erro"}
     return voltar(f"/acompanhar/{ch.token_publico}")
 
 
@@ -478,13 +613,22 @@ def publico_acompanhar(request: Request, token: str, db: Session = Depends(get_d
     ch = _chamado_publico(db, token)
     recem = request.session.pop("aberto_agora", None) == token
     return render(request, "publico_acompanhar.html", ch=ch, sit=regras.status_geral(ch), recem=recem,
-                  texto_padrao=regras.TEXTO_PADRAO, link=str(request.url))
+                  texto_padrao=regras.TEXTO_PADRAO, link=f"{base_url(request)}/acompanhar/{token}")
 
 
 @app.get("/acompanhar/{token}/pdf")
 def publico_pdf(token: str, db: Session = Depends(get_db)):
     ch = _chamado_publico(db, token)
     return _anexo_pdf(pdf.pdf_chamado(ch), f"Ticket_{ch.numero_fmt}_{ch.unidade.nome.replace(' ', '_')}.pdf")
+
+
+@app.get("/acompanhar/{token}/fotos/{anexo_id}")
+def publico_foto(token: str, anexo_id: int, mini: int = 0, db: Session = Depends(get_db)):
+    ch = _chamado_publico(db, token)
+    an = next((a for a in ch.anexos if a.id == anexo_id), None)
+    if not an:
+        raise HTTPException(404, "Foto não encontrada.")
+    return _servir_foto(an, bool(mini))
 
 
 # ---------------------------------------------------------------- relatório

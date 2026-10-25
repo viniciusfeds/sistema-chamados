@@ -1,5 +1,5 @@
 {% extends "publico_base.html" %}
-{% from "_macros.html" import selo, tabela_acoes, caixa_status, copiar %}
+{% from "_macros.html" import selo, tabela_acoes, caixa_status, copiar, galeria %}
 {% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
 {% block cabecalho %}{{ ch.unidade.cliente.nome }}{% endblock %}
 {% block conteudo %}
@@ -34,6 +34,13 @@
   <h2>Andamento</h2>
   {{ tabela_acoes(ch) }}
 </div>
+
+{% if ch.anexos %}
+<div class="card">
+  <h2>Fotos</h2>
+  {{ galeria(ch.anexos, '/acompanhar/' ~ ch.token_publico ~ '/fotos/') }}
+</div>
+{% endif %}
 
 {% if ch.cancelado %}
 <div class="caixa" style="background:#F0F0F0;border-color:#DADADA;margin-bottom:16px"><b>Chamado cancelado.</b></div>

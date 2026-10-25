@@ -119,8 +119,13 @@ def pdf_chamado(ch) -> bytes:
               ("DATA DE ABERTURA", ch.abertura.strftime("%d/%m/%Y"))]
     if ch.solicitante_nome:
         linhas.append(("SOLICITANTE", ch.solicitante_nome))
-    linhas.append(("RESPONSÁVEL TÉCNICO", ch.responsavel or config.RESPONSAVEL_PADRAO))
-    t = Table([[Paragraph(a, sLab), Paragraph(para_pdf(b), sVal)] for a, b in linhas],
+    if ch.prioridade_ok in ("alta", "urgente"):
+        from .models import PRIORIDADES
+        rot, corp, _ = PRIORIDADES[ch.prioridade_ok]
+        linhas.append(("PRIORIDADE", f'<font color="{corp}">{rot.upper()}</font>'))
+    resp = ch.responsavel or (f"{config.EMPRESA_NOME} — {ch.tecnico.nome}" if ch.tecnico else config.RESPONSAVEL_PADRAO)
+    linhas.append(("RESPONSÁVEL TÉCNICO", resp))
+    t = Table([[Paragraph(a, sLab), Paragraph(b if a == "PRIORIDADE" else para_pdf(b), sVal)] for a, b in linhas],
               colWidths=[58 * mm, LARG - 58 * mm])
     t.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 6), ("TOPPADDING", (0, 0), (-1, -1), 1.5),
                            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5)]))
@@ -158,6 +163,7 @@ def pdf_chamado(ch) -> bytes:
                              ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
                              ("TOPPADDING", (0, 0), (0, 0), 10), ("BOTTOMPADDING", (0, -1), (-1, -1), 10)]))
     E += [box, Spacer(1, 10)]
+    E += _bloco_fotos(ch)
 
     qr = Image(str(ASSETS / "qr.png"), width=24 * mm, height=24 * mm)
     txt = [Paragraph("Ficou com alguma dúvida?", sQT), Spacer(1, 4),
@@ -173,6 +179,38 @@ def pdf_chamado(ch) -> bytes:
                         Paragraph(f"Atenciosamente, <b>Equipe {config.EMPRESA_NOME}</b>", sCorpo)])]
     doc.build(E)
     return buf.getvalue()
+
+
+def _bloco_fotos(ch, maximo=9):
+    """Miniaturas das fotos do chamado (3 por linha)."""
+    from .fotos import FotoInvalida, caminho
+    itens = []
+    for an in ch.anexos[:maximo]:
+        try:
+            p = caminho(an, mini=True)
+        except FotoInvalida:
+            continue
+        if not p.exists():
+            continue
+        w = (LARG - 12) / 3
+        h = w * (an.altura or 3) / (an.largura or 4) if an.largura else w * 0.75
+        h = min(h, w * 1.2)
+        img = Image(str(p), width=w, height=h, kind="proportional")
+        leg = Paragraph(para_pdf(an.legenda or (an.acao.quando if an.acao else "")),
+                        st("leg", fontSize=8, leading=10, textColor=CINZA))
+        itens.append([img, leg])
+    if not itens:
+        return []
+    linhas = []
+    for i in range(0, len(itens), 3):
+        grupo = itens[i:i + 3] + [["", ""]] * (3 - len(itens[i:i + 3]))
+        linhas.append([g[0] for g in grupo])
+        linhas.append([g[1] for g in grupo])
+    t = Table(linhas, colWidths=[(LARG) / 3] * 3)
+    t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                           ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    extra = f" (mostrando {maximo} de {len(ch.anexos)})" if len(ch.anexos) > maximo else ""
+    return [KeepTogether([Paragraph(f"Fotos{extra}", sSec), t]), Spacer(1, 10)]
 
 
 def pdf_relatorio(chamados, periodo: str, subtitulo_extra: str = "", cliente_nome: str = "") -> bytes:

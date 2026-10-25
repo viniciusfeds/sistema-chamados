@@ -102,3 +102,25 @@ form.filtros.com-cliente{grid-template-columns:2fr 1.2fr 1.2fr 1fr 1fr auto}
 @media (max-width:820px){form.filtros.com-cliente{grid-template-columns:1fr 1fr}}
 
 .rodape-versao{text-align:center;color:var(--cinza-cl);font-size:.78rem;margin-top:28px}
+
+/* --- v1.1: prioridade, parados, fotos, WhatsApp --- */
+.prio{display:inline-block;font-size:.75rem;font-weight:700;color:var(--pc);border:1.5px solid var(--pc);border-radius:999px;padding:0 8px;white-space:nowrap}
+.tag.cinza{color:#555;background:#EFEFEF}
+.tag.alerta{color:#8E1C16;background:#FDECEC}
+tr.parado td:first-child{box-shadow:inset 4px 0 0 #B3261E}
+.galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:8px 0}
+.galeria figure{margin:0;background:#FAFAFA;border:1px solid var(--linha);border-radius:8px;overflow:hidden}
+.galeria img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#eee}
+.galeria figcaption{font-size:.75rem;color:var(--cinza);padding:4px 8px}
+.linkbtn{background:none;border:0;color:#B3261E;cursor:pointer;font:inherit;padding:0;text-decoration:underline}
+.btn.wa{background:#1F9E55;border-color:#1F9E55}
+.btn.wa:hover{background:#17803F;border-color:#17803F}
+.acoes-topo{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+.classif{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.classif>div{min-width:160px}
+input[type=file]{padding:7px;background:#FAFAFA}
+form.filtros,form.filtros.com-cliente{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+form.filtros .q{grid-column:span 2}
+@media (max-width:820px){form.filtros .q{grid-column:1/-1}}
+label.check{display:flex;gap:8px;align-items:flex-start;font-weight:600;color:var(--texto);font-size:.95rem;margin:4px 0 14px}
+label.check input{width:auto;margin-top:3px}
