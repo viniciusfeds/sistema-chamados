@@ -1,0 +1,43 @@
+{% extends "publico_base.html" %}
+{% from "_macros.html" import selo, tabela_acoes, caixa_status, copiar %}
+{% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
+{% block cabecalho %}{{ ch.unidade.cliente.nome }}{% endblock %}
+{% block conteudo %}
+{% if recem %}
+<div class="flash ok" style="font-size:1.05rem">
+  ✅ Chamado aberto com sucesso! Seu número é <b>{{ ch.numero_fmt }}</b>.<br>
+  <span style="font-weight:400">Guarde o link abaixo para acompanhar o atendimento.</span>
+</div>
+<div class="card">{{ copiar(link) }}</div>
+{% endif %}
+
+<div class="cab">
+  <div>
+    <h1>Ticket <span class="num">{{ ch.numero_fmt }}</span> {{ selo(sit) }}</h1>
+    <div class="sub">{{ ch.titulo|fmt }}</div>
+  </div>
+  <a class="btn sec" href="/acompanhar/{{ ch.token_publico }}/pdf" target="_blank">Baixar PDF</a>
+</div>
+
+<div class="card">
+  <dl class="dados">
+    <dt>Unidade</dt><dd>{{ ch.unidade.nome }}</dd>
+    <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
+    <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
+    {% if ch.solicitante_nome %}<dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}</dd>{% endif %}
+  </dl>
+  <h2>Problema relatado</h2>
+  <p>{{ ch.problema|fmt }}</p>
+</div>
+
+<div class="card">
+  <h2>Andamento</h2>
+  {{ tabela_acoes(ch) }}
+</div>
+
+{% if ch.cancelado %}
+<div class="caixa" style="background:#F0F0F0;border-color:#DADADA;margin-bottom:16px"><b>Chamado cancelado.</b></div>
+{% else %}
+{{ caixa_status(ch, sit, texto_padrao) }}
+{% endif %}
+{% endblock %}

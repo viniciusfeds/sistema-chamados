@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades %}
+{% block titulo %}Relatório{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><h1>Relatório de chamados</h1>
+<div class="muted">Gera o PDF consolidado no layout {{ config.EMPRESA_NOME }} para enviar aos responsáveis.</div></div></div>
+<form class="card" method="get" action="/relatorio/pdf" target="_blank">
+  <div class="grid2">
+    <div class="campo"><label for="de">De</label><input id="de" type="date" name="de" value="{{ de.isoformat() }}" required></div>
+    <div class="campo"><label for="ate">Até</label><input id="ate" type="date" name="ate" value="{{ ate.isoformat() }}" required></div>
+    {% if u.equipe %}
+    <div class="campo"><label for="cliente">Cliente</label><select id="cliente" name="cliente">
+      {% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+      <option value="">Todos os clientes</option></select></div>
+    {% endif %}
+    {% if u.papel != 'unidade' %}
+    <div class="campo"><label for="unidade">Unidade <span class="muted">(opcional)</span></label>
+      {{ select_unidades(grupos, 'unidade', None, 'Todas as unidades', False) }}</div>
+    {% endif %}
+  </div>
+  <div class="campo"><label for="inc">Chamados abertos antes do período</label>
+    <select id="inc" name="incluir_abertos"><option value="1">Incluir os que ainda não foram concluídos</option>
+    <option value="0">Somente os abertos dentro do período</option></select></div>
+  <button class="btn">Gerar PDF</button>
+</form>
+{% endblock %}

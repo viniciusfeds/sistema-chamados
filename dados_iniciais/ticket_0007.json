@@ -1,0 +1,29 @@
+{
+  "ticket": 7,
+  "unidade": "SkyFit CT Salim",
+  "titulo": "Totem 02 — Falha no Carregador",
+  "assunto": "Falha no Totem 02",
+  "abertura": "17/10/2026",
+  "problema": "O <b>Totem 02</b> da unidade apresentou falha de funcionamento.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Visita técnica à unidade e verificação do <b>Totem 02</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Identificada falha no <b>carregador</b> do totem",
+      "status": "Concluído"
+    },
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Ajuste do carregador e correção da falha — totem operando normalmente",
+      "status": "Concluído"
+    }
+  ],
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Falha no carregador corrigida durante a visita. Totem 02 operando normalmente.",
+  "resumo": "Falha no carregador identificada e corrigida na visita. Totem operando."
+}

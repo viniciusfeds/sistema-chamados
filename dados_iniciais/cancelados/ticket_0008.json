@@ -1,0 +1,24 @@
+{
+  "ticket": 8,
+  "unidade": "SkyFit Carrão",
+  "titulo": "Sala de Dança — Manutenção da Caixa de Som",
+  "assunto": "Manutenção da caixa de som da sala de dança",
+  "abertura": "17/10/2026",
+  "problema": "Necessidade de <b>manutenção da caixa de som da sala de dança</b> da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Visita técnica à unidade",
+      "status": "Concluído"
+    },
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Manutenção da caixa de som da sala de dança realizada no local",
+      "status": "Concluído"
+    }
+  ],
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Manutenção realizada no local. Caixa de som da sala de dança funcionando normalmente.",
+  "resumo": "Manutenção realizada no local. Caixa de som funcionando."
+}

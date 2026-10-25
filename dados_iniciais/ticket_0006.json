@@ -1,0 +1,25 @@
+{
+  "ticket": 6,
+  "unidade": "SkyFit Aeroporto",
+  "titulo": "Leitores Faciais — Inclusão de Imagem de Propaganda",
+  "assunto": "Inclusão de imagem de propaganda nas duas faciais",
+  "abertura": "15/10/2026",
+  "problema": "Solicitada a <b>inclusão da imagem de propaganda</b> na tela das <b>duas faciais</b> (Catracas 01 e 02) da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "15/10/2026 · 19:21",
+      "acao": "Abertura do chamado e registro da solicitação",
+      "status": "Concluído"
+    },
+    {
+      "quando": "16/10/2026",
+      "acao": "Inclusão da imagem de propaganda nas faciais das <b>Catracas 01 e 02</b>",
+      "status": "Agendado"
+    }
+  ],
+  "status_titulo": "Chamado agendado",
+  "status_texto": "Atendimento agendado para 16/10/2026. Informaremos a conclusão por aqui.",
+  "resumo": "Chamado registrado; inclusão da imagem agendada.",
+  "proximo": "Inclusão da imagem de propaganda nas duas faciais agendada para 16/10/2026."
+}

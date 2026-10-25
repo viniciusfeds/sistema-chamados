@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades %}
+{% block titulo %}Abrir chamado{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><h1>Abrir chamado</h1><div class="muted">Será o ticket nº {{ '%04d' % proximo }}</div></div></div>
+<form class="card" method="post" action="/chamados/novo">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if u.papel == 'unidade' %}
+  <p class="muted">Unidade: <b>{{ u.unidade.nome }}</b></p>
+  {% else %}
+  <div class="grid2">
+    <div class="campo"><label for="unidade_id">{{ 'Cliente / unidade' if u.equipe else 'Unidade' }}</label>
+      {{ select_unidades(grupos) }}</div>
+    {% if u.equipe %}
+    <div class="campo"><label for="abertura">Data de abertura</label>
+      <input id="abertura" type="date" name="abertura" value="{{ hoje.isoformat() }}"></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="campo"><label for="assunto">Assunto</label>
+    <input id="assunto" name="assunto" required maxlength="200" placeholder="Ex.: Falha na caixa de som da sala de dança"></div>
+  {% if u.equipe %}
+  <div class="campo"><label for="titulo">Título no PDF <span class="muted">(opcional)</span></label>
+    <input id="titulo" name="titulo" maxlength="200" placeholder="Ex.: Sala de Dança — Falha na Caixa de Som">
+    <div class="dica">Aparece em laranja abaixo de “RELATÓRIO DE CHAMADO”. Se ficar vazio, usa o assunto.</div></div>
+  {% endif %}
+  <div class="campo"><label for="problema">Problema relatado</label>
+    <textarea id="problema" name="problema" required placeholder="Descreva o que está acontecendo"></textarea>
+    <div class="dica">Use **texto** para deixar em negrito.</div></div>
+
+  {% if u.equipe %}
+  <h2 style="margin-top:8px">Primeira ação <span class="muted" style="font-weight:400">(opcional)</span></h2>
+  <p class="dica" style="margin-top:0">A abertura do chamado já é registrada automaticamente. Use este campo se o atendimento já começou ou foi agendado.</p>
+  <div class="campo"><label for="acao_descricao">Ação</label>
+    <input id="acao_descricao" name="acao_descricao" placeholder="Ex.: Visita técnica e correção da falha no carregador"></div>
+  <div class="grid3">
+    <div class="campo"><label for="acao_status">Status da ação</label>
+      <select id="acao_status" name="acao_status">{% for s in STATUS_ACAO %}<option>{{ s }}</option>{% endfor %}</select></div>
+    <div class="campo"><label for="acao_data">Data</label><input id="acao_data" type="date" name="acao_data" value="{{ hoje.isoformat() }}"></div>
+    <div class="campo"><label for="acao_hora">Horário</label><input id="acao_hora" type="time" name="acao_hora" value="{{ agora_hora }}"></div>
+  </div>
+  {% endif %}
+  <button class="btn">Abrir chamado</button>
+</form>
+{% endblock %}

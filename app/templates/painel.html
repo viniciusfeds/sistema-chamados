@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades, selo %}
+{% block titulo %}Painel{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div>
+    <h1>Painel de chamados</h1>
+    <div class="muted">{% if u.equipe %}Todos os clientes{% else %}{{ u.descricao_escopo }}{% endif %}</div>
+  </div>
+  <a class="btn" href="/chamados/novo">+ Abrir chamado</a>
+</div>
+
+{% if novos_link and u.equipe %}
+<div class="flash aviso">{{ novos_link }} chamado(s) aberto(s) pelo link público aguardando atendimento.
+  <a href="?status=aberto{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}">Ver</a></div>
+{% endif %}
+
+{% macro qs(st) -%}
+?status={{ st }}{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}{% if f.unidade %}&unidade={{ f.unidade }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.de %}&de={{ f.de }}{% endif %}{% if f.ate %}&ate={{ f.ate }}{% endif %}
+{%- endmacro %}
+<div class="cards">
+  {% set total = contagem.values()|sum - contagem['cancelado'] %}
+  <a href="{{ qs('') }}" style="--c:#2B2B2B" class="{{ 'ativo' if not f.status }}"><b>{{ total }}</b><span>Total</span></a>
+  {% for k in ORDEM_STATUS %}
+  <a href="{{ qs(k) }}" style="--c:{{ cor(k) }}" class="{{ 'ativo' if f.status == k }}"><b>{{ contagem[k] }}</b><span>{{ rotulo(k) }}</span></a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <form class="filtros {{ 'com-cliente' if u.equipe }}" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Nº do ticket, assunto, problema ou solicitante"></div>
+    {% if u.equipe %}
+    <div><label for="cliente">Cliente</label>
+      <select id="cliente" name="cliente" onchange="this.form.unidade.value='';this.form.submit()"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}
+      </select></div>
+    {% endif %}
+    {% if u.papel != 'unidade' %}
+    <div><label for="unidade">Unidade</label>
+      {% set gs = grupos %}
+      {% if f.cliente %}{% set gs = gs|selectattr('0.id', 'equalto', f.cliente)|list %}{% endif %}
+      {{ select_unidades(gs, 'unidade', f.unidade, 'Todas', False) }}</div>
+    {% endif %}
+    <div><label for="de">Aberto de</label><input id="de" type="date" name="de" value="{{ f.de }}"></div>
+    <div><label for="ate">até</label><input id="ate" type="date" name="ate" value="{{ f.ate }}"></div>
+    <input type="hidden" name="status" value="{{ f.status }}">
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if chamados %}
+<table class="resp">
+  <thead><tr><th>Ticket</th>{% if u.equipe %}<th>Cliente</th>{% endif %}<th>Unidade</th><th>Assunto</th><th>Abertura</th><th>Última ação</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for c in chamados %}
+  {% set s = sits[c.id] %}
+  {% set ult = c.acoes_ordenadas[-1] if c.acoes else None %}
+  <tr class="link" onclick="location.href='/chamados/{{ c.numero }}'">
+    <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
+    {% if u.equipe %}<td data-l="Cliente">{{ c.unidade.cliente.nome_curto or c.unidade.cliente.nome }}</td>{% endif %}
+    <td data-l="Unidade">{{ c.unidade.nome_curto }}</td>
+    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}</td>
+    <td data-l="Abertura">{{ c.abertura|data }}</td>
+    <td data-l="Última ação" class="muted">{% if ult %}{{ ult.quando }}{% endif %}</td>
+    <td data-l="Status">{{ selo(s) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="vazio">Nenhum chamado encontrado com esses filtros.</div>
+{% endif %}
+</div>
+{% if contagem['cancelado'] and f.status != 'cancelado' %}
+<p class="muted"><a href="{{ qs('cancelado') }}">Ver {{ contagem['cancelado'] }} chamado(s) cancelado(s)</a></p>
+{% endif %}
+{% endblock %}

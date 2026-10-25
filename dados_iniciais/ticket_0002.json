@@ -1,0 +1,51 @@
+{
+  "ticket": 2,
+  "unidade": "SkyFit Vila Augusta",
+  "titulo": "Catraca 02 — Lentidão na Liberação de Acesso",
+  "assunto": "Lentidão na liberação da Catraca 02",
+  "abertura": "15/10/2026",
+  "problema": "A <b>Catraca 02</b> apresentava lentidão na liberação de acesso dos alunos pelo leitor facial.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Deslocamento do técnico até a unidade para atendimento presencial",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Reset do modem da operadora <b>Vivo</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Liberação de portas no modem da <b>Vivo</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Refeita a configuração da facial da <b>Catraca 02</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Ajuste do parâmetro <b>“tempo de liberação”</b> da facial: de <b>4 segundos</b> para <b>1 segundo</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Teste de liberação de acesso realizado com sucesso",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:28",
+      "acao": "Acompanhamento com a recepção para validação do funcionamento",
+      "status": "Em andamento"
+    }
+  ],
+  "status": "andamento",
+  "status_titulo": "Chamado em acompanhamento",
+  "status_texto": "A Catraca 02 já está liberando normalmente após os ajustes. O chamado segue em acompanhamento com a recepção e será encerrado após a validação.",
+  "resumo": "Modem Vivo resetado, portas liberadas, facial reconfigurada, liberação 4s → 1s. Teste OK.",
+  "proximo": "Aguardando validação da recepção para encerramento."
+}

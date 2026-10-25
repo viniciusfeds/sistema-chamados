@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Chamados{% endblock %} · {{ config.EMPRESA_NOME }}</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if u %}
+<header class="topo"><div class="in">
+  <a href="/"><img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}"></a>
+  <nav>
+    <a href="/" class="{{ 'ativo' if request.url.path == '/' }}">Painel</a>
+    <a href="/chamados/novo" class="{{ 'ativo' if request.url.path == '/chamados/novo' }}">Abrir chamado</a>
+    <a href="/relatorio" class="{{ 'ativo' if request.url.path == '/relatorio' }}">Relatório</a>
+    {% if u.papel == 'admin' %}<a href="/admin" class="{{ 'ativo' if request.url.path == '/admin' }}">Administração</a>{% endif %}
+    <a href="/conta" class="{{ 'ativo' if request.url.path == '/conta' }}">Minha conta</a>
+    <a href="/sair">Sair</a>
+  </nav>
+  <div class="quem"><b>{{ u.nome }}</b><br>{{ PAPEIS[u.papel] }}{% if u.descricao_escopo %} · {{ u.descricao_escopo }}{% endif %}</div>
+</div></header>
+{% endif %}
+<main>
+{% if flash %}<div class="flash {{ flash.tipo }}">{{ flash.msg }}</div>{% endif %}
+{% block conteudo %}{% endblock %}
+<footer class="rodape-versao">Sistema de Chamados {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
+</main>
+</body>
+</html>

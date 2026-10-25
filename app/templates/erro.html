@@ -1,0 +1,10 @@
+{% extends "publico_base.html" if publico else "base.html" %}
+{% block titulo %}Erro{% endblock %}
+{% block conteudo %}
+<div class="card login" style="text-align:center">
+  {% if not publico %}<img src="/static/logo.png" alt="">{% endif %}
+  <h1 style="font-size:1.3rem">{{ erro }}</h1>
+  <p><a class="btn sec" href="javascript:history.back()">Voltar</a>
+  {% if not publico %}<a class="btn" href="/">Ir para o painel</a>{% endif %}</p>
+</div>
+{% endblock %}

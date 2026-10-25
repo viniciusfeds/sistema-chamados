@@ -1,0 +1,24 @@
+{
+  "ticket": 9,
+  "unidade": "SkyFit Vila Augusta",
+  "titulo": "Rede — Inclusão de Impressora Wi-Fi",
+  "assunto": "Inclusão de impressora Wi-Fi",
+  "abertura": "22/10/2026",
+  "problema": "Solicitada a <b>inclusão de uma impressora Wi-Fi</b> na rede da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "22/10/2026 · 14:18",
+      "acao": "Abertura do chamado e registro da solicitação",
+      "status": "Concluído"
+    },
+    {
+      "quando": "A agendar",
+      "acao": "Configuração da impressora na rede Wi-Fi e teste de impressão",
+      "status": "Aguardando"
+    }
+  ],
+  "status_texto": "Chamado registrado. Informaremos a data do atendimento técnico.",
+  "resumo": "Chamado registrado; aguardando agendamento do atendimento.",
+  "proximo": "Agendar a configuração da impressora Wi-Fi na rede da unidade."
+}

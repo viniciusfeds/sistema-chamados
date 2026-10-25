@@ -1,0 +1,30 @@
+{
+  "ticket": 4,
+  "unidade": "SkyFit Carrão",
+  "titulo": "CFTV — Troca de Senha do DVR",
+  "assunto": "Solicitação de troca de senha do DVR",
+  "abertura": "15/10/2026",
+  "problema": "Solicitada a <b>troca da senha de acesso do DVR</b> (gravador das câmeras) da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "15/10/2026 · 19:07",
+      "acao": "Abertura do chamado e registro da solicitação",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 19:08",
+      "acao": "Troca da senha de acesso do DVR realizada",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 19:08",
+      "acao": "Nova senha enviada à responsável <b>Alessandra</b>",
+      "status": "Concluído"
+    }
+  ],
+  "status": "concluido",
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Senha do DVR alterada e enviada à Alessandra. Por segurança, a nova senha não consta neste relatório.",
+  "resumo": "Senha alterada e enviada à Alessandra."
+}

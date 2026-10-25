@@ -1,0 +1,34 @@
+# Sistema de Chamados TecnosIT
+#   docker compose up -d --build        → sobe em http://SERVIDOR:9000
+#   docker compose logs -f app          → ver os logs
+#   docker compose exec app python -m scripts.gerenciar backup
+services:
+  app:
+    build: .
+    image: tecnosit/chamados:latest
+    container_name: chamados
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${PORTA:-9000}:${PORTA:-9000}"   # faixa liberada: 9000–9100
+    volumes:
+      - chamados_dados:/app/dados
+
+  # --- Opcional: PostgreSQL em vez de SQLite -------------------------------
+  # Suba com:  docker compose --profile postgres up -d --build
+  # e no .env: DATABASE_URL=postgresql+psycopg://chamados:SENHA@db:5432/chamados
+  # (descomente psycopg[binary] no requirements.txt)
+  db:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chamados
+      POSTGRES_USER: chamados
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha}
+    volumes:
+      - chamados_pg:/var/lib/postgresql/data
+
+volumes:
+  chamados_dados:
+  chamados_pg:

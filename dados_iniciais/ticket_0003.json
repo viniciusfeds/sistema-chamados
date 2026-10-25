@@ -1,0 +1,30 @@
+{
+  "ticket": 3,
+  "unidade": "SkyFit Carrão",
+  "titulo": "Sala de Dança — Falha na Caixa de Som",
+  "assunto": "Falha na caixa de som da sala de dança",
+  "abertura": "15/10/2026",
+  "problema": "Relatada falha na <b>caixa de som da sala de dança</b> da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "15/10/2026 · 18:54",
+      "acao": "Abertura do chamado e registro da falha",
+      "status": "Concluído"
+    },
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Visita técnica à unidade",
+      "status": "Concluído"
+    },
+    {
+      "quando": "17/10/2026 · 16:52",
+      "acao": "Manutenção da caixa de som da sala de dança realizada no local",
+      "status": "Concluído"
+    }
+  ],
+  "status": "aberto",
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Manutenção realizada no local. Caixa de som da sala de dança funcionando normalmente.",
+  "resumo": "Manutenção realizada no local em 17/10. Caixa de som funcionando."
+}

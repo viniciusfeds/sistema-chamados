@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades, caixa_status, copiar %}
+{% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div>
+    <div class="muted"><a href="/">← Painel</a></div>
+    <h1>Ticket <span class="num">{{ ch.numero_fmt }}</span> <span class="selo" style="background:{{ cor(sit) }};vertical-align:middle">{{ rotulo(sit) }}</span></h1>
+    <div class="sub">{{ ch.titulo|fmt }}</div>
+  </div>
+  <a class="btn" href="/chamados/{{ ch.numero }}/pdf" target="_blank">Baixar PDF</a>
+</div>
+
+{% if ch.cancelado %}
+<div class="caixa" style="background:#F0F0F0;border-color:#DADADA;margin-bottom:16px">
+  <b>Chamado cancelado.</b> {% if ch.motivo_cancelamento %}{{ ch.motivo_cancelamento }}{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <dl class="dados">
+    <dt>Cliente</dt><dd>{{ ch.unidade.cliente.nome }}</dd>
+    <dt>Unidade</dt><dd>{{ ch.unidade.nome }}</dd>
+    <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
+    <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
+    {% if ch.solicitante_nome %}
+    <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% endif %}</dd>
+    {% if u.equipe and (ch.solicitante_contato or ch.solicitante_email) %}
+    <dt>Contato</dt><dd>{% if ch.solicitante_contato %}{% set fone = ch.solicitante_contato|replace(' ','')|replace('(','')|replace(')','')|replace('-','')|replace('+','') %}
+      <a href="https://wa.me/{{ '55' ~ fone if fone|length <= 11 else fone }}" target="_blank" rel="noopener">{{ ch.solicitante_contato }}</a>{% endif %}
+      {% if ch.solicitante_email %} · <a href="mailto:{{ ch.solicitante_email }}">{{ ch.solicitante_email }}</a>{% endif %}</dd>
+    {% endif %}
+    {% endif %}
+    <dt>Responsável técnico</dt><dd>{{ ch.responsavel or config.RESPONSAVEL_PADRAO }}</dd>
+  </dl>
+  <h2>Problema relatado</h2>
+  <p>{{ ch.problema|fmt }}</p>
+
+  {% if ch.diagnostico %}
+  <h2>{{ ch.diagnostico_titulo or 'Diagnóstico' }}</h2>
+  <table style="margin-bottom:8px"><thead><tr>{% for c in ch.diagnostico[0] %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for r in ch.diagnostico[1:] %}<tr>{% for c in r %}<td>{{ c|fmt }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>
+  {% endif %}
+</div>
+
+<div class="card" id="acoes">
+  <h2>Ações</h2>
+  {% if ch.acoes %}
+  <table class="resp">
+    <thead><tr><th style="width:170px">Data / Horário</th><th>Ação</th><th style="width:130px">Status</th>{% if u.equipe %}<th style="width:80px"></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for a in ch.acoes_ordenadas %}
+    <tr>
+      <td data-l="Data">{{ a.quando }}</td>
+      <td data-l="Ação">{{ a.descricao|fmt }}</td>
+      <td data-l="Status"><span class="st-acao" style="color:{{ COR_ACAO.get(a.status,'#2B2B2B') }}">{{ a.status }}</span></td>
+      {% if u.equipe %}<td><button type="button" class="btn peq sec" onclick="var r=document.getElementById('ed-{{ a.id }}');r.hidden=!r.hidden">Editar</button></td>{% endif %}
+    </tr>
+    {% if u.equipe %}
+    <tr id="ed-{{ a.id }}" class="edicao" hidden><td colspan="4">
+      <form method="post" action="/chamados/{{ ch.numero }}/acoes/{{ a.id }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="campo"><label>Ação</label><input name="descricao" value="{{ a.descricao }}" required></div>
+        <div class="grid3">
+          <div class="campo"><label>Status</label><select name="status">{% for s in STATUS_ACAO %}<option {{ 'selected' if s == a.status }}>{{ s }}</option>{% endfor %}</select></div>
+          <div class="campo"><label>Data</label><input type="date" name="data" value="{{ a.data.isoformat() if a.data }}"></div>
+          <div class="campo"><label>Horário</label><input type="time" name="hora" value="{{ a.hora.strftime('%H:%M') if a.hora }}"></div>
+        </div>
+        <div class="campo"><label>Sem data? Texto no lugar da data</label><input name="quando_texto" value="{{ a.quando_texto or '' }}" placeholder="A agendar"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn peq" name="operacao" value="salvar">Salvar</button>
+          <button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Excluir esta ação?')">Excluir</button>
+        </div>
+      </form>
+    </td></tr>
+    {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nenhuma ação registrada.</p>{% endif %}
+
+  {% if u.equipe and not ch.cancelado %}
+  <form method="post" action="/chamados/{{ ch.numero }}/acoes" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:14px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h3>Registrar nova ação</h3>
+    <div class="campo"><label for="descricao">Ação realizada ou prevista</label>
+      <input id="descricao" name="descricao" required placeholder="Ex.: Carga dos alunos na **Catraca 02** finalizada"></div>
+    <div class="grid3">
+      <div class="campo"><label for="status">Status</label>
+        <select id="status" name="status">{% for s in STATUS_ACAO %}<option>{{ s }}</option>{% endfor %}</select></div>
+      <div class="campo"><label for="data">Data</label><input id="data" type="date" name="data" value="{{ hoje.isoformat() }}"></div>
+      <div class="campo"><label for="hora">Horário</label><input id="hora" type="time" name="hora" value="{{ agora_hora }}"></div>
+    </div>
+    <div class="dica" style="margin:-4px 0 10px">Para algo ainda sem data, apague a data e escreva, por exemplo, “A agendar”:
+      <input name="quando_texto" placeholder="A agendar" style="max-width:220px;padding:5px 8px;margin-left:4px"></div>
+    <button class="btn">Registrar ação</button>
+  </form>
+  {% endif %}
+</div>
+
+{{ caixa_status(ch, sit, texto_padrao) }}
+
+<div class="card">
+  <h3 style="margin-bottom:6px">Link de acompanhamento</h3>
+  <p class="dica" style="margin-top:0">Quem tiver este link vê o andamento e baixa o PDF, sem precisar de login. Ele também é mostrado a quem abriu o chamado pela página pública.</p>
+  {{ copiar(link_publico) }}
+</div>
+
+{% if u.equipe %}
+<details class="card" style="padding:14px 18px">
+  <summary>Editar dados do chamado, texto de status e relatório</summary>
+  <form method="post" action="/chamados/{{ ch.numero }}/editar" style="margin-top:14px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid2">
+      <div class="campo"><label>Cliente / unidade</label>
+        {% if ch.unidade.ativa %}{{ select_unidades(grupos, 'unidade_id', ch.unidade_id, id='ed_unidade') }}
+        {% else %}<input type="hidden" name="unidade_id" value="{{ ch.unidade_id }}"><p>{{ ch.unidade.nome }} (inativa)</p>{% endif %}</div>
+      <div class="campo"><label>Data de abertura</label><input type="date" name="abertura" value="{{ ch.abertura.isoformat() }}"></div>
+    </div>
+    <div class="campo"><label>Assunto</label><input name="assunto" value="{{ ch.assunto }}" required></div>
+    <div class="campo"><label>Título no PDF</label><input name="titulo" value="{{ ch.titulo }}" required></div>
+    <div class="campo"><label>Problema relatado</label><textarea name="problema" required>{{ ch.problema }}</textarea></div>
+    <div class="campo"><label>Responsável técnico</label><input name="responsavel" value="{{ ch.responsavel or '' }}" placeholder="{{ config.RESPONSAVEL_PADRAO }}"></div>
+    <div class="grid2">
+      <div class="campo"><label>Título da tabela de diagnóstico</label><input name="diagnostico_titulo" value="{{ ch.diagnostico_titulo or '' }}" placeholder="Diagnóstico"></div>
+      <div></div>
+    </div>
+    <div class="campo"><label>Tabela de diagnóstico <span class="muted">(opcional)</span></label>
+      <textarea name="diagnostico" placeholder="Equipamento | Endereço IP | Pessoas cadastradas&#10;Catraca 01 | 192.168.15.231 | 10.240">{{ diag_texto }}</textarea>
+      <div class="dica">Uma linha por linha da tabela; a primeira é o cabeçalho. Separe as colunas com “|”.</div></div>
+    <div class="campo"><label>Texto da caixa de status</label>
+      <textarea name="status_texto" style="min-height:60px">{{ ch.status_texto or texto_padrao[sit] }}</textarea>
+      <div class="dica">Quando o status geral muda, este texto volta para o padrão automaticamente.</div></div>
+    <div class="campo"><label>Situação atual (coluna do relatório)</label>
+      <textarea name="resumo" style="min-height:60px" placeholder="Se vazio, usa o texto da caixa de status">{{ ch.resumo or '' }}</textarea></div>
+    <div class="campo"><label>Próximo passo (relatório)</label>
+      <textarea name="proximo" style="min-height:60px" placeholder="Se vazio, usa o texto da caixa de status">{{ ch.proximo or '' }}</textarea></div>
+    <button class="btn">Salvar alterações</button>
+  </form>
+  <hr style="border:0;border-top:1px solid var(--linha);margin:18px 0">
+  {% if ch.cancelado %}
+  <form method="post" action="/chamados/{{ ch.numero }}/reabrir"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sec">Reativar chamado</button></form>
+  {% else %}
+  <form method="post" action="/chamados/{{ ch.numero }}/cancelar" onsubmit="return confirm('Cancelar o ticket {{ ch.numero_fmt }}?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>Cancelar chamado (ex.: duplicado)</label><input name="motivo" placeholder="Motivo, ex.: Duplicado do ticket 0003"></div>
+    <button class="btn perigo">Cancelar chamado</button>
+  </form>
+  {% endif %}
+</details>
+{% endif %}
+{% endblock %}

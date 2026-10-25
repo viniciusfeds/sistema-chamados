@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% from "_macros.html" import copiar %}
+{% block titulo %}Administração{% endblock %}
+{% block conteudo %}
+<h1>Administração</h1>
+
+<div class="card" id="clientes">
+  <h2>Clientes</h2>
+  <p class="dica" style="margin-top:0">Cada cliente tem um <b>link público de abertura de chamado</b>, sem login. Envie esse link no grupo do cliente: quem abrir escolhe a unidade, informa nome e WhatsApp e descreve o problema.</p>
+  {% for c in clientes %}
+  <div class="cliente-box {{ '' if c.ativo else 'inativo' }}">
+    <div class="cab" style="margin-bottom:6px">
+      <div><b style="font-size:1.1rem">{{ c.nome }}</b>
+        <span class="muted">· {{ c.unidades|length }} unidade(s){% if not c.ativo %} · <b>inativo</b>{% endif %}</span></div>
+      <form method="post" action="/admin/clientes/{{ c.id }}" style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq sec" name="operacao" value="link">{{ 'Desativar link' if c.abertura_publica else 'Ativar link' }}</button>
+        <button class="btn peq sec" name="operacao" value="novo_link" onclick="return confirm('Gerar um novo link? O link atual de {{ c.nome }} vai parar de funcionar.')">Gerar novo link</button>
+        <button class="btn peq {{ 'perigo' if c.ativo else 'sec' }}" name="operacao" value="ativo">{{ 'Desativar cliente' if c.ativo else 'Ativar cliente' }}</button>
+      </form>
+    </div>
+    {% if c.abertura_publica and c.ativo %}
+      {{ copiar(base ~ '/abrir/' ~ c.slug_publico) }}
+      <a class="dica" href="/abrir/{{ c.slug_publico }}" target="_blank">Abrir página ↗</a>
+    {% else %}
+      <p class="muted" style="margin:4px 0">Link público desativado.</p>
+    {% endif %}
+    <details style="margin-top:8px"><summary>Editar nome</summary>
+      <form method="post" action="/admin/clientes/{{ c.id }}" class="grid3" style="margin-top:8px;align-items:end">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div><label>Nome</label><input name="nome" value="{{ c.nome }}" required></div>
+        <div><label>Prefixo das unidades</label><input name="nome_curto" value="{{ c.nome_curto or '' }}" placeholder="Ex.: SkyFit"></div>
+        <div><button class="btn peq" name="operacao" value="salvar">Salvar</button></div>
+      </form>
+    </details>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum cliente cadastrado.</p>
+  {% endfor %}
+  <details style="margin-top:12px"><summary>+ Novo cliente</summary>
+  <form method="post" action="/admin/clientes" class="grid3" style="margin-top:10px;align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label>Nome do cliente</label><input name="nome" required placeholder="Ex.: Condomínio Top Guarulhos"></div>
+    <div><label>Prefixo das unidades <span class="muted">(opcional)</span></label><input name="nome_curto" placeholder="Ex.: Top"></div>
+    <div><button class="btn">Cadastrar cliente</button></div>
+  </form>
+  <p class="dica">O prefixo é colocado na frente do nome das unidades (ex.: prefixo “SkyFit” + unidade “Cisper” = “SkyFit Cisper”). Deixe vazio se não quiser.</p>
+  </details>
+</div>
+
+<div class="card" id="unidades">
+  <h2>Unidades</h2>
+  <table class="resp" style="margin-bottom:14px">
+    <thead><tr><th>Cliente</th><th>Unidade</th><th>Chamados</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for c in clientes %}{% for un in c.unidades %}
+    <tr><td data-l="Cliente">{{ c.nome }}</td><td data-l="Unidade"><b>{{ un.nome }}</b></td><td data-l="Chamados">{{ un.chamados|length }}</td>
+      <td data-l="Situação">{{ 'Ativa' if un.ativa else 'Inativa' }}</td>
+      <td><form method="post" action="/admin/unidades/{{ un.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq sec">{{ 'Desativar' if un.ativa else 'Ativar' }}</button></form></td></tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/unidades" class="grid3" style="align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label>Cliente</label><select name="cliente_id" required><option value="">Selecione…</option>
+      {% for c in clientes if c.ativo %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label>Nova unidade</label><input name="nome" required placeholder="Ex.: Bonsucesso"></div>
+    <div><button class="btn">Cadastrar unidade</button></div>
+  </form>
+</div>
+
+<div class="card" id="usuarios">
+  <h2>Usuários</h2>
+  <table class="resp" style="margin-bottom:14px">
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for x in usuarios %}
+    <tr>
+      <td data-l="Nome"><b>{{ x.nome }}</b></td>
+      <td data-l="E-mail">{{ x.email }}</td>
+      <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}</td>
+      <td data-l="Situação">{{ 'Ativo' if x.ativo else 'Inativo' }}</td>
+      <td>
+        <details style="margin:0;padding:4px 8px"><summary>Opções</summary>
+          <form method="post" action="/admin/usuarios/{{ x.id }}" style="margin-top:8px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input name="senha" type="password" placeholder="Nova senha (mín. 8)" autocomplete="new-password" style="margin-bottom:6px">
+            <button class="btn peq" name="operacao" value="senha">Trocar senha</button>
+            {% if x.id != u.id %}<button class="btn peq sec" name="operacao" value="alternar">{{ 'Desativar' if x.ativo else 'Ativar' }}</button>{% endif %}
+          </form>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <details><summary>+ Novo usuário</summary>
+  <form method="post" action="/admin/usuarios" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid2">
+      <div class="campo"><label>Nome</label><input name="nome" required></div>
+      <div class="campo"><label>E-mail (login)</label><input name="email" type="email" required></div>
+      <div class="campo"><label>Senha inicial</label><input name="senha" type="password" minlength="8" required autocomplete="new-password"></div>
+      <div class="campo"><label>Perfil</label><select name="papel" id="papel" onchange="mostrarEscopo(this.value)">
+        <option value="unidade">Unidade: vê e abre só os chamados da unidade</option>
+        <option value="gestor">Gestor do cliente: vê todas as unidades do cliente</option>
+        <option value="tecnico">Técnico TecnosIT: todos os clientes</option>
+        <option value="admin">Administrador</option></select></div>
+    </div>
+    <div class="campo" id="box-unidade"><label>Unidade</label><select name="unidade_id"><option value="">Selecione…</option>
+      {% for c in clientes if c.ativo %}<optgroup label="{{ c.nome }}">
+        {% for un in c.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</optgroup>{% endfor %}</select></div>
+    <div class="campo" id="box-cliente" hidden><label>Cliente</label><select name="cliente_id"><option value="">Selecione…</option>
+      {% for c in clientes if c.ativo %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+    <button class="btn">Criar usuário</button>
+  </form></details>
+  <script>
+  function mostrarEscopo(p){document.getElementById('box-unidade').hidden=p!=='unidade';document.getElementById('box-cliente').hidden=p!=='gestor';}
+  </script>
+</div>
+{% endblock %}

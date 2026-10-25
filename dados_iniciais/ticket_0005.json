@@ -1,0 +1,25 @@
+{
+  "ticket": 5,
+  "unidade": "SkyFit Carrão",
+  "titulo": "CFTV — Atualização do DVR",
+  "assunto": "Atualização do DVR",
+  "abertura": "15/10/2026",
+  "problema": "Necessidade de <b>atualização do DVR</b> (gravador das câmeras) da unidade.",
+  "titulo_solucao": "Ações",
+  "acoes": [
+    {
+      "quando": "15/10/2026 · 19:08",
+      "acao": "Abertura do chamado",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 19:08",
+      "acao": "Atualização do DVR realizada",
+      "status": "Concluído"
+    }
+  ],
+  "status": "concluido",
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Atualização do DVR realizada hoje. Equipamento operando normalmente.",
+  "resumo": "Atualização do DVR realizada."
+}

@@ -1,0 +1,63 @@
+{
+  "ticket": 1,
+  "unidade": "SkyFit Cisper",
+  "titulo": "Leitores Faciais — Limite Máximo de Cadastros Atingido",
+  "assunto": "Leitor facial não aceitava novos cadastros",
+  "abertura": "14/10/2026",
+  "problema": "Os leitores faciais atingiram o limite máximo de cadastros na memória, impedindo a inclusão de novos alunos.",
+  "titulo_tabela": "Diagnóstico",
+  "tabela": [
+    [
+      "Equipamento",
+      "Endereço IP",
+      "Pessoas cadastradas"
+    ],
+    [
+      "Catraca 01",
+      "192.168.15.231",
+      "10.240"
+    ],
+    [
+      "Catraca 02",
+      "192.168.15.232",
+      "10.096"
+    ]
+  ],
+  "titulo_solucao": "Ações",
+  "status": "andamento",
+  "status_titulo": "Chamado concluído",
+  "status_texto": "Cargas concluídas e propaganda incluída. Catracas 01 e 02 operando normalmente.",
+  "acoes": [
+    {
+      "quando": "14/10/2026 · 14:51",
+      "acao": "Acesso local às duas faciais e levantamento do total de cadastros",
+      "status": "Concluído"
+    },
+    {
+      "quando": "14/10/2026 · 15:20",
+      "acao": "Reset e carga dos alunos na <b>Catraca 01</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "14/10/2026 · 22:12",
+      "acao": "Reinício, teste OK e validação com a recepção — <b>Catraca 01 liberada</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 10:21",
+      "acao": "Reset e início da carga dos alunos na <b>Catraca 02</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "15/10/2026 · 12:55",
+      "acao": "Imagem de propaganda incluída nas <b>Catracas 01 e 02</b>",
+      "status": "Concluído"
+    },
+    {
+      "quando": "19/10/2026 · 08:49",
+      "acao": "Carga dos alunos na <b>Catraca 02</b> finalizada — <b>Catraca 02 liberada</b>",
+      "status": "Concluído"
+    }
+  ],
+  "resumo": "Cargas concluídas nas 2 faciais e propaganda incluída. Catracas operando."
+}

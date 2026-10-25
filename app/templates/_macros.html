@@ -1,0 +1,48 @@
+{# Select de unidades agrupado por cliente. grupos = [(cliente, [unidades])] #}
+{% macro select_unidades(grupos, nome="unidade_id", selecionada=None, vazio="Selecione…", obrigatorio=True, id=None) -%}
+<select name="{{ nome }}" id="{{ id or nome }}" {{ 'required' if obrigatorio }}>
+  <option value="">{{ vazio }}</option>
+  {% if grupos|length == 1 %}
+    {% for un in grupos[0][1] %}<option value="{{ un.id }}" {{ 'selected' if selecionada == un.id }}>{{ un.nome }}</option>{% endfor %}
+  {% else %}
+    {% for cli, uns in grupos %}
+    <optgroup label="{{ cli.nome }}">
+      {% for un in uns %}<option value="{{ un.id }}" {{ 'selected' if selecionada == un.id }}>{{ un.nome }}</option>{% endfor %}
+    </optgroup>
+    {% endfor %}
+  {% endif %}
+</select>
+{%- endmacro %}
+
+{% macro selo(st) -%}
+<span class="selo" style="background:{{ cor(st) }}">{{ rotulo(st) }}</span>
+{%- endmacro %}
+
+{# Tabela de ações somente leitura (usada também na página pública) #}
+{% macro tabela_acoes(ch) -%}
+<table class="resp">
+  <thead><tr><th style="width:170px">Data / Horário</th><th>Ação</th><th style="width:130px">Status</th></tr></thead>
+  <tbody>
+  {% for a in ch.acoes_ordenadas %}
+  <tr>
+    <td data-l="Data">{{ a.quando }}</td>
+    <td data-l="Ação">{{ a.descricao|fmt }}</td>
+    <td data-l="Status"><span class="st-acao" style="color:{{ COR_ACAO.get(a.status,'#2B2B2B') }}">{{ a.status }}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro caixa_status(ch, sit, texto_padrao) -%}
+{% set cx = CAIXAS[sit] %}
+<div class="caixa" style="background:{{ cx[0] }};border-color:{{ cx[1] }};margin-bottom:16px">
+  <b style="color:{{ cor(sit) }}">Chamado {{ rotulo(sit)|lower }}</b><br>
+  {{ (ch.status_texto or texto_padrao[sit])|fmt }}
+</div>
+{%- endmacro %}
+
+{% macro copiar(texto, rotulo="Copiar link") -%}
+<span class="copiar"><input readonly value="{{ texto }}" onclick="this.select()">
+<button type="button" class="btn peq sec" onclick="var i=this.previousElementSibling;i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);this.textContent='Copiado!'">{{ rotulo }}</button></span>
+{%- endmacro %}
