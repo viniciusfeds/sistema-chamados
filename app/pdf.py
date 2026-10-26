@@ -83,6 +83,8 @@ def _cabecalho(ticket=None, situacao=None):
         c.line(ML, 22 * mm, W - MR, 22 * mm)
         c.setFont("Carlito", 8.5); c.setFillColor(CINZA)
         c.drawString(ML, 16 * mm, config.EMPRESA_RODAPE)
+        c.setFont("Carlito", 7); c.setFillColor(colors.HexColor("#A0A0A0"))
+        c.drawString(ML, 12 * mm, f"Emitido pelo {config.SISTEMA_NOME}")
         c.setFont("Times-Roman", 11); c.setFillColor(colors.black)
         c.drawRightString(W - MR, 16 * mm, str(doc.page))
         c.restoreState()
@@ -92,7 +94,8 @@ def _cabecalho(ticket=None, situacao=None):
 def _doc(buf, titulo, ticket=None, situacao=None):
     doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=ML, rightMargin=MR,
                           topMargin=41 * mm, bottomMargin=28 * mm,
-                          title=titulo, author=config.EMPRESA_NOME)
+                          title=titulo, author=config.EMPRESA_NOME,
+                          creator=config.SISTEMA_NOME, subject=f"{config.SISTEMA_NOME} · {config.EMPRESA_NOME}")
     doc.addPageTemplates([PageTemplate(frames=[Frame(ML, 25 * mm, LARG, H - 66 * mm, 0, 0, 0, 0)],
                                        onPage=_cabecalho(ticket, situacao))])
     return doc

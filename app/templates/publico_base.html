@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>{% block titulo %}Chamado{% endblock %} · {{ config.EMPRESA_NOME }}</title>
+<title>{% block titulo %}Chamado{% endblock %} · {{ config.SISTEMA_NOME }}</title>
 <link rel="icon" href="/static/logo.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -17,7 +17,7 @@
 <main class="estreito">
 {% if flash %}<div class="flash {{ flash.tipo }}">{{ flash.msg }}</div>{% endif %}
 {% block conteudo %}{% endblock %}
-<p class="muted" style="text-align:center;margin-top:24px">{{ config.EMPRESA_NOME }} · Soluções em Tecnologia · WhatsApp {{ config.EMPRESA_WHATSAPP }}</p>
+<p class="muted" style="text-align:center;margin-top:24px">{{ config.EMPRESA_NOME }} · Soluções em Tecnologia · WhatsApp {{ config.EMPRESA_WHATSAPP }}<br><span style="font-size:.8rem">{{ config.SISTEMA_NOME }}</span></p>
 </main>
 </body>
 </html>

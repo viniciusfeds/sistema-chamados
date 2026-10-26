@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.2.1 — 2026-10-26
+- O sistema passa a se chamar **Nexus Desk** (linha Nexus: Nexus FIT, Nexus Cond, Nexus Desk)
+- Nome no login, no cabeçalho, no título das páginas, no rodapé, na página pública e nos PDFs ("Emitido pelo Nexus Desk")
+- Nome configurável por `SISTEMA_NOME` no `.env`
+
 ## 1.2.0 — 2026-10-25
 - **WhatsApp automático pela API oficial da Meta (Cloud API)**: avisos enviados sozinhos quando o chamado é aberto, muda de status e é concluído
 - Contatos de aviso por cliente (todas as unidades) ou por unidade, escolhendo os eventos de cada um

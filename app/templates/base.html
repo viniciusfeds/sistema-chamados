@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block titulo %}Chamados{% endblock %} · {{ config.EMPRESA_NOME }}</title>
+<title>{% block titulo %}Chamados{% endblock %} · {{ config.SISTEMA_NOME }}</title>
 <link rel="icon" href="/static/logo.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 {% if u %}
 <header class="topo"><div class="in">
-  <a href="/"><img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}"></a>
+  <a href="/" class="marca"><img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}"><span class="marca-nome">{{ config.SISTEMA_NOME }}</span></a>
   <nav>
     <a href="/" class="{{ 'ativo' if request.url.path == '/' }}">Painel</a>
     <a href="/chamados/novo" class="{{ 'ativo' if request.url.path == '/chamados/novo' }}">Abrir chamado</a>
@@ -25,7 +25,7 @@
 <main>
 {% if flash %}<div class="flash {{ flash.tipo }}">{{ flash.msg }}</div>{% endif %}
 {% block conteudo %}{% endblock %}
-<footer class="rodape-versao">Sistema de Chamados {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
+<footer class="rodape-versao">{{ config.SISTEMA_NOME }} · por {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
 </main>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# Sistema de Chamados TecnosIT
+# Nexus Desk — sistema de chamados TecnosIT
 #   docker compose up -d --build        → sobe em http://SERVIDOR:9000
 #   docker compose logs -f app          → ver os logs
 #   docker compose exec app python -m scripts.gerenciar backup

@@ -171,7 +171,7 @@ def enviar_teste(telefone: str) -> str:
     tel = normalizar_telefone(telefone)
     if not tel:
         raise ErroAPI("Telefone inválido. Use DDD + número, ex.: 11 91234-5678.")
-    params = ["0000", "Unidade de teste", "Em andamento", "Teste de envio pelo sistema de chamados",
+    params = ["0000", "Unidade de teste", "Em andamento", f"Teste de envio pelo {config.SISTEMA_NOME}",
               config.URL_PUBLICA or "https://tecnosit.com.br"]
     resp = _post(payload_modelo(tel, config.WHATSAPP_MODELO_ATUALIZADO, params))
     return (resp.get("messages") or [{}])[0].get("id", "")

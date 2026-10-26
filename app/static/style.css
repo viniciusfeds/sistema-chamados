@@ -13,6 +13,9 @@ h2{font-size:1.15rem;color:var(--laranja)}
 .topo{background:var(--branco);border-bottom:1px solid var(--linha);position:sticky;top:0;z-index:5}
 .topo .in{max-width:1180px;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .topo img{height:42px}
+.marca{display:flex;align-items:center;gap:10px;text-decoration:none}
+.marca-nome{font-weight:800;font-size:1.05rem;color:var(--texto);letter-spacing:.2px;padding-left:10px;border-left:2px solid var(--laranja)}
+.login-nome{text-align:center;font-size:1.6rem;margin-bottom:2px}
 .topo nav{display:flex;gap:4px;flex-wrap:wrap;flex:1}
 .topo nav a{text-decoration:none;color:var(--texto);padding:7px 11px;border-radius:8px;font-weight:600}
 .topo nav a:hover,.topo nav a.ativo{background:#FFF0E8;color:var(--laranja-esc)}
@@ -85,6 +88,8 @@ details summary{cursor:pointer;font-weight:700;color:var(--laranja-esc)}
   .topo img{height:34px}
   .topo nav a{padding:5px 8px;font-size:.95rem}
   .topo .quem{display:none}
+  .marca-nome{font-size:.95rem;padding-left:8px}
+  .topo nav{flex-basis:100%;order:3}
   .so-mobile{display:block}
 }
 

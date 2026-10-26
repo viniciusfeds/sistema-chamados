@@ -26,6 +26,9 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "")
 COOKIE_SEGURO = os.environ.get("COOKIE_SEGURO", "0") == "1"  # 1 em produção (HTTPS)
 FUSO = ZoneInfo(os.environ.get("FUSO_HORARIO", "America/Sao_Paulo"))
 
+# Nome do sistema (linha Nexus: Nexus FIT, Nexus Cond, Nexus Desk)
+SISTEMA_NOME = os.environ.get("SISTEMA_NOME", "Nexus Desk")
+
 EMPRESA_NOME = os.environ.get("EMPRESA_NOME", "TecnosIT")
 EMPRESA_RODAPE = os.environ.get(
     "EMPRESA_RODAPE", "TecnosIT  ·  Soluções em Tecnologia  ·  (11) 96153-8947  ·  tecnosit.com.br")

@@ -1,4 +1,4 @@
-"""Sistema de Chamados TecnosIT — aplicação web (FastAPI), multi-cliente."""
+"""Nexus Desk (TecnosIT) — sistema de chamados, aplicação web (FastAPI), multi-cliente."""
 import hmac
 import json
 import unicodedata
@@ -37,7 +37,7 @@ async def _vida(app):
     yield
 
 
-app = FastAPI(title="Chamados TecnosIT", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_vida)
+app = FastAPI(title=config.SISTEMA_NOME, docs_url=None, redoc_url=None, openapi_url=None, lifespan=_vida)
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY, session_cookie="chamados",
                    max_age=60 * 60 * 24 * 14, same_site="lax", https_only=config.COOKIE_SEGURO)
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")

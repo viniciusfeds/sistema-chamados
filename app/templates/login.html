@@ -3,8 +3,8 @@
 {% block conteudo %}
 <div class="login card">
   <img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}">
-  <h1 style="text-align:center;font-size:1.4rem">Sistema de Chamados</h1>
-  <p class="muted" style="text-align:center;margin-top:0">{{ config.EMPRESA_NOME }} · Soluções em Tecnologia</p>
+  <h1 class="login-nome">{{ config.SISTEMA_NOME }}</h1>
+  <p class="muted" style="text-align:center;margin-top:0">Gestão de chamados técnicos · por {{ config.EMPRESA_NOME }}</p>
   <form method="post" action="/login">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="next" value="{{ next }}">

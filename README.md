@@ -1,4 +1,6 @@
-# Sistema de Chamados — TecnosIT
+# Nexus Desk — sistema de chamados da TecnosIT
+
+Parte da linha **Nexus** (Nexus FIT, Nexus Cond, Nexus Desk).
 
 Sistema web **multi-cliente** para abrir, acompanhar e registrar chamados técnicos (SkyFit, condomínios e outros clientes), com o PDF do ticket e o relatório consolidado no layout TecnosIT.
 
