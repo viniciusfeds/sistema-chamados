@@ -6,6 +6,8 @@ Sistema web **multi-cliente** para abrir, acompanhar e registrar chamados técni
 
 ## O que ele faz
 
+> **Configurações pela tela:** em **Administração → Configurações** você ajusta WhatsApp, e-mail, monitoramento, ocorrências, prazos e dados da empresa, sem editar arquivos e sem reiniciar. O `.env` só é usado na instalação.
+
 - **Vários clientes**: cada cliente tem suas unidades, usuários, relatório e link público. Um cliente nunca vê os chamados de outro.
 - **Abertura sem login (link público)**: cada cliente tem um link próprio, por exemplo `https://chamados.tecnosit.com.br/abrir/DP69oNy...`. Quem abre o link escolhe a unidade, informa nome, WhatsApp e o problema. Na hora recebe o **número do chamado** e um **link de acompanhamento** (sem login), onde vê o andamento e baixa o PDF.
   - O chamado chega no painel da equipe marcado como **via link**, com o WhatsApp clicável.

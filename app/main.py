@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
+from . import ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
@@ -37,6 +37,7 @@ JANELA_PUBLICO = timedelta(minutes=30)
 async def _vida(app):
     criar_tabelas()
     inventario.garantir_chave()
+    ajustes.carregar()
     parar = monitor.iniciar()
     yield
     if parar:
@@ -47,6 +48,12 @@ app = FastAPI(title=config.SISTEMA_NOME, docs_url=None, redoc_url=None, openapi_
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY, session_cookie="chamados",
                    max_age=60 * 60 * 24 * 14, same_site="lax", https_only=config.COOKIE_SEGURO)
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+
+
+@app.middleware("http")
+async def _ajustes_atualizados(request, call_next):
+    ajustes.atualizar_se_mudou()   # outro processo salvou as Configurações? recarrega (a cada 5 s no máximo)
+    return await call_next(request)
 tpl = Jinja2Templates(directory=APP_DIR / "templates")
 tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
@@ -1208,6 +1215,29 @@ def admin_tipo_op(request: Request, tid: int, operacao: str = Form(...), nome: s
     return voltar("/admin#tipos")
 
 
+@app.get("/admin/configuracoes", response_class=HTMLResponse)
+def admin_configuracoes(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    from .models import Configuracao
+    linhas = {c.chave for c in db.scalars(select(Configuracao)).all()}
+    valores = {k: ajustes.para_texto(c, ajustes._ler_config(k)) for k, c in ajustes.CAMPOS.items() if c.tipo != "senha"}
+    senhas = {k: bool(ajustes._ler_config(k)) for k, c in ajustes.CAMPOS.items() if c.tipo == "senha"}
+    padroes = {k: ajustes.para_texto(c, ajustes.PADROES[k]) for k, c in ajustes.CAMPOS.items() if c.tipo != "senha"}
+    return render(request, "admin_config.html", u=u, secoes=ajustes.SECOES, valores=valores, senhas=senhas,
+                  padroes=padroes, no_sistema=linhas, v=None)
+
+
+@app.post("/admin/configuracoes", dependencies=[Depends(checar_csrf)])
+async def admin_configuracoes_salvar(request: Request, u: Usuario = Depends(so_admin),
+                                     db: Session = Depends(get_db)):
+    form = dict((await request.form()).items())
+    erros = ajustes.salvar(db, form)
+    if erros:
+        flash(request, "Nada foi salvo. " + " ".join(erros), "erro")
+    else:
+        flash(request, "Configurações salvas. Já estão valendo, sem reiniciar.")
+    return voltar("/admin/configuracoes")
+
+
 @app.post("/admin/unidades", dependencies=[Depends(checar_csrf)])
 def admin_unidade(request: Request, nome: str = Form(...), cliente_id: int = Form(...),
                   u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
@@ -1300,7 +1330,7 @@ def admin_whatsapp(request: Request, u: Usuario = Depends(so_admin), db: Session
     envios = db.scalars(select(EnvioWhatsApp).order_by(EnvioWhatsApp.id.desc()).limit(100)
                         .options(selectinload(EnvioWhatsApp.chamado))).all()
     return render(request, "admin_whatsapp.html", u=u, clientes=clientes, contatos=contatos, envios=envios,
-                  configurado=whatsapp.configurado(), textos=whatsapp.TEXTOS_MODELOS,
+                  configurado=whatsapp.configurado(), textos=whatsapp.textos_modelos(),
                   nome_modelo=whatsapp.nome_modelo, webhook=f"{base_url(request)}/webhook/whatsapp")
 
 
@@ -1343,7 +1373,7 @@ def admin_contato_op(request: Request, cid: int, operacao: str = Form(...), u: U
 @app.post("/admin/whatsapp/teste", dependencies=[Depends(checar_csrf)])
 def admin_whatsapp_teste(request: Request, telefone: str = Form(...), u: Usuario = Depends(so_admin)):
     if not whatsapp.configurado():
-        flash(request, "Configure WHATSAPP_TOKEN e WHATSAPP_PHONE_ID no .env primeiro.", "erro")
+        flash(request, "Preencha o token e o Phone number ID em Administração → Configurações primeiro.", "erro")
     else:
         try:
             whatsapp.enviar_teste(telefone)

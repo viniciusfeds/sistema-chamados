@@ -435,3 +435,11 @@ class Ocorrencia(Base):
     @property
     def aberta(self):
         return self.status == "aberta"
+
+
+class Configuracao(Base):
+    """Ajustes feitos pela tela Administração → Configurações (sobrepõem o .env)."""
+    __tablename__ = "configuracoes"
+    chave: Mapped[str] = mapped_column(String(60), primary_key=True)
+    valor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

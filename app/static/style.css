@@ -224,3 +224,13 @@ fieldset.monitor-box legend{padding:0 6px}
 .oc-acoes form{margin:0}
 .oc-resp{font-weight:700}
 details.oc-encerrar{margin:0;padding:3px 10px}
+
+/* --- v1.6: configurações --- */
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
+.cfg-grid .cfg-bool{grid-column:1/-1;margin-bottom:8px}
+@media (max-width:820px){.cfg-grid{grid-template-columns:1fr}}
+.cfg-num{max-width:160px}
+.cfg-alt{display:inline-block;font-size:.68rem;font-weight:800;text-transform:uppercase;color:#1F5FA8;background:#E8F0FB;border-radius:5px;padding:0 5px;margin-left:4px;vertical-align:1px}
+.cfg-indice{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 14px}
+.cfg-indice a{font-size:.85rem;font-weight:700;text-decoration:none;border:1px solid var(--linha);background:#fff;border-radius:999px;padding:4px 12px}
+.cfg-salvar{position:sticky;bottom:0;background:var(--fundo);padding:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--linha)}

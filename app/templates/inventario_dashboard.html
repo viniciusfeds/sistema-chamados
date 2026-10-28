@@ -9,7 +9,7 @@
     <h1>Dashboard do inventário</h1>
     <div class="muted">
       {% if monitor_ativo %}Monitoramento a cada {{ intervalo }} min · página atualiza sozinha a cada 1 min
-      {% else %}<b>Monitoramento automático desligado</b> (MONITOR_ATIVO=0 no .env){% endif %}</div>
+      {% else %}<b>Monitoramento automático desligado</b> (ligue em {% if u.papel == 'admin' %}<a href="/admin/configuracoes#monitor">Configurações</a>{% else %}Administração → Configurações{% endif %}){% endif %}</div>
   </div>
   <form method="get" style="min-width:220px">
     <label for="cliente">Cliente</label>

@@ -65,7 +65,8 @@
 </div>
 {%- endmacro %}
 
-{% macro campo_fotos(nome="fotos_enviadas", maximo=6, rotulo="Fotos") -%}
+{% macro campo_fotos(nome="fotos_enviadas", maximo=None, rotulo="Fotos") -%}
+{% set maximo = maximo or config.FOTO_MAX_POR_ENVIO %}
 <div class="campo"><label>{{ rotulo }} <span class="muted">(opcional, até {{ maximo }})</span></label>
   <input type="file" name="{{ nome }}" accept="image/*" multiple
          onchange="if(this.files.length>{{ maximo }}){alert('Selecione no máximo {{ maximo }} fotos.');this.value='';}">

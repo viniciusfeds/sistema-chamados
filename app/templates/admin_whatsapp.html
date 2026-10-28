@@ -21,7 +21,7 @@
   <p class="dica">O teste usa o modelo <b>{{ nome_modelo('status') }}</b> com dados de exemplo.</p>
   {% else %}
   <p><span class="selo" style="background:#7A7A7A">Não configurado</span>
-    Os avisos automáticos ficam desligados até você preencher <code>WHATSAPP_TOKEN</code> e <code>WHATSAPP_PHONE_ID</code> no <code>.env</code> e reiniciar o sistema.
+    Os avisos automáticos ficam desligados até você preencher o <b>token</b> e o <b>Phone number ID</b> em <a href="/admin/configuracoes#whatsapp">Administração → Configurações</a>.
     O passo a passo está em <code>docs/WHATSAPP.md</code>.</p>
   {% endif %}
   <details style="margin-top:10px"><summary>Modelos que precisam estar aprovados na Meta</summary>
@@ -34,7 +34,7 @@
   <details style="margin-top:8px"><summary>Webhook (status entregue/lido) — opcional</summary>
     <p class="dica">No app da Meta → WhatsApp → Configuração → Webhook, informe:</p>
     <label>URL de retorno</label>{{ copiar(webhook, "Copiar") }}
-    <p class="dica">Token de verificação: o valor de <code>WHATSAPP_VERIFY_TOKEN</code> do .env. Assine o campo <b>messages</b>.
+    <p class="dica">Token de verificação: o mesmo de <a href="/admin/configuracoes#whatsapp">Configurações → WhatsApp</a>. Assine o campo <b>messages</b>.
       Também preencha <code>WHATSAPP_APP_SECRET</code> (chave secreta do app). A URL precisa ser HTTPS e acessível pela internet.</p>
   </details>
 </div>

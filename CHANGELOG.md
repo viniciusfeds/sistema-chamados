@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## 1.6.0 — 2026-10-28
+- **Administração → Configurações**: tudo o que antes exigia editar o `.env` agora é ajustado pela tela e vale na hora, sem reiniciar:
+  - empresa e sistema (nomes, WhatsApp, rodapé do PDF, responsável padrão, endereço público);
+  - chamados (prazos de chamado parado por prioridade, limites de fotos);
+  - monitoramento (ligar/desligar, intervalo, falhas seguidas, tempo de espera);
+  - ocorrências (abrir chamado automático, prioridade, agrupamento, reabertura, fechar ao voltar, **avisar o cliente**);
+  - WhatsApp da Meta (token, Phone number ID, webhook, nomes dos modelos) e e-mail (SMTP)
+- Tokens e senhas ficam **criptografados** no banco e nunca aparecem na tela
+- Com vários processos, todos percebem a alteração em poucos segundos; o monitoramento pode ser religado pela tela sem reiniciar
+- Campo “alterado” mostra o que foi mudado pela tela e qual é o padrão
+- O `.env` fica só para a instalação (banco, porta, chave de sessão e primeiro administrador); os valores dele continuam valendo como padrão
+
 ## 1.5.0 — 2026-10-28
 - **Ocorrências** (nova aba em *Inventário*): quando um equipamento monitorado cai, o sistema abre a ocorrência e um **chamado automático** (prioridade Alta, tag pelo tipo do equipamento, equipamento vinculado)
 - **Alerta à equipe no WhatsApp** (modelos `alerta_equipamento_offline` e `alerta_equipamento_normalizado`): cada técnico informa o WhatsApp e ativa os alertas em *Minha conta* (ou o admin, em *Usuários*)

@@ -46,8 +46,10 @@ _TEXTOS = {
                       "Detalhes: {{5}}"),
 }
 
-# A Meta não aceita modelo que termine (ou comece) com variável: todos fecham com a assinatura.
-TEXTOS_MODELOS = {k: v + "\n\n— " + config.EMPRESA_NOME for k, v in _TEXTOS.items()}
+def textos_modelos():
+    """Textos a cadastrar na Meta. Ela não aceita modelo que termine (ou comece) com variável:
+    todos fecham com a assinatura da empresa."""
+    return {k: v + "\n\n— " + config.EMPRESA_NOME for k, v in _TEXTOS.items()}
 
 # Rótulos de todos os eventos que geram envio (clientes + equipe)
 EVENTOS_ENVIO = {"abertura": "Chamado aberto", "status": "Mudança de status", "conclusao": "Chamado concluído",

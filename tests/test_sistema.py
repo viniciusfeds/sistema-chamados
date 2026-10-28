@@ -1025,6 +1025,61 @@ def test_admin_alertas_usuario_e_modelos_meta():
         nomes = [n for n, _ in whatsapp.destinatarios_equipe(db)]
         assert "Admin" in nomes and "Recepção Carrão" not in nomes
     # a Meta não aceita modelo que termine ou comece com variável
-    for txt in whatsapp.TEXTOS_MODELOS.values():
+    for txt in whatsapp.textos_modelos().values():
         assert not txt.rstrip().endswith("}}") and not txt.lstrip().startswith("{{")
     assert "alerta_equipamento_offline" in a.get("/admin/whatsapp").text
+
+
+# ------------------------------------------------------------------ configurações pela tela (v1.6) — manter por último
+def _form_config(c, **mudar):
+    from app import ajustes
+    form = {k: ajustes.para_texto(cp, ajustes._ler_config(k)) for k, cp in ajustes.CAMPOS.items()
+            if cp.tipo not in ("senha",)}
+    form = {k: v for k, v in form.items() if not (ajustes.CAMPOS[k].tipo == "bool" and v == "0")}
+    form.update(mudar)
+    form = {k: v for k, v in form.items() if v is not None}
+    form["csrf"] = _csrf(c.get("/admin/configuracoes").text)
+    return form
+
+
+def test_configuracoes_pela_tela():
+    from app import ajustes, config
+    from app.models import Configuracao
+    assert entrar("tec@t.com").get("/admin/configuracoes").status_code == 403
+    a = entrar("admin@t.com")
+    r = a.get("/admin/configuracoes")
+    assert "Ocorrências e chamado automático" in r.text and "Avisar também o cliente" in r.text
+    assert config.MONITOR_AVISAR_CLIENTE is False and config.MONITOR_INTERVALO_MIN == 5
+    r = a.post("/admin/configuracoes", data=_form_config(
+        a, MONITOR_AVISAR_CLIENTE="1", MONITOR_INTERVALO_MIN="3", ALERTA_HORAS_ALTA="6",
+        URL_PUBLICA="https://chamados.tecnosit.com.br/", WHATSAPP_TOKEN="EAAGsegredo123",
+        AVISO_EMAILS="a@tecnosit.com.br; b@tecnosit.com.br"))
+    assert "Configurações salvas" in r.text and "alterado" in r.text
+    assert config.MONITOR_AVISAR_CLIENTE is True and config.MONITOR_INTERVALO_MIN == 3
+    assert config.ALERTA_HORAS["alta"] == 6 and config.URL_PUBLICA == "https://chamados.tecnosit.com.br"
+    assert config.WHATSAPP_TOKEN == "EAAGsegredo123" and config.AVISO_EMAILS == ["a@tecnosit.com.br", "b@tecnosit.com.br"]
+    assert "EAAGsegredo123" not in r.text and "configurado — deixe vazio para manter" in r.text
+    with SessionLocal() as db:
+        tok = db.get(Configuracao, "WHATSAPP_TOKEN").valor
+        assert tok.startswith("enc:") and "segredo" not in tok
+        assert db.get(Configuracao, "MONITOR_FALHAS") is None   # igual ao padrão: não é gravado
+    # salvar de novo sem digitar o token mantém o token
+    a.post("/admin/configuracoes", data=_form_config(a))
+    assert config.WHATSAPP_TOKEN == "EAAGsegredo123"
+    # valor inválido: nada é salvo
+    r = a.post("/admin/configuracoes", data=_form_config(a, MONITOR_INTERVALO_MIN="0", MONITOR_AVISAR_CLIENTE=None))
+    assert "Nada foi salvo" in r.text and config.MONITOR_INTERVALO_MIN == 3 and config.MONITOR_AVISAR_CLIENTE is True
+    r = a.post("/admin/configuracoes", data=_form_config(a, URL_PUBLICA="chamados.com"))
+    assert "http://" in r.text and config.URL_PUBLICA == "https://chamados.tecnosit.com.br"
+    # outro processo (worker/monitor) percebe a mudança e recarrega sozinho
+    config.MONITOR_INTERVALO_MIN = 99
+    ajustes._estado["versao"] = "antiga"
+    ajustes.atualizar_se_mudou(0)
+    assert config.MONITOR_INTERVALO_MIN == 3
+    # voltar ao padrão (desmarcar / valor padrão) e apagar o token
+    form = _form_config(a, MONITOR_AVISAR_CLIENTE=None, MONITOR_INTERVALO_MIN="5", ALERTA_HORAS_ALTA="12",
+                        URL_PUBLICA="", AVISO_EMAILS="", WHATSAPP_TOKEN__limpar="1")
+    a.post("/admin/configuracoes", data=form)
+    assert config.MONITOR_AVISAR_CLIENTE is False and config.MONITOR_INTERVALO_MIN == 5 and config.WHATSAPP_TOKEN == ""
+    with SessionLocal() as db:
+        assert {c.chave for c in db.scalars(select(Configuracao))} == {"_versao"}

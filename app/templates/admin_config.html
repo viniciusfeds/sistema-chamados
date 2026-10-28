@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titulo %}Configurações{% endblock %}
+
+{% macro campo(c) -%}
+{% set alterado = c.chave in no_sistema %}
+<div class="campo cfg-campo {{ 'cfg-bool' if c.tipo == 'bool' }}">
+  {% if c.tipo == 'bool' %}
+  <label class="check" style="margin:0"><input type="checkbox" name="{{ c.chave }}" value="1" style="width:auto"
+    {{ 'checked' if valores[c.chave] == '1' }}> {{ c.rotulo }}{% if alterado %} <span class="cfg-alt" title="Definido nesta tela">alterado</span>{% endif %}</label>
+  {% else %}
+  <label for="{{ c.chave }}">{{ c.rotulo }}{% if alterado %} <span class="cfg-alt" title="Definido nesta tela">alterado</span>{% endif %}</label>
+  {% if c.tipo == 'senha' %}
+    <input id="{{ c.chave }}" name="{{ c.chave }}" type="password" autocomplete="new-password"
+      placeholder="{{ '•••••••• (configurado — deixe vazio para manter)' if senhas[c.chave] else 'Não configurado' }}">
+    {% if senhas[c.chave] and alterado %}<label class="check" style="margin:4px 0 0;font-size:.85rem"><input type="checkbox" name="{{ c.chave }}__limpar" value="1" style="width:auto"> Apagar</label>{% endif %}
+  {% elif c.tipo == 'escolha' %}
+    <select id="{{ c.chave }}" name="{{ c.chave }}">
+    {% for k, r in c.opcoes.items() %}<option value="{{ k }}" {{ 'selected' if valores[c.chave] == k }}>{{ r }}</option>{% endfor %}</select>
+  {% else %}
+    <input id="{{ c.chave }}" name="{{ c.chave }}" value="{{ valores[c.chave] }}"
+      {% if c.tipo in ('int', 'num') %}inputmode="decimal" class="cfg-num"{% endif %}
+      {% if c.tipo == 'url' %}inputmode="url" placeholder="https://"{% endif %}>
+  {% endif %}
+  {% endif %}
+  {% if c.ajuda %}<div class="dica">{{ c.ajuda }}</div>{% endif %}
+  {% if alterado and c.tipo not in ('senha',) and padroes[c.chave] != valores[c.chave] %}<div class="dica">Padrão: {{ ({'1': 'ligado', '0': 'desligado'}[padroes[c.chave]] if c.tipo == 'bool' else (c.opcoes.get(padroes[c.chave], padroes[c.chave]) if c.tipo == 'escolha' else (padroes[c.chave] or 'vazio'))) }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% block conteudo %}
+<div class="cab">
+  <div><div class="muted"><a href="/admin">← Administração</a></div><h1>Configurações</h1>
+    <div class="muted">Valem na hora, sem reiniciar e sem editar arquivos. Para voltar ao padrão, coloque o valor padrão de novo.</div></div>
+</div>
+<nav class="cfg-indice">{% for id, titulo, _, _ in secoes %}<a href="#{{ id }}">{{ titulo }}</a>{% endfor %}</nav>
+<form method="post" action="/admin/configuracoes" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% for id, titulo, descricao, campos in secoes %}
+  <div class="card" id="{{ id }}">
+    <h2>{{ titulo }}</h2>
+    <p class="dica" style="margin-top:-2px">{{ descricao }}</p>
+    <div class="cfg-grid">
+      {% for c in campos if not c.avancado %}{{ campo(c) }}{% endfor %}
+    </div>
+    {% set avancados = campos|selectattr('avancado')|list %}
+    {% if avancados %}
+    <details style="margin-top:6px"><summary>Avançado</summary>
+      <div class="cfg-grid" style="margin-top:10px">{% for c in avancados %}{{ campo(c) }}{% endfor %}</div>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <div class="cfg-salvar"><button class="btn">Salvar configurações</button>
+    <span class="muted">Banco de dados, porta e chave de segurança continuam no arquivo .env (só na instalação).</span></div>
+</form>
+{% endblock %}

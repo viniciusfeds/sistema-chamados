@@ -114,10 +114,12 @@ def _pegar_trava() -> bool:
 
 
 def _laco(parar: threading.Event):
+    from . import ajustes
     time.sleep(5)
     while not parar.is_set():
         try:
-            n = verificar_todos()
+            ajustes.atualizar_se_mudou(0)   # pega mudanças feitas na tela de Configurações
+            n = verificar_todos() if config.MONITOR_ATIVO else 0
             if n:
                 log.info("Monitoramento: %s equipamento(s) verificados", n)
         except Exception as e:  # nunca derruba o sistema
@@ -127,7 +129,9 @@ def _laco(parar: threading.Event):
 
 def iniciar():
     """Inicia o laço em segundo plano (só em um processo). Retorna o Event para parar, ou None."""
-    if not config.MONITOR_ATIVO or not _pegar_trava():
+    # o laço sempre roda (em um processo só); se o monitoramento estiver desligado nas
+    # Configurações ele apenas espera, e volta a testar quando for religado
+    if not _pegar_trava():
         return None
     parar = threading.Event()
     threading.Thread(target=_laco, args=(parar,), daemon=True, name="monitor").start()

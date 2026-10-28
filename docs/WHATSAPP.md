@@ -102,16 +102,17 @@ Quem recebe:
 
 ## 3. Configurar o sistema
 
-No `.env`:
-```
-WHATSAPP_TOKEN=EAAG...(token permanente)
-WHATSAPP_PHONE_ID=123456789012345
-URL_PUBLICA=https://chamados.tecnosit.com.br
-```
-Depois rode `docker compose up -d` e:
+Em **Administração → Configurações → WhatsApp (API oficial da Meta)**, preencha:
+- **Token permanente** (passo 5);
+- **Identificação do número (Phone number ID)** (passo 4).
+
+Em **Empresa e sistema**, preencha o **Endereço público do sistema** (ex.: `https://chamados.tecnosit.com.br`), usado nos links das mensagens. Clique em **Salvar configurações**: vale na hora, sem reiniciar.
+
+Depois:
 1. Abra **Administração → WhatsApp automático**. A situação deve mostrar **Conectado**.
 2. Use **Enviar teste** com o seu celular. A mensagem do modelo `chamado_atualizado` deve chegar.
 3. Cadastre os **contatos de aviso** de cada cliente: nome, WhatsApp, unidade (ou todas) e quando avisar.
+4. Para os **alertas de monitoramento**, cada técnico informa o WhatsApp em **Minha conta → Alertas de monitoramento**.
 
 > **Consentimento:** pela regra da Meta, só cadastre quem concordou em receber mensagens da TecnosIT por WhatsApp.
 
@@ -119,12 +120,12 @@ Depois rode `docker compose up -d` e:
 
 Sem o webhook, o histórico mostra **Enviado** ou **Falhou**. Com o webhook, ele também mostra **Entregue** e **Lido**, além das falhas que acontecem depois do envio (ex.: número sem WhatsApp).
 
-1. No `.env`, defina:
-   - `WHATSAPP_VERIFY_TOKEN`: uma senha qualquer, que você inventa.
-   - `WHATSAPP_APP_SECRET`: em *developers.facebook.com → seu app → Configurações → Básico → Chave secreta do app*.
+1. Em **Administração → Configurações → WhatsApp**, preencha:
+   - **Token de verificação do webhook**: uma senha qualquer, que você inventa.
+   - **Chave secreta do app**: em *developers.facebook.com → seu app → Configurações → Básico → Chave secreta do app*.
 2. No app, em *WhatsApp → Configuração → Webhook*:
    - URL de retorno: `https://SEU-ENDERECO/webhook/whatsapp`
-   - Token de verificação: o mesmo `WHATSAPP_VERIFY_TOKEN`
+   - Token de verificação: o mesmo preenchido em Configurações
    - Em *Campos do webhook*, assine **messages**.
 
 A URL precisa ser **HTTPS** e acessível pela internet, por exemplo com Cloudflare Tunnel ou Nginx Proxy Manager na frente da porta 9000.
