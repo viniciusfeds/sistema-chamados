@@ -49,6 +49,36 @@
   </details>
 </div>
 
+<div class="card" id="tipos">
+  <h2>Tipos de chamado</h2>
+  <p class="dica" style="margin-top:0">Tags para classificar os chamados (um chamado pode ter mais de uma). Servem de filtro no painel e no relatório. Desativar um tipo tira ele das opções, mas os chamados antigos continuam marcados.</p>
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th style="width:240px">Tipo</th><th>Nome, cor e situação</th></tr></thead>
+    <tbody>
+    {% for tp in tipos %}
+    <tr>
+      <td data-l="Tipo"><span class="tipo-tag" style="--tc:{{ tp.cor }}">{{ tp.nome }}</span></td>
+      <td data-l="Editar">
+        <form method="post" action="/admin/tipos/{{ tp.id }}" class="tipo-form">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input name="nome" value="{{ tp.nome }}" maxlength="60" required>
+          <input type="color" name="cor" value="{{ tp.cor }}" title="Cor">
+          <button class="btn peq sec" name="operacao" value="salvar">Salvar</button>
+          <button class="btn peq {{ 'perigo' if tp.ativo else 'sec' }}" name="operacao" value="alternar">{{ 'Desativar' if tp.ativo else 'Ativar' }}</button>
+          {% if not tp.ativo %}<span class="muted">inativo</span>{% endif %}
+        </form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/admin/tipos" class="tipo-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="nome" maxlength="60" required placeholder="Novo tipo, ex.: Interfonia">
+    <input type="color" name="cor" value="#5F6B7A" title="Cor">
+    <button class="btn peq">+ Adicionar tipo</button>
+  </form>
+</div>
+
 <div class="card" id="unidades">
   <h2>Unidades</h2>
   <table class="resp" style="margin-bottom:14px">

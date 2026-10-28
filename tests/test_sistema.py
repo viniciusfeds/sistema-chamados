@@ -1,5 +1,6 @@
 """Testes dos fluxos principais. Rodar com:  python -m pytest -q"""
 import os
+from datetime import date
 import re
 import tempfile
 from pathlib import Path
@@ -8,6 +9,7 @@ _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/teste.db"
 os.environ["SECRET_KEY"] = "teste"
 os.environ["DADOS_DIR"] = _tmp
+os.environ["MONITOR_ATIVO"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -16,7 +18,8 @@ from sqlalchemy import select  # noqa: E402
 from app.auth import hash_senha  # noqa: E402
 from app.db import SessionLocal, criar_tabelas  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import AcessoSenha, Chamado, Cliente, EnvioWhatsApp, Equipamento, Unidade, Usuario  # noqa: E402
+from app.models import (AcessoSenha, Chamado, Cliente, EnvioWhatsApp, Equipamento, EventoMonitor,  # noqa: E402
+                        TipoChamado, Unidade, Usuario)
 from scripts.gerenciar import importar  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -755,3 +758,133 @@ def test_inventario_garantia_e_exclusao():
     assert "excluído" in r.text
     with SessionLocal() as db:
         assert db.get(Equipamento, eid) is None
+
+
+# ------------------------------------------------------------------ tipos de chamado (v1.4)
+def _tipo(nome):
+    with SessionLocal() as db:
+        return db.scalar(select(TipoChamado).where(TipoChamado.nome == nome)).id
+
+
+def test_tipos_padrao_e_chamado_com_tags():
+    cftv, acesso = _tipo("CFTV"), _tipo("Controle de acesso")
+    c = entrar("tec@t.com")
+    r = c.get("/chamados/novo")
+    assert "Tipo de chamado" in r.text and "Manutenção preventiva" in r.text
+    r = c.post("/chamados/novo", data={"unidade_id": IDS["carrao"], "assunto": "Câmera 3 sem imagem e facial travada",
+                                       "problema": "x", "tipo_ids": [cftv, acesso], "csrf": _csrf(r.text)})
+    num = int(re.search(r"Ticket (\d{4}) aberto", r.text).group(1))
+    assert 'class="tipo-tag"' in r.text
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert {t.nome for t in ch.tipos} == {"CFTV", "Controle de acesso"}
+    # filtro no painel
+    assert f"/chamados/{num}" in c.get(f"/?tipo={cftv}").text
+    assert f"/chamados/{num}" not in c.get(f"/?tipo={_tipo('Alarme')}").text
+    # reclassificar: só CFTV
+    tok = _csrf(c.get(f"/chamados/{num}").text)
+    c.post(f"/chamados/{num}/classificar", data={"prioridade": "alta", "tipo_ids": [cftv], "csrf": tok})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert [t.nome for t in ch.tipos] == ["CFTV"] and ch.prioridade == "alta"
+    # relatório filtrado por tipo
+    hoje = date.today().isoformat()
+    r = c.get(f"/relatorio/pdf?de={hoje}&ate={hoje}&cliente={IDS['sky']}&tipo={cftv}")
+    assert r.status_code == 200 and "CFTV" in r.headers["content-disposition"]
+    # unidade não escolhe tipo
+    assert "Tipo de chamado" not in entrar("carrao@t.com").get("/chamados/novo").text
+
+
+def test_admin_tipos():
+    a = entrar("admin@t.com")
+    tok = _csrf(a.get("/admin").text)
+    r = a.post("/admin/tipos", data={"nome": "Interfonia", "cor": "#123abc", "csrf": tok})
+    assert "Tipo Interfonia cadastrado" in r.text
+    assert "já existe" in a.post("/admin/tipos", data={"nome": "interfonia", "cor": "", "csrf": tok}).text
+    tid = _tipo("Interfonia")
+    with SessionLocal() as db:
+        assert db.get(TipoChamado, tid).cor == "#123ABC"
+    a.post(f"/admin/tipos/{tid}", data={"operacao": "alternar", "csrf": tok})
+    assert "Interfonia" not in entrar("tec@t.com").get("/chamados/novo").text
+    c = entrar("tec@t.com")
+    assert c.post("/admin/tipos", data={"nome": "X", "csrf": _csrf(c.get("/conta").text)}).status_code == 403
+
+
+# ------------------------------------------------------------------ monitoramento e dashboard (v1.4)
+def test_ip_externo_e_monitorar_exige_porta():
+    c = entrar("tec@t.com")
+    r = _novo_equip(c, nome="NVR Externo", ip="192.168.0.90", mac="", senha="", ip_externo="https://SkyCarrao.DDNS.net/",
+                    monitorar="1", monitor_porta="")
+    assert "Para monitorar, informe a porta" in r.text
+    r = _novo_equip(c, nome="NVR Externo", ip="192.168.0.90", mac="", senha="", ip_externo="999.1.1.1")
+    assert "IP externo inválido" in r.text
+    r = _novo_equip(c, nome="NVR Externo", ip="192.168.0.90", mac="", senha="", ip_externo="https://SkyCarrao.DDNS.net/",
+                    monitorar="1", monitor_porta="70000")
+    assert "Porta inválida" in r.text
+    r = _novo_equip(c, nome="NVR Externo", ip="192.168.0.90", mac="", senha="", ip_externo="https://SkyCarrao.DDNS.net/",
+                    monitorar="1", monitor_porta="37777")
+    assert "skycarrao.ddns.net" in r.text and "Aguardando teste" in r.text
+    assert "NVR Externo" in c.get("/inventario?q=ddns").text
+
+
+def test_monitor_tolerancia_de_falhas():
+    from app import config, monitor
+    with SessionLocal() as db:
+        eq = Equipamento(unidade_id=IDS["carrao"], nome="Mon A", tipo="dvr", monitorar=True,
+                         ip_externo="exemplo.com", monitor_porta=80, monitor_endereco="externo")
+        db.add(eq); db.flush()
+        assert eq.alvo_monitor == ("exemplo.com", 80)
+        monitor.registrar(db, eq, True, 12, None)
+        assert eq.monitor_status == "online" and eq.monitor_ms == 12
+        monitor.registrar(db, eq, False, None, "Sem resposta")
+        assert eq.monitor_status == "online"           # 1ª falha: ainda tolerada
+        for _ in range(config.MONITOR_FALHAS - 1):
+            monitor.registrar(db, eq, False, None, "Sem resposta")
+        assert eq.monitor_status == "offline" and eq.monitor_erro == "Sem resposta"
+        monitor.registrar(db, eq, True, 8, None)
+        assert eq.monitor_status == "online" and eq.monitor_falhas == 0
+        db.commit()
+        evs = [e.status for e in db.scalars(select(EventoMonitor).where(EventoMonitor.equipamento_id == eq.id)
+                                            .order_by(EventoMonitor.id))]
+        assert evs == ["online", "offline", "online"]
+
+
+def test_monitor_conexao_real_e_dashboard():
+    import socket
+    from app import monitor
+    srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(5)
+    aberta = srv.getsockname()[1]
+    fechado = socket.socket(); fechado.bind(("127.0.0.1", 0)); porta_fechada = fechado.getsockname()[1]; fechado.close()
+    try:
+        c = entrar("tec@t.com")
+        _novo_equip(c, nome="Mon Online", ip="127.0.0.1", mac="", senha="", monitorar="1",
+                    monitor_endereco="interno", monitor_porta=str(aberta))
+        _novo_equip(c, nome="Mon Offline", ip="127.0.0.2", mac="", senha="", monitorar="1",
+                    monitor_endereco="interno", monitor_porta=str(porta_fechada))
+        with SessionLocal() as db:
+            on = db.scalar(select(Equipamento).where(Equipamento.nome == "Mon Online")).id
+            off = db.scalar(select(Equipamento).where(Equipamento.nome == "Mon Offline")).id
+        assert monitor.verificar_todos() >= 2
+        with SessionLocal() as db:
+            assert db.get(Equipamento, on).monitor_status == "online"
+            assert db.get(Equipamento, off).monitor_status is None   # 1ª falha tolerada
+        tok = _csrf(c.get(f"/inventario/{off}").text)
+        r = c.post(f"/inventario/{off}/testar", data={"csrf": tok})
+        assert "Offline:" in r.text and "Histórico" in r.text
+        r = c.get("/inventario/dashboard")
+        assert r.status_code == 200 and "Equipamentos offline" in r.text and "Mon Offline" in r.text
+        assert "Por cliente" in r.text and "Por tipo" in r.text and "Mais chamados" in r.text
+        assert "DVR Recepção" in r.text   # ranking: tem chamado vinculado
+        assert "Mon Online" not in c.get("/inventario?monitor_st=offline").text
+        assert "Mon Offline" in c.get("/inventario?monitor_st=offline").text
+        assert entrar("gestor@t.com").get("/inventario/dashboard").status_code == 403
+        # desmarcar monitorar limpa o status
+        with SessionLocal() as db:
+            assert db.get(Equipamento, off).monitor_status == "offline"
+        c.post(f"/inventario/{off}", data={"unidade_id": IDS["carrao"], "tipo": "dvr", "nome": "Mon Offline",
+                                           "ip": "127.0.0.2", "csrf": tok})
+        with SessionLocal() as db:
+            e = db.get(Equipamento, off)
+            assert not e.monitorar and e.monitor_status is None
+    finally:
+        srv.close()

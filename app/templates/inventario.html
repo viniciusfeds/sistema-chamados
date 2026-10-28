@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades %}
+{% from "_macros.html" import select_unidades, status_monitor, abas_inventario %}
 {% block titulo %}Inventário{% endblock %}
 {% block conteudo %}
+{{ abas_inventario('lista') }}
 <div class="cab">
   <div>
     <h1>Inventário</h1>
@@ -32,6 +33,11 @@
       <select id="garantia" name="garantia"><option value="">Todas</option>
         <option value="vence" {{ 'selected' if f.garantia == 'vence' }}>Vencendo (30 dias)</option>
         <option value="vencida" {{ 'selected' if f.garantia == 'vencida' }}>Vencida</option></select></div>
+    <div><label for="monitor_st">Monitoramento</label>
+      <select id="monitor_st" name="monitor_st"><option value="">Todos</option>
+        <option value="monitorados" {{ 'selected' if f.monitor_st == 'monitorados' }}>Monitorados</option>
+        <option value="online" {{ 'selected' if f.monitor_st == 'online' }}>Online</option>
+        <option value="offline" {{ 'selected' if f.monitor_st == 'offline' }}>Offline</option></select></div>
     <div><label class="check" style="margin:0 0 10px"><input type="checkbox" name="inativos" value="1" {{ 'checked' if f.inativos }} style="width:auto"> Mostrar fora de uso</label></div>
     <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/inventario">Limpar</a></div>
   </form>
@@ -40,7 +46,7 @@
 <div class="card" style="padding:0;overflow:hidden">
 {% if equipamentos %}
 <table class="resp">
-  <thead><tr><th>Equipamento</th><th>Unidade</th><th>Marca / Modelo</th><th>IP</th><th>MAC</th><th>Garantia</th><th>Chamados</th></tr></thead>
+  <thead><tr><th>Equipamento</th><th>Unidade</th><th>Marca / Modelo</th><th>IP</th><th>MAC</th><th>Monitor</th><th>Garantia</th><th>Chamados</th></tr></thead>
   <tbody>
   {% for e in equipamentos %}
   {% set g = e.situacao_garantia(hoje) %}
@@ -50,8 +56,9 @@
       {% if not e.ativo %}<span class="tag cinza">fora de uso</span>{% endif %}</td>
     <td data-l="Unidade">{{ e.unidade.nome }}</td>
     <td data-l="Marca / Modelo">{{ e.marca_modelo or '—' }}</td>
-    <td data-l="IP" class="mono">{{ e.ip or '—' }}</td>
+    <td data-l="IP" class="mono">{{ e.ip or '—' }}{% if e.ip_externo %}<div class="muted" title="IP externo / DDNS">{{ e.ip_externo }}</div>{% endif %}</td>
     <td data-l="MAC" class="mono">{{ e.mac or '—' }}</td>
+    <td data-l="Monitor">{{ status_monitor(e) }}</td>
     <td data-l="Garantia">{% if g[0] %}<span class="gar gar-{{ g[0] }}">{{ e.garantia_ate|data }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
     <td data-l="Chamados">{{ e.chamados|length or '—' }}</td>
   </tr>

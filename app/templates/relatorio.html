@@ -18,6 +18,9 @@
       {{ select_unidades(grupos, 'unidade', None, 'Todas as unidades', False) }}</div>
     {% endif %}
   </div>
+  <div class="campo"><label for="tipo">Tipo de chamado <span class="muted">(opcional)</span></label>
+    <select id="tipo" name="tipo"><option value="">Todos os tipos</option>
+    {% for t in tipos %}<option value="{{ t.id }}">{{ t.nome }}</option>{% endfor %}</select></div>
   <div class="campo"><label for="inc">Chamados abertos antes do período</label>
     <select id="inc" name="incluir_abertos"><option value="1">Incluir os que ainda não foram concluídos</option>
     <option value="0">Somente os abertos dentro do período</option></select></div>

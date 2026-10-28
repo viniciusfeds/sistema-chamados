@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, campo_fotos %}
+{% from "_macros.html" import select_unidades, campo_fotos, campo_tipos %}
 {% block titulo %}Abrir chamado{% endblock %}
 {% block conteudo %}
 <div class="cab"><div><h1>Abrir chamado</h1><div class="muted">Será o ticket nº {{ '%04d' % proximo }}</div></div></div>
@@ -37,6 +37,7 @@
       {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if t.id == u.id }}>{{ t.nome }}</option>{% endfor %}</select></div>
     {% endif %}
   </div>
+  {% if u.equipe %}{{ campo_tipos(tipos) }}{% endif %}
   {{ campo_fotos() }}
 
   {% if u.equipe %}

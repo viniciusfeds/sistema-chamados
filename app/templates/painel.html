@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, selo, prio %}
+{% from "_macros.html" import select_unidades, selo, prio, tags %}
 {% block titulo %}Painel{% endblock %}
 {% block conteudo %}
 <div class="cab">
@@ -23,7 +23,7 @@
 {% endif %}
 
 {% macro qs(st) -%}
-?status={{ st }}{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}{% if f.unidade %}&unidade={{ f.unidade }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.de %}&de={{ f.de }}{% endif %}{% if f.ate %}&ate={{ f.ate }}{% endif %}{% if f.prioridade %}&prioridade={{ f.prioridade }}{% endif %}{% if f.tecnico %}&tecnico={{ f.tecnico }}{% endif %}
+?status={{ st }}{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}{% if f.unidade %}&unidade={{ f.unidade }}{% endif %}{% if f.q %}&q={{ f.q|urlencode }}{% endif %}{% if f.de %}&de={{ f.de }}{% endif %}{% if f.ate %}&ate={{ f.ate }}{% endif %}{% if f.prioridade %}&prioridade={{ f.prioridade }}{% endif %}{% if f.tecnico %}&tecnico={{ f.tecnico }}{% endif %}{% if f.tipo %}&tipo={{ f.tipo }}{% endif %}
 {%- endmacro %}
 <div class="cards">
   {% set total = contagem.values()|sum - contagem['cancelado'] %}
@@ -48,6 +48,9 @@
       {% if f.cliente %}{% set gs = gs|selectattr('0.id', 'equalto', f.cliente)|list %}{% endif %}
       {{ select_unidades(gs, 'unidade', f.unidade, 'Todas', False) }}</div>
     {% endif %}
+    <div><label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo"><option value="">Todos</option>
+      {% for t in tipos %}<option value="{{ t.id }}" {{ 'selected' if f.tipo == t.id }}>{{ t.nome }}{{ '' if t.ativo else ' (inativo)' }}</option>{% endfor %}</select></div>
     <div><label for="prioridade">Prioridade</label>
       <select id="prioridade" name="prioridade"><option value="">Todas</option>
       {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if f.prioridade == k }}>{{ p[0] }}</option>{% endfor %}</select></div>
@@ -77,7 +80,8 @@
     <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
     {% if u.equipe %}<td data-l="Cliente">{{ c.unidade.cliente.nome_curto or c.unidade.cliente.nome }}</td>{% endif %}
     <td data-l="Unidade">{{ c.unidade.nome_curto }}</td>
-    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}{% if c.anexos %} <span class="tag cinza" title="Fotos">📷 {{ c.anexos|length }}</span>{% endif %}</td>
+    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}{% if c.anexos %} <span class="tag cinza" title="Fotos">📷 {{ c.anexos|length }}</span>{% endif %}
+      {% if c.tipos %}<div class="tags-linha">{{ tags(c.tipos) }}</div>{% endif %}</td>
     <td data-l="Prioridade">{{ prio(c.prioridade_ok) }}</td>
     {% if u.equipe %}<td data-l="Técnico">{{ c.tecnico.nome if c.tecnico else '—' }}</td>{% endif %}
     <td data-l="Última ação" class="muted">{% if ult %}{{ ult.quando }}{% endif %}{% if c.id in parados %}<br><span class="tag alerta">parado {{ horas_parado(c) }}h</span>{% endif %}</td>

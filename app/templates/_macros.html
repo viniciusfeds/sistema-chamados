@@ -71,3 +71,33 @@
          onchange="if(this.files.length>{{ maximo }}){alert('Selecione no máximo {{ maximo }} fotos.');this.value='';}">
   <div class="dica">Tire a foto na hora ou escolha da galeria. As fotos são reduzidas automaticamente.</div></div>
 {%- endmacro %}
+
+{% macro tags(tipos) -%}
+{% for t in tipos %}<span class="tipo-tag" style="--tc:{{ t.cor }}">{{ t.nome }}</span>{% endfor %}
+{%- endmacro %}
+
+{% macro status_monitor(e) -%}
+{% if not e.monitorar %}<span class="muted">—</span>
+{% elif e.monitor_status == 'online' %}<span class="mon mon-online">Online</span>
+{% elif e.monitor_status == 'offline' %}<span class="mon mon-offline">Offline</span>
+{% else %}<span class="mon mon-aguardando">Aguardando teste</span>{% endif %}
+{%- endmacro %}
+
+{% macro abas_inventario(ativa) -%}
+<nav class="abas">
+  <a href="/inventario/dashboard" class="{{ 'ativa' if ativa == 'dashboard' }}">Dashboard</a>
+  <a href="/inventario" class="{{ 'ativa' if ativa == 'lista' }}">Equipamentos</a>
+  <a href="/inventario/novo" class="{{ 'ativa' if ativa == 'novo' }}">+ Novo</a>
+</nav>
+{%- endmacro %}
+
+{% macro campo_tipos(tipos, marcados=[]) -%}
+{% if tipos %}
+<div class="campo"><label>Tipo de chamado <span class="muted">(pode marcar mais de um)</span></label>
+  <div class="tipos-opcoes">
+  {% for t in tipos %}
+  <label class="tipo-opcao" style="--tc:{{ t.cor }}"><input type="checkbox" name="tipo_ids" value="{{ t.id }}" {{ 'checked' if t in marcados }}> {{ t.nome }}</label>
+  {% endfor %}
+  </div></div>
+{% endif %}
+{%- endmacro %}

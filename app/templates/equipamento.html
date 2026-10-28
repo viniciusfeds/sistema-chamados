@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, selo %}
+{% from "_macros.html" import select_unidades, selo, status_monitor, abas_inventario %}
 {% block titulo %}{{ eq.nome if eq else 'Novo equipamento' }}{% endblock %}
 
 {% macro formulario(eq, v) -%}
@@ -22,11 +22,27 @@
   <div class="campo"><label for="modelo">Modelo</label><input id="modelo" name="modelo" maxlength="120" value="{{ d.modelo or '' }}" placeholder="Ex.: iDFace"></div>
   <div class="campo"><label for="numero_serie">Nº de série</label><input id="numero_serie" name="numero_serie" maxlength="120" value="{{ d.numero_serie or '' }}"></div>
 </div>
-<div class="grid3">
-  <div class="campo"><label for="ip">IP</label><input id="ip" name="ip" maxlength="45" value="{{ d.ip or '' }}" placeholder="192.168.15.231" inputmode="decimal" class="mono"></div>
-  <div class="campo"><label for="mac">MAC</label><input id="mac" name="mac" maxlength="20" value="{{ d.mac or '' }}" placeholder="00:1A:2B:3C:4D:5E" class="mono"></div>
-  <div class="campo"><label for="porta">Portas</label><input id="porta" name="porta" maxlength="60" value="{{ d.porta or '' }}" placeholder="Ex.: 80 / 554"></div>
+<div class="grid2">
+  <div class="campo"><label for="ip">IP interno</label><input id="ip" name="ip" maxlength="45" value="{{ d.ip or '' }}" placeholder="192.168.15.231" inputmode="decimal" class="mono"></div>
+  <div class="campo"><label for="ip_externo">IP externo / DDNS</label><input id="ip_externo" name="ip_externo" maxlength="255" value="{{ d.ip_externo or '' }}" placeholder="177.10.20.30 ou cliente.ddns.net" class="mono"></div>
 </div>
+<div class="grid2">
+  <div class="campo"><label for="mac">MAC</label><input id="mac" name="mac" maxlength="20" value="{{ d.mac or '' }}" placeholder="00:1A:2B:3C:4D:5E" class="mono"></div>
+  <div class="campo"><label for="porta">Portas <span class="muted">(anotação)</span></label><input id="porta" name="porta" maxlength="60" value="{{ d.porta or '' }}" placeholder="Ex.: HTTP 80 / RTSP 554 / serviço 37777"></div>
+</div>
+<fieldset class="monitor-box">
+  <legend><label class="check" style="margin:0"><input type="checkbox" name="monitorar" value="1" style="width:auto" {{ 'checked' if d.monitorar }}
+    onchange="this.closest('fieldset').classList.toggle('ligado', this.checked)"> Monitorar este equipamento</label></legend>
+  <div class="grid2">
+    <div class="campo"><label for="monitor_endereco">Testar pelo</label>
+      <select id="monitor_endereco" name="monitor_endereco">
+        <option value="externo" {{ 'selected' if (d.monitor_endereco or 'externo') == 'externo' }}>IP externo / DDNS (pela internet)</option>
+        <option value="interno" {{ 'selected' if d.monitor_endereco == 'interno' }}>IP interno (mesma rede do servidor)</option></select></div>
+    <div class="campo"><label for="monitor_porta">Porta a testar</label>
+      <input id="monitor_porta" name="monitor_porta" inputmode="numeric" maxlength="5" value="{{ d.monitor_porta or '' }}" placeholder="Ex.: 80, 37777, 8000" class="mono"></div>
+  </div>
+  <div class="dica">A cada {{ config.MONITOR_INTERVALO_MIN }} min o sistema tenta conectar nesse endereço e porta. Use uma porta liberada (redirecionada) no roteador do cliente.</div>
+</fieldset>
 <div class="grid2">
   <div class="campo"><label for="usuario">Usuário de acesso</label><input id="usuario" name="usuario" maxlength="120" value="{{ d.usuario or '' }}" autocomplete="off" placeholder="Ex.: admin"></div>
   <div class="campo"><label for="senha">Senha de acesso {% if eq and eq.tem_senha %}<span class="muted">(deixe vazio para manter)</span>{% endif %}</label>
@@ -43,6 +59,7 @@
 {%- endmacro %}
 
 {% block conteudo %}
+{{ abas_inventario('novo' if not eq else '') }}
 {% if not eq %}
 <div class="cab"><div><div class="muted"><a href="/inventario">← Inventário</a></div><h1>Novo equipamento</h1></div></div>
 <form class="card" method="post" action="/inventario/novo" autocomplete="off">
@@ -68,7 +85,8 @@
     {% if eq.local %}<dt>Local</dt><dd>{{ eq.local }}</dd>{% endif %}
     <dt>Marca / Modelo</dt><dd>{{ eq.marca_modelo or '—' }}</dd>
     {% if eq.numero_serie %}<dt>Nº de série</dt><dd class="mono">{{ eq.numero_serie }}</dd>{% endif %}
-    <dt>IP</dt><dd class="mono">{{ eq.ip or '—' }}{% if eq.porta %} <span class="muted">· portas {{ eq.porta }}</span>{% endif %}</dd>
+    <dt>IP interno</dt><dd class="mono">{{ eq.ip or '—' }}{% if eq.porta %} <span class="muted">· portas {{ eq.porta }}</span>{% endif %}</dd>
+    <dt>IP externo / DDNS</dt><dd class="mono">{{ eq.ip_externo or '—' }}</dd>
     <dt>MAC</dt><dd class="mono">{{ eq.mac or '—' }}</dd>
     <dt>Acesso</dt><dd>
       {% if eq.usuario %}Usuário <span class="mono">{{ eq.usuario }}</span>{% endif %}
@@ -82,6 +100,32 @@
   </dl>
   {% if eq.observacoes %}<h2>Observações</h2><p>{{ eq.observacoes|fmt }}</p>{% endif %}
 </div>
+
+{% if eq.monitorar %}
+<div class="card" id="monitor">
+  <div class="cab" style="margin-bottom:6px">
+    <h2 style="margin:0">Monitoramento</h2>
+    <form method="post" action="/inventario/{{ eq.id }}/testar"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn peq sec">Testar agora</button></form>
+  </div>
+  {% set alvo = eq.alvo_monitor %}
+  <p style="margin:4px 0 10px">{{ status_monitor(eq) }}
+    <span class="muted">{% if alvo %}<span class="mono">{{ alvo[0] }}:{{ alvo[1] }}</span>{% endif %}
+    {% if eq.monitor_desde %} · desde {{ eq.monitor_desde|local }} ({{ duracao(eq.monitor_desde) }}){% endif %}
+    {% if eq.monitor_ms is not none %} · {{ eq.monitor_ms }} ms{% endif %}
+    {% if eq.monitor_ultima %} · último teste {{ eq.monitor_ultima|local }}{% endif %}</span></p>
+  {% if eq.monitor_erro %}<p class="dica" style="color:#8E1C16;margin-top:0">{{ eq.monitor_erro }}</p>{% endif %}
+  {% if eq.eventos_monitor %}
+  <details><summary>Histórico (quedas e retornos)</summary>
+    <table class="resp" style="margin-top:8px"><thead><tr><th>Quando</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>
+    {% for ev in eq.eventos_monitor[:30] %}
+    <tr><td data-l="Quando">{{ ev.criado_em|local }}</td><td data-l="Status"><span class="mon mon-{{ ev.status }}">{{ 'Online' if ev.status == 'online' else 'Offline' }}</span></td>
+      <td data-l="Detalhe" class="muted">{{ ev.detalhe or '' }}</td></tr>
+    {% endfor %}</tbody></table>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="card" id="chamados">
   <h2>Chamados deste equipamento {% if eq.chamados %}<span class="muted" style="font-weight:400">({{ eq.chamados|length }})</span>{% endif %}</h2>

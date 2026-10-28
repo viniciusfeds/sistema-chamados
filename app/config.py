@@ -47,6 +47,12 @@ ALERTA_HORAS = {"urgente": int(os.environ.get("ALERTA_HORAS_URGENTE", "4")),
 # Inventário: chave das senhas dos equipamentos (se vazio, gera em dados/.chave_inventario)
 INVENTARIO_CHAVE = os.environ.get("INVENTARIO_CHAVE", "").strip()
 
+# Monitoramento dos equipamentos do inventário (teste de conexão TCP)
+MONITOR_ATIVO = os.environ.get("MONITOR_ATIVO", "1") == "1"
+MONITOR_INTERVALO_MIN = max(1, int(os.environ.get("MONITOR_INTERVALO_MIN", "5")))
+MONITOR_FALHAS = max(1, int(os.environ.get("MONITOR_FALHAS", "2")))   # falhas seguidas para ficar offline
+MONITOR_TIMEOUT = float(os.environ.get("MONITOR_TIMEOUT", "4"))
+
 # Fotos
 FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
 FOTO_MAX_POR_ENVIO = int(os.environ.get("FOTO_MAX_POR_ENVIO", "6"))

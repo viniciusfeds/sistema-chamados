@@ -1,6 +1,7 @@
 """Nexus Desk (TecnosIT) — sistema de chamados, aplicação web (FastAPI), multi-cliente."""
 import hmac
 import json
+import re
 import unicodedata
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta, timezone
@@ -17,13 +18,13 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import avisos, config, fotos, inventario, pdf, regras, whatsapp
+from . import avisos, config, fotos, inventario, monitor, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
-                     Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, Unidade, Usuario,
-                     novo_token)
+                     Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
+                     TipoChamado, Unidade, Usuario, novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -36,7 +37,10 @@ JANELA_PUBLICO = timedelta(minutes=30)
 async def _vida(app):
     criar_tabelas()
     inventario.garantir_chave()
+    parar = monitor.iniciar()
     yield
+    if parar:
+        parar.set()
 
 
 app = FastAPI(title=config.SISTEMA_NOME, docs_url=None, redoc_url=None, openapi_url=None, lifespan=_vida)
@@ -129,7 +133,7 @@ def _diag_para_texto(d):
 
 def _opts_chamado():
     return (selectinload(Chamado.acoes), selectinload(Chamado.anexos), selectinload(Chamado.tecnico),
-            selectinload(Chamado.envios), selectinload(Chamado.equipamentos),
+            selectinload(Chamado.envios), selectinload(Chamado.equipamentos), selectinload(Chamado.tipos),
             selectinload(Chamado.unidade).selectinload(Unidade.cliente))
 
 
@@ -155,6 +159,16 @@ def avisar_whatsapp(request, db, ch, antes=None):
     except Exception as e:  # o aviso nunca impede o registro do chamado
         import logging
         logging.getLogger("chamados").warning("Falha ao preparar aviso de WhatsApp: %s", e)
+
+
+def tipos_chamado(db, so_ativos=True):
+    sel = select(TipoChamado).order_by(TipoChamado.ordem, TipoChamado.nome)
+    return db.scalars(sel.where(TipoChamado.ativo) if so_ativos else sel).all()
+
+
+def _tipos_escolhidos(db, ids) -> list:
+    ids = {i for i in (_int(x) for x in ids or []) if i}
+    return db.scalars(select(TipoChamado).where(TipoChamado.id.in_(ids))).all() if ids else []
 
 
 def tecnicos(db):
@@ -305,8 +319,8 @@ def sair(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def painel(request: Request, cliente: str = "", unidade: str = "", status: str = "", q: str = "",
            de: str = "", ate: str = "", prioridade: str = "", tecnico: str = "", parado: str = "",
-           u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
-    cliente, unidade = _int(cliente), _int(unidade)
+           tipo: str = "", u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    cliente, unidade, tipo_id = _int(cliente), _int(unidade), _int(tipo)
     if status not in regras.STATUS_GERAL:
         status = ""
     prioridade = prioridade if prioridade in PRIORIDADES else ""
@@ -316,6 +330,8 @@ def painel(request: Request, cliente: str = "", unidade: str = "", status: str =
         lista = [c for c in lista if c.prioridade_ok == prioridade]
     if tec_id and u.equipe:
         lista = [c for c in lista if c.tecnico_id == tec_id]
+    if tipo_id:
+        lista = [c for c in lista if any(t.id == tipo_id for t in c.tipos)]
     sits = {c.id: regras.status_geral(c) for c in lista}
     parados = {c.id for c in lista if esta_parado(c, sits[c.id])}
     contagem = {k: sum(1 for c in lista if sits[c.id] == k) for k in regras.STATUS_GERAL}
@@ -330,9 +346,9 @@ def painel(request: Request, cliente: str = "", unidade: str = "", status: str =
     return render(request, "painel.html", u=u, chamados=lista, sits=sits, contagem=contagem,
                   grupos=grupos, clientes=clientes_ativos(db) if u.equipe else [],
                   tecnicos=tecnicos(db) if u.equipe else [], novos_link=novos_link,
-                  parados=parados, horas_parado=horas_parado,
+                  parados=parados, horas_parado=horas_parado, tipos=tipos_chamado(db, False),
                   f=dict(cliente=cliente, unidade=unidade, status=status, q=q, de=de, ate=ate,
-                         prioridade=prioridade, tecnico=tecnico, parado=parado))
+                         prioridade=prioridade, tecnico=tecnico, parado=parado, tipo=tipo_id))
 
 
 # ---------------------------------------------------------------- novo chamado (logado)
@@ -340,7 +356,7 @@ def painel(request: Request, cliente: str = "", unidade: str = "", status: str =
 def novo_form(request: Request, u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     return render(request, "novo.html", u=u, grupos=unidades_permitidas(db, u), hoje=agora().date(),
                   agora_hora=agora().strftime("%H:%M"), proximo=proximo_numero(db),
-                  tecnicos=tecnicos(db) if u.equipe else [])
+                  tecnicos=tecnicos(db) if u.equipe else [], tipos=tipos_chamado(db))
 
 
 @app.post("/chamados/novo", dependencies=[Depends(checar_csrf)])
@@ -348,7 +364,7 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
          unidade_id: str = Form(""), titulo: str = Form(""), abertura: str = Form(""),
          prioridade: str = Form("normal"), tecnico_id: str = Form(""),
          acao_descricao: str = Form(""), acao_status: str = Form("Concluído"),
-         acao_data: str = Form(""), acao_hora: str = Form(""),
+         acao_data: str = Form(""), acao_hora: str = Form(""), tipo_ids: list[str] = Form(default=[]),
          fotos_enviadas: list[UploadFile] = File(default=[]),
          u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     un = db.get(Unidade, u.unidade_id if u.papel == "unidade" else (_int(unidade_id) or 0))
@@ -363,6 +379,7 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
                  tecnico_id=_tecnico_valido(db, _int(tecnico_id)) if u.equipe else None,
                  abertura=_data(abertura, hoje) if u.equipe else hoje, criado_por_id=u.id,
                  solicitante_nome=None if u.equipe else u.nome)
+    ch.tipos = _tipos_escolhidos(db, tipo_ids)
     quem = "pela equipe técnica" if u.equipe else f"por {u.nome}"
     ch.acoes.append(Acao(data=hoje, hora=hm, descricao=f"Abertura do chamado {quem}",
                          status="Concluído", autor_id=u.id))
@@ -398,6 +415,7 @@ def detalhe(request: Request, numero: int, u: Usuario = Depends(usuario_atual),
                                                          Equipamento.ativo).order_by(Equipamento.nome)).all() \
         if u.equipe else []
     return render(request, "chamado.html", u=u, ch=ch, sit=sit, equip_unidade=equip_unidade,
+                  tipos=tipos_chamado(db) if u.equipe else [],
                   grupos=unidades_permitidas(db, u) if u.equipe else [],
                   tecnicos=tecnicos(db) if u.equipe else [],
                   hoje=agora().date(), agora_hora=agora().strftime("%H:%M"),
@@ -435,12 +453,15 @@ def nova_acao(request: Request, numero: int, descricao: str = Form(...), status:
 
 @app.post("/chamados/{numero}/classificar", dependencies=[Depends(checar_csrf)])
 def classificar(request: Request, numero: int, prioridade: str = Form("normal"), tecnico_id: str = Form(""),
+                tipo_ids: list[str] = Form(default=[]),
                 u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
     ch.prioridade = _prioridade(prioridade)
     ch.tecnico_id = _tecnico_valido(db, _int(tecnico_id))
+    inativos = [t for t in ch.tipos if not t.ativo]   # tipos desativados continuam no chamado
+    ch.tipos = inativos + [t for t in _tipos_escolhidos(db, tipo_ids) if t.ativo]
     db.commit()
-    flash(request, "Prioridade e técnico atualizados.")
+    flash(request, "Classificação atualizada.")
     return voltar(f"/chamados/{numero}")
 
 
@@ -584,7 +605,8 @@ def _equip(db, eid) -> Equipamento:
     eq = db.scalar(select(Equipamento).where(Equipamento.id == eid).options(
         selectinload(Equipamento.unidade).selectinload(Unidade.cliente),
         selectinload(Equipamento.chamados).selectinload(Chamado.acoes),
-        selectinload(Equipamento.acessos).selectinload(AcessoSenha.usuario)))
+        selectinload(Equipamento.acessos).selectinload(AcessoSenha.usuario),
+        selectinload(Equipamento.eventos_monitor)))
     if not eq:
         raise HTTPException(404, "Equipamento não encontrado.")
     return eq
@@ -596,7 +618,7 @@ def _grupos_todas_unidades(db):
 
 @app.get("/inventario", response_class=HTMLResponse)
 def inventario_lista(request: Request, cliente: str = "", unidade: str = "", tipo: str = "", q: str = "",
-                     garantia: str = "", inativos: str = "", u: Usuario = Depends(so_equipe),
+                     garantia: str = "", inativos: str = "", monitor_st: str = "", u: Usuario = Depends(so_equipe),
                      db: Session = Depends(get_db)):
     cliente, unidade = _int(cliente), _int(unidade)
     tipo = tipo if tipo in TIPOS_EQUIPAMENTO else ""
@@ -615,19 +637,26 @@ def inventario_lista(request: Request, cliente: str = "", unidade: str = "", tip
         sel = sel.where(or_(Equipamento.nome.ilike(like), Equipamento.marca.ilike(like),
                             Equipamento.modelo.ilike(like), Equipamento.ip.ilike(like),
                             Equipamento.mac.ilike(like), Equipamento.numero_serie.ilike(like),
+                            Equipamento.ip_externo.ilike(like),
                             Equipamento.local.ilike(like)))
     lista = db.scalars(sel.order_by(Unidade.nome, Equipamento.tipo, Equipamento.nome)).all()
     hoje = agora().date()
     if garantia in ("vence", "vencida"):
         lista = [e for e in lista if e.situacao_garantia(hoje)[0] == garantia]
+    if monitor_st == "monitorados":
+        lista = [e for e in lista if e.monitorar]
+    elif monitor_st in ("online", "offline"):
+        lista = [e for e in lista if e.monitorar and e.monitor_status == monitor_st]
     vencendo = sum(1 for e in lista if e.situacao_garantia(hoje)[0] == "vence") if garantia != "vence" else 0
     return render(request, "inventario.html", u=u, equipamentos=lista, hoje=hoje, vencendo=vencendo,
                   clientes=clientes_ativos(db), grupos=_grupos_todas_unidades(db),
-                  f=dict(cliente=cliente, unidade=unidade, tipo=tipo, q=q, garantia=garantia, inativos=inativos))
+                  f=dict(cliente=cliente, unidade=unidade, tipo=tipo, q=q, garantia=garantia, inativos=inativos,
+                         monitor_st=monitor_st))
 
 
 def _preencher_equip(eq, db, f) -> list[str]:
     """Aplica os campos do formulário. Retorna avisos; levanta DadoInvalido em erro."""
+    alvo_antes = eq.alvo_monitor if eq.id else None
     un = db.get(Unidade, _int(f["unidade_id"]) or 0)
     if not un:
         raise inventario.DadoInvalido("Selecione a unidade.")
@@ -642,6 +671,17 @@ def _preencher_equip(eq, db, f) -> list[str]:
     eq.observacoes = f["observacoes"].strip() or None
     eq.ip = inventario.normalizar_ip(f["ip"])
     eq.mac = inventario.normalizar_mac(f["mac"])
+    eq.ip_externo = inventario.normalizar_host(f["ip_externo"])
+    eq.monitor_porta = inventario.normalizar_porta(f["monitor_porta"])
+    eq.monitor_endereco = "interno" if f["monitor_endereco"] == "interno" else "externo"
+    monitorar = bool(f["monitorar"])
+    if monitorar and not eq.alvo_monitor:
+        raise inventario.DadoInvalido("Para monitorar, informe a porta e o "
+                                      + ("IP interno." if eq.monitor_endereco == "interno" else "IP externo / DDNS."))
+    if not monitorar or eq.monitorar != monitorar or eq.alvo_monitor != alvo_antes:
+        eq.monitor_status = eq.monitor_desde = eq.monitor_ms = eq.monitor_erro = None
+        eq.monitor_falhas = 0
+    eq.monitorar = monitorar
     eq.instalacao, eq.garantia_ate = _data(f["instalacao"]), _data(f["garantia_ate"])
     avisos_ = []
     if eq.ip:
@@ -653,10 +693,77 @@ def _preencher_equip(eq, db, f) -> list[str]:
 
 
 def _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
-                instalacao, garantia_ate, observacoes):
+                instalacao, garantia_ate, observacoes, ip_externo="", monitorar="", monitor_porta="",
+                monitor_endereco="externo"):
     return dict(unidade_id=unidade_id, tipo=tipo, nome=nome, marca=marca, modelo=modelo,
                 numero_serie=numero_serie, ip=ip, mac=mac, porta=porta, local=local, usuario=usuario,
-                instalacao=instalacao, garantia_ate=garantia_ate, observacoes=observacoes)
+                instalacao=instalacao, garantia_ate=garantia_ate, observacoes=observacoes, ip_externo=ip_externo,
+                monitorar=monitorar, monitor_porta=monitor_porta, monitor_endereco=monitor_endereco)
+
+
+def _duracao(desde):
+    if not desde:
+        return ""
+    s = int((agora_utc() - desde).total_seconds())
+    if s < 3600:
+        return f"{max(1, s // 60)} min"
+    if s < 86400:
+        return f"{s // 3600}h{(s % 3600) // 60:02d}"
+    d = s // 86400
+    return f"{d} dia{'s' if d > 1 else ''}"
+
+
+tpl.env.globals["duracao"] = _duracao
+
+
+@app.get("/inventario/dashboard", response_class=HTMLResponse)
+def inventario_dashboard(request: Request, cliente: str = "", u: Usuario = Depends(so_equipe),
+                         db: Session = Depends(get_db)):
+    cliente = _int(cliente)
+    sel = select(Equipamento).join(Unidade).where(Equipamento.ativo).options(
+        selectinload(Equipamento.unidade).selectinload(Unidade.cliente),
+        selectinload(Equipamento.chamados).selectinload(Chamado.acoes))
+    if cliente:
+        sel = sel.where(Unidade.cliente_id == cliente)
+    eqs = db.scalars(sel).all()
+    hoje = agora().date()
+    monitorados = [e for e in eqs if e.monitorar]
+    offline = sorted([e for e in monitorados if e.monitor_status == "offline"],
+                     key=lambda e: e.monitor_desde or datetime.min)
+    online = [e for e in monitorados if e.monitor_status == "online"]
+    aguardando = [e for e in monitorados if e.monitor_status not in ("online", "offline")]
+    por_cliente = {}
+    for e in eqs:
+        c = e.unidade.cliente
+        d = por_cliente.setdefault(c.id, {"cliente": c, "total": 0, "unidades": {}, "offline": 0})
+        d["total"] += 1
+        d["unidades"][e.unidade.nome_curto] = d["unidades"].get(e.unidade.nome_curto, 0) + 1
+        d["offline"] += 1 if (e.monitorar and e.monitor_status == "offline") else 0
+    por_cliente = sorted(por_cliente.values(), key=lambda d: -d["total"])
+    por_tipo = {}
+    for e in eqs:
+        por_tipo[e.tipo_rotulo] = por_tipo.get(e.tipo_rotulo, 0) + 1
+    por_tipo = sorted(por_tipo.items(), key=lambda x: -x[1])
+    faixas = {"vencida": [], "30": [], "60": [], "90": []}
+    for e in eqs:
+        if not e.garantia_ate:
+            continue
+        dias = (e.garantia_ate - hoje).days
+        chave = "vencida" if dias < 0 else "30" if dias <= 30 else "60" if dias <= 60 else "90" if dias <= 90 else None
+        if chave:
+            faixas[chave].append(e)
+    for v in faixas.values():
+        v.sort(key=lambda e: e.garantia_ate)
+
+    def chamados_validos(e):
+        return [c for c in e.chamados if not c.cancelado]
+    ranking = sorted([e for e in eqs if chamados_validos(e)],
+                     key=lambda e: (-len(chamados_validos(e)), e.nome))[:10]
+    return render(request, "inventario_dashboard.html", u=u, eqs=eqs, monitorados=monitorados, offline=offline,
+                  online=online, aguardando=aguardando, por_cliente=por_cliente, por_tipo=por_tipo,
+                  faixas=faixas, ranking=ranking, chamados_validos=chamados_validos, duracao=_duracao,
+                  clientes=clientes_ativos(db), f=dict(cliente=cliente), hoje=hoje,
+                  intervalo=config.MONITOR_INTERVALO_MIN, monitor_ativo=config.MONITOR_ATIVO)
 
 
 @app.get("/inventario/novo", response_class=HTMLResponse)
@@ -670,11 +777,13 @@ def inventario_novo_form(request: Request, unidade: str = "", u: Usuario = Depen
 def inventario_novo(request: Request, unidade_id: str = Form(""), tipo: str = Form("outro"), nome: str = Form(""),
                     marca: str = Form(""), modelo: str = Form(""), numero_serie: str = Form(""),
                     ip: str = Form(""), mac: str = Form(""), porta: str = Form(""), local: str = Form(""),
+                    ip_externo: str = Form(""), monitorar: str = Form(""), monitor_porta: str = Form(""),
+                    monitor_endereco: str = Form("externo"),
                     usuario: str = Form(""), senha: str = Form(""), instalacao: str = Form(""),
                     garantia_ate: str = Form(""), observacoes: str = Form(""),
                     u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     f = _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
-                    instalacao, garantia_ate, observacoes)
+                    instalacao, garantia_ate, observacoes, ip_externo, monitorar, monitor_porta, monitor_endereco)
     eq = Equipamento(criado_por_id=u.id)
     try:
         avs = _preencher_equip(eq, db, f)
@@ -705,12 +814,14 @@ def inventario_detalhe(request: Request, eid: int, u: Usuario = Depends(so_equip
 def inventario_salvar(request: Request, eid: int, unidade_id: str = Form(""), tipo: str = Form("outro"),
                       nome: str = Form(""), marca: str = Form(""), modelo: str = Form(""),
                       numero_serie: str = Form(""), ip: str = Form(""), mac: str = Form(""), porta: str = Form(""),
+                      ip_externo: str = Form(""), monitorar: str = Form(""), monitor_porta: str = Form(""),
+                      monitor_endereco: str = Form("externo"),
                       local: str = Form(""), usuario: str = Form(""), senha: str = Form(""),
                       remover_senha: str = Form(""), instalacao: str = Form(""), garantia_ate: str = Form(""),
                       observacoes: str = Form(""), u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     eq = _equip(db, eid)
     f = _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
-                    instalacao, garantia_ate, observacoes)
+                    instalacao, garantia_ate, observacoes, ip_externo, monitorar, monitor_porta, monitor_endereco)
     try:
         avs = _preencher_equip(eq, db, f)
     except inventario.DadoInvalido as e:
@@ -743,6 +854,22 @@ def inventario_ver_senha(request: Request, eid: int, u: Usuario = Depends(so_equ
     db.commit()
     return Response(json.dumps({"senha": senha}), media_type="application/json",
                     headers={"Cache-Control": "no-store"})
+
+
+@app.post("/inventario/{eid}/testar", dependencies=[Depends(checar_csrf)])
+def inventario_testar(request: Request, eid: int, u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    eq = _equip(db, eid)
+    try:
+        ok, ms, erro = monitor.verificar_um(db, eq)
+    except ValueError as e:
+        flash(request, str(e), "erro"); return voltar(f"/inventario/{eid}")
+    db.commit()
+    host, porta = eq.alvo_monitor
+    if ok:
+        flash(request, f"Online: {host}:{porta} respondeu em {ms} ms.")
+    else:
+        flash(request, f"Offline: {host}:{porta} não respondeu ({erro}).", "erro")
+    return voltar(f"/inventario/{eid}")
 
 
 @app.post("/inventario/{eid}/alternar", dependencies=[Depends(checar_csrf)])
@@ -878,14 +1005,16 @@ def publico_foto(token: str, anexo_id: int, mini: int = 0, db: Session = Depends
 def relatorio_form(request: Request, u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     hoje = agora().date()
     return render(request, "relatorio.html", u=u, clientes=clientes_ativos(db) if u.equipe else [],
+                  tipos=tipos_chamado(db, False),
                   grupos=unidades_permitidas(db, u) if u.papel != "unidade" else [],
                   de=hoje - timedelta(days=7), ate=hoje)
 
 
 @app.get("/relatorio/pdf")
 def relatorio_pdf(de: str, ate: str, cliente: str = "", unidade: str = "", incluir_abertos: str = "1",
-                  u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+                  tipo: str = "", u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     cliente, unidade = _int(cliente), _int(unidade)
+    tp = db.get(TipoChamado, _int(tipo)) if _int(tipo) else None
     d1, d2 = _data(de), _data(ate)
     if not d1 or not d2 or d1 > d2:
         raise HTTPException(400, "Período inválido.")
@@ -896,6 +1025,8 @@ def relatorio_pdf(de: str, ate: str, cliente: str = "", unidade: str = "", inclu
         cliente = un.cliente_id
     lista = _filtrar(db, u, cliente, un.id if un else None, d1, d2, incluir_abertos=incluir_abertos != "0")
     lista = sorted([c for c in lista if not c.cancelado], key=lambda c: c.numero)
+    if tp:
+        lista = [c for c in lista if tp in c.tipos]
     periodo = (f"{d1:%d/%m} a {d2:%d/%m/%Y}" if d1.year == d2.year else f"{d1:%d/%m/%Y} a {d2:%d/%m/%Y}")
     if u.papel == "unidade":
         un = u.unidade
@@ -905,9 +1036,10 @@ def relatorio_pdf(de: str, ate: str, cliente: str = "", unidade: str = "", inclu
         ids = {c.unidade.cliente_id for c in lista}
         cli = db.get(Cliente, ids.pop()) if len(ids) == 1 else None
     titulo_cliente = cli.nome if cli else "Todos os clientes"
-    extra = un.nome_curto if un else ""
+    extra = " — ".join(x for x in (un.nome_curto if un else "", tp.nome if tp else "") if x)
     base = f"Relatorio_Chamados_{(cli.nome_curto or cli.nome) if cli else 'Geral'}"
-    nome = f"{base}_{d1:%d-%m}_a_{d2:%d-%m-%Y}{'_' + extra if extra else ''}.pdf".replace(" ", "_")
+    sufixo = "_".join(x for x in (un.nome_curto if un else "", tp.nome if tp else "") if x)
+    nome = f"{base}_{d1:%d-%m}_a_{d2:%d-%m-%Y}{'_' + sufixo if sufixo else ''}.pdf".replace(" ", "_").replace("/", "-")
     return _anexo_pdf(pdf.pdf_relatorio(lista, periodo, extra, titulo_cliente), nome)
 
 
@@ -916,7 +1048,7 @@ def relatorio_pdf(de: str, ate: str, cliente: str = "", unidade: str = "", inclu
 def admin(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     clientes = db.scalars(select(Cliente).order_by(Cliente.nome).options(selectinload(Cliente.unidades))).all()
     base = str(request.base_url).rstrip("/")
-    return render(request, "admin.html", u=u, clientes=clientes, base=base,
+    return render(request, "admin.html", u=u, clientes=clientes, base=base, tipos=tipos_chamado(db, False),
                   usuarios=db.scalars(select(Usuario).order_by(Usuario.papel, Usuario.nome)).all())
 
 
@@ -953,6 +1085,46 @@ def admin_cliente_op(request: Request, cid: int, operacao: str = Form(...), nome
         flash(request, "Cliente atualizado.")
     db.commit()
     return voltar("/admin#clientes")
+
+
+def _cor(v):
+    v = (v or "").strip()
+    return v.upper() if re.fullmatch(r"#[0-9A-Fa-f]{6}", v) else "#5F6B7A"
+
+
+@app.post("/admin/tipos", dependencies=[Depends(checar_csrf)])
+def admin_tipo(request: Request, nome: str = Form(""), cor: str = Form(""), u: Usuario = Depends(so_admin),
+               db: Session = Depends(get_db)):
+    nome = nome.strip()[:60]
+    if len(nome) < 2:
+        flash(request, "Informe o nome do tipo.", "erro")
+    elif db.scalar(select(TipoChamado).where(func.lower(TipoChamado.nome) == nome.lower())):
+        flash(request, "Esse tipo já existe.", "erro")
+    else:
+        ordem = (db.scalar(select(func.max(TipoChamado.ordem))) or 0) + 1
+        db.add(TipoChamado(nome=nome, cor=_cor(cor), ordem=ordem)); db.commit()
+        flash(request, f"Tipo {nome} cadastrado.")
+    return voltar("/admin#tipos")
+
+
+@app.post("/admin/tipos/{tid}", dependencies=[Depends(checar_csrf)])
+def admin_tipo_op(request: Request, tid: int, operacao: str = Form(...), nome: str = Form(""), cor: str = Form(""),
+                  u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    tp = db.get(TipoChamado, tid)
+    if not tp:
+        raise HTTPException(404)
+    if operacao == "alternar":
+        tp.ativo = not tp.ativo
+        flash(request, f"Tipo {tp.nome} {'ativado' if tp.ativo else 'desativado'}.")
+    elif operacao == "salvar" and nome.strip():
+        outro = db.scalar(select(TipoChamado).where(func.lower(TipoChamado.nome) == nome.strip().lower(),
+                                                    TipoChamado.id != tp.id))
+        if outro:
+            flash(request, "Já existe um tipo com esse nome.", "erro"); return voltar("/admin#tipos")
+        tp.nome, tp.cor = nome.strip()[:60], _cor(cor)
+        flash(request, "Tipo atualizado.")
+    db.commit()
+    return voltar("/admin#tipos")
 
 
 @app.post("/admin/unidades", dependencies=[Depends(checar_csrf)])

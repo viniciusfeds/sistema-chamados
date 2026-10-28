@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, caixa_status, copiar, prio, galeria, campo_fotos %}
+{% from "_macros.html" import select_unidades, caixa_status, copiar, prio, galeria, campo_fotos, tags, campo_tipos %}
 {% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
 {% block conteudo %}
 <div class="cab">
@@ -7,6 +7,7 @@
     <div class="muted"><a href="/">← Painel</a></div>
     <h1>Ticket <span class="num">{{ ch.numero_fmt }}</span> <span class="selo" style="background:{{ cor(sit) }};vertical-align:middle">{{ rotulo(sit) }}</span> {{ prio(ch.prioridade_ok) }}</h1>
     <div class="sub">{{ ch.titulo|fmt }}</div>
+    {% if ch.tipos %}<div class="tags-linha">{{ tags(ch.tipos) }}</div>{% endif %}
     {% if ch.tecnico %}<div class="muted">Técnico: <b>{{ ch.tecnico.nome }}</b></div>{% endif %}
   </div>
   <div class="acoes-topo">
@@ -29,6 +30,7 @@
     {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if k == ch.prioridade_ok }}>{{ p[0] }}</option>{% endfor %}</select></div>
   <div><label for="cl_tec">Técnico responsável</label><select id="cl_tec" name="tecnico_id"><option value="">A definir</option>
     {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if t.id == ch.tecnico_id }}>{{ t.nome }}</option>{% endfor %}</select></div>
+  <div class="classif-tipos">{{ campo_tipos(tipos, ch.tipos) }}</div>
   <div style="min-width:0"><button class="btn sec">Salvar</button></div>
 </form>
 {% endif %}

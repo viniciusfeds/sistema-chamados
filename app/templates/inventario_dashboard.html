@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selo, status_monitor, abas_inventario %}
+{% block titulo %}Dashboard do inventário{% endblock %}
+{% block conteudo %}
+<meta http-equiv="refresh" content="60">
+{{ abas_inventario('dashboard') }}
+<div class="cab">
+  <div>
+    <h1>Dashboard do inventário</h1>
+    <div class="muted">
+      {% if monitor_ativo %}Monitoramento a cada {{ intervalo }} min · página atualiza sozinha a cada 1 min
+      {% else %}<b>Monitoramento automático desligado</b> (MONITOR_ATIVO=0 no .env){% endif %}</div>
+  </div>
+  <form method="get" style="min-width:220px">
+    <label for="cliente">Cliente</label>
+    <select id="cliente" name="cliente" onchange="this.form.submit()"><option value="">Todos os clientes</option>
+    {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select>
+  </form>
+</div>
+{% set qc = ('&cliente=' ~ f.cliente) if f.cliente else '' %}
+
+<div class="cards">
+  <a href="/inventario?{{ qc[1:] }}" style="--c:#2B2B2B"><b>{{ eqs|length }}</b><span>Equipamentos</span></a>
+  <a href="/inventario?monitor_st=monitorados{{ qc }}" style="--c:#1F5FA8"><b>{{ monitorados|length }}</b><span>Monitorados</span></a>
+  <a href="/inventario?monitor_st=online{{ qc }}" style="--c:#1E7B45"><b>{{ online|length }}</b><span>Online</span></a>
+  <a href="/inventario?monitor_st=offline{{ qc }}" style="--c:#B3261E" class="{{ 'ativo' if offline }}"><b>{{ offline|length }}</b><span>Offline</span></a>
+  <a href="/inventario?garantia=vencida{{ qc }}" style="--c:#8E1C16"><b>{{ faixas['vencida']|length }}</b><span>Garantia vencida</span></a>
+  <a href="/inventario?garantia=vence{{ qc }}" style="--c:#B07000"><b>{{ faixas['30']|length }}</b><span>Vence em 30 dias</span></a>
+</div>
+
+<div class="card" id="offline">
+  <h2>{% if offline %}⚠ {% endif %}Equipamentos offline</h2>
+  {% if offline %}
+  <table class="resp">
+    <thead><tr><th>Equipamento</th><th>Unidade</th><th>Endereço testado</th><th>Offline há</th><th>Motivo</th></tr></thead>
+    <tbody>
+    {% for e in offline %}{% set alvo = e.alvo_monitor %}
+    <tr class="link parado" onclick="location.href='/inventario/{{ e.id }}'">
+      <td data-l="Equipamento"><a href="/inventario/{{ e.id }}"><b>{{ e.nome }}</b></a><div class="muted">{{ e.tipo_rotulo }}</div></td>
+      <td data-l="Unidade">{{ e.unidade.nome }}</td>
+      <td data-l="Endereço testado" class="mono">{% if alvo %}{{ alvo[0] }}:{{ alvo[1] }}{% endif %}</td>
+      <td data-l="Offline há"><b style="color:#B3261E">{{ duracao(e.monitor_desde) }}</b><div class="muted">desde {{ e.monitor_desde|local }}</div></td>
+      <td data-l="Motivo" class="muted">{{ e.monitor_erro or '' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% elif monitorados %}
+  <p class="ok-tudo">✔ Todos os {{ monitorados|length - aguardando|length }} equipamentos testados estão online.{% if aguardando %} <span class="muted">{{ aguardando|length }} aguardando o primeiro teste.</span>{% endif %}</p>
+  {% else %}
+  <p class="muted">Nenhum equipamento monitorado ainda. Na ficha do equipamento, informe o IP externo / DDNS e a porta e marque <b>Monitorar este equipamento</b>.</p>
+  {% endif %}
+</div>
+
+<div class="dash-grid">
+  <div class="card">
+    <h2>Por cliente</h2>
+    {% set maxc = (por_cliente|map(attribute='total')|max) if por_cliente else 1 %}
+    {% for d in por_cliente %}
+    <details class="barra-item">
+      <summary><span class="barra-rot">{{ d.cliente.nome }}{% if d.offline %} <span class="tag alerta">{{ d.offline }} offline</span>{% endif %}</span>
+        <span class="barra"><i style="width:{{ (d.total / maxc * 100)|round(1) }}%"></i></span><b>{{ d.total }}</b></summary>
+      <ul class="sub-lista">{% for nome, n in d.unidades|dictsort %}<li><span>{{ nome }}</span><b>{{ n }}</b></li>{% endfor %}</ul>
+    </details>
+    {% else %}<p class="muted">Sem equipamentos.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <h2>Por tipo</h2>
+    {% set maxt = (por_tipo|map(attribute=1)|max) if por_tipo else 1 %}
+    {% for nome, n in por_tipo %}
+    <div class="barra-item linha"><span class="barra-rot">{{ nome }}</span>
+      <span class="barra"><i style="width:{{ (n / maxt * 100)|round(1) }}%"></i></span><b>{{ n }}</b></div>
+    {% else %}<p class="muted">Sem equipamentos.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="card">
+    <h2>Garantias</h2>
+    {% set rotulos = {'vencida': ('Vencidas', 'vencida'), '30': ('Vencem em até 30 dias', 'vence'), '60': ('31 a 60 dias', 'ok'), '90': ('61 a 90 dias', 'ok')} %}
+    {% set algum = namespace(v=false) %}
+    {% for k in ['vencida', '30', '60', '90'] %}{% if faixas[k] %}{% set algum.v = true %}
+    <h3 class="gar-tit">{{ rotulos[k][0] }} <span class="muted">({{ faixas[k]|length }})</span></h3>
+    <ul class="sub-lista">
+      {% for e in faixas[k][:8] %}<li><a href="/inventario/{{ e.id }}">{{ e.nome }}</a> <span class="muted">· {{ e.unidade.nome_curto }}</span>
+        <span class="gar gar-{{ rotulos[k][1] }}">{{ e.garantia_ate|data }}</span></li>{% endfor %}
+      {% if faixas[k]|length > 8 %}<li class="muted">e mais {{ faixas[k]|length - 8 }}…</li>{% endif %}
+    </ul>
+    {% endif %}{% endfor %}
+    {% if not algum.v %}<p class="muted">Nenhuma garantia vencida ou vencendo nos próximos 90 dias.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Mais chamados</h2>
+    {% if ranking %}
+    <table class="resp">
+      <thead><tr><th>Equipamento</th><th>Chamados</th><th>Último</th></tr></thead>
+      <tbody>
+      {% for e in ranking %}{% set cs = chamados_validos(e) %}{% set ult = cs|sort(attribute='numero')|last %}
+      <tr class="link" onclick="location.href='/inventario/{{ e.id }}'">
+        <td data-l="Equipamento"><a href="/inventario/{{ e.id }}"><b>{{ e.nome }}</b></a><div class="muted">{{ e.unidade.nome }}</div></td>
+        <td data-l="Chamados"><b style="font-size:1.15rem">{{ cs|length }}</b></td>
+        <td data-l="Último"><a class="num" href="/chamados/{{ ult.numero }}" onclick="event.stopPropagation()">{{ ult.numero_fmt }}</a> {{ selo(status_geral(ult)) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">Nenhum chamado vinculado a equipamentos ainda. Vincule pelo quadro “Equipamentos” do chamado.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

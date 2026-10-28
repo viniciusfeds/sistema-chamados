@@ -71,3 +71,30 @@ def normalizar_mac(v: str) -> str | None:
     if len(hexa) != 12 or re.search(r"[^0-9A-Fa-f:\-.\s]", v):
         raise DadoInvalido(f"MAC inválido: “{v}”. Exemplo: 00:1A:2B:3C:4D:5E")
     return ":".join(hexa[i:i + 2] for i in range(0, 12, 2)).upper()
+
+
+_HOST = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
+
+
+def normalizar_host(v: str) -> str | None:
+    """IP externo: aceita IP público ou nome DDNS (ex.: skyfitcisper.ddns.net)."""
+    v = (v or "").strip().lower()
+    if not v:
+        return None
+    v = re.sub(r"^https?://", "", v).split("/")[0]
+    try:
+        return str(ipaddress.ip_address(v))
+    except ValueError:
+        pass
+    if not _HOST.match(v) or "." not in v or re.fullmatch(r"[\d.]+", v):
+        raise DadoInvalido(f"IP externo inválido: “{v}”. Use um IP (ex.: 177.10.20.30) ou um DDNS (ex.: cliente.ddns.net)")
+    return v
+
+
+def normalizar_porta(v) -> int | None:
+    v = str(v or "").strip()
+    if not v:
+        return None
+    if not v.isdigit() or not 1 <= int(v) <= 65535:
+        raise DadoInvalido(f"Porta inválida: “{v}”. Use um número de 1 a 65535.")
+    return int(v)

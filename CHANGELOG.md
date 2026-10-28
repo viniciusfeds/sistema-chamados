@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 1.4.0 — 2026-10-28
+- **Tipos de chamado (tags)**: CFTV, Controle de acesso, Rede / Internet, Áudio e vídeo, Alarme, Manutenção preventiva, Instalação e Suporte / Configuração já vêm cadastrados; o administrador cria, renomeia, muda a cor e desativa em *Administração → Tipos de chamado*
+- Um chamado pode ter vários tipos: escolha na abertura (equipe) ou no quadro de classificação do chamado; as tags aparecem no painel e no chamado
+- Filtro por tipo no **painel** e no **relatório PDF** (o tipo entra no subtítulo e no nome do arquivo)
+- Inventário: **IP externo / DDNS** do equipamento
+- **Monitoramento automático**: marque *Monitorar este equipamento*, escolha testar pelo IP externo/DDNS ou pelo IP interno e a porta; o sistema testa a conexão a cada 5 min (`MONITOR_INTERVALO_MIN`) e só marca offline após 2 falhas seguidas (`MONITOR_FALHAS`); botão *Testar agora* e histórico de quedas e retornos
+- **Dashboard do inventário**: totais, online/offline (com tempo fora e motivo), equipamentos por cliente/unidade e por tipo, garantias vencidas e vencendo em 30/60/90 dias e ranking dos equipamentos com mais chamados; atualiza sozinho a cada minuto
+- Lista do inventário com coluna e filtro de monitoramento; busca também pelo IP externo
+
 ## 1.3.0 — 2026-10-28
 - **Inventário de equipamentos** por cliente e unidade (menu *Inventário*, só para a equipe TecnosIT): tipo, identificação, local, marca, modelo, nº de série, IP, MAC, portas, usuário e senha de acesso, data de instalação, garantia e observações
 - **Senhas criptografadas** (Fernet/AES): aparecem só ao clicar em *Mostrar*, somem sozinhas após 30 s e cada visualização ou alteração fica registrada (quem e quando)

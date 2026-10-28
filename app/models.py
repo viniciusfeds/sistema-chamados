@@ -141,6 +141,7 @@ class Chamado(Base):
                          order_by="Acao.id")
     equipamentos = relationship("Equipamento", secondary="chamado_equipamentos", back_populates="chamados",
                                 order_by="Equipamento.nome")
+    tipos = relationship("TipoChamado", secondary="chamado_tipos", order_by="TipoChamado.ordem")
 
     @property
     def numero_fmt(self):
@@ -296,6 +297,7 @@ class Equipamento(Base):
     modelo: Mapped[str | None] = mapped_column(String(120), nullable=True)
     numero_serie: Mapped[str | None] = mapped_column(String(120), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(45), nullable=True, index=True)
+    ip_externo: Mapped[str | None] = mapped_column(String(255), nullable=True)  # IP público ou DDNS
     mac: Mapped[str | None] = mapped_column(String(17), nullable=True)
     porta: Mapped[str | None] = mapped_column(String(60), nullable=True)   # ex.: "80 / 554"
     local: Mapped[str | None] = mapped_column(String(120), nullable=True)  # onde está instalado
@@ -305,11 +307,23 @@ class Equipamento(Base):
     garantia_ate: Mapped[date | None] = mapped_column(Date, nullable=True)
     observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # monitoramento (v1.4): teste de conexão TCP em endereço:porta a cada MONITOR_INTERVALO_MIN
+    monitorar: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    monitor_porta: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monitor_endereco: Mapped[str | None] = mapped_column(String(10), nullable=True, default="externo")  # externo/interno
+    monitor_status: Mapped[str | None] = mapped_column(String(12), nullable=True)   # online / offline / None
+    monitor_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC, início do status atual
+    monitor_ultima: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC, último teste
+    monitor_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monitor_falhas: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    monitor_erro: Mapped[str | None] = mapped_column(String(255), nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     unidade = relationship("Unidade")
+    eventos_monitor = relationship("EventoMonitor", back_populates="equipamento", cascade="all, delete-orphan",
+                                   order_by="EventoMonitor.id.desc()")
     chamados = relationship("Chamado", secondary="chamado_equipamentos", back_populates="equipamentos",
                             order_by="Chamado.numero.desc()")
     acessos = relationship("AcessoSenha", back_populates="equipamento", cascade="all, delete-orphan",
@@ -322,6 +336,12 @@ class Equipamento(Base):
     @property
     def marca_modelo(self):
         return " ".join(x for x in (self.marca, self.modelo) if x) or ""
+
+    @property
+    def alvo_monitor(self):
+        """(host, porta) testado no monitoramento, ou None se faltar dado."""
+        host = self.ip if self.monitor_endereco == "interno" else (self.ip_externo or None)
+        return (host, self.monitor_porta) if host and self.monitor_porta else None
 
     @property
     def tem_senha(self):
@@ -350,3 +370,38 @@ class AcessoSenha(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     equipamento = relationship("Equipamento", back_populates="acessos")
     usuario = relationship("Usuario")
+
+
+class EventoMonitor(Base):
+    """Mudança de status do monitoramento (caiu / voltou)."""
+    __tablename__ = "eventos_monitor"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    equipamento_id: Mapped[int] = mapped_column(ForeignKey("equipamentos.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(12))          # online / offline
+    detalhe: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime)    # UTC
+    equipamento = relationship("Equipamento", back_populates="eventos_monitor")
+
+
+# ------------------------------------------------------------------ tipos de chamado (v1.4)
+chamado_tipos = Table(
+    "chamado_tipos", Base.metadata,
+    Column("chamado_id", ForeignKey("chamados.id", ondelete="CASCADE"), primary_key=True),
+    Column("tipo_id", ForeignKey("tipos_chamado.id", ondelete="CASCADE"), primary_key=True),
+)
+
+TIPOS_CHAMADO_PADRAO = [
+    ("CFTV", "#1F5FA8"), ("Controle de acesso", "#6A3FB5"), ("Rede / Internet", "#0E7C86"),
+    ("Áudio e vídeo", "#B5651D"), ("Alarme", "#B3261E"), ("Manutenção preventiva", "#2E7D32"),
+    ("Instalação", "#5F6B7A"), ("Suporte / Configuração", "#8A5300"),
+]
+
+
+class TipoChamado(Base):
+    """Tag de classificação do chamado (CFTV, Controle de acesso...). Cadastrada pelo administrador."""
+    __tablename__ = "tipos_chamado"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(60), unique=True)
+    cor: Mapped[str] = mapped_column(String(7), default="#5F6B7A")
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)

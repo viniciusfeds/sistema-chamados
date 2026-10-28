@@ -61,7 +61,7 @@ def _completar_dados():
 
     from sqlalchemy import select
 
-    from .models import Chamado, Cliente, Unidade, novo_token
+    from .models import TIPOS_CHAMADO_PADRAO, Chamado, Cliente, TipoChamado, Unidade, novo_token
     with SessionLocal() as db:
         sem_cliente = db.scalars(select(Unidade).where(Unidade.cliente_id.is_(None))).all()
         if sem_cliente:
@@ -76,4 +76,10 @@ def _completar_dados():
             ch.token_publico = novo_token(18)
         for ch in db.scalars(select(Chamado).where(Chamado.origem.is_(None))).all():
             ch.origem = "sistema"
-        db.commit()
+        if not db.scalar(select(TipoChamado.id).limit(1)):
+            for i, (nome, cor) in enumerate(TIPOS_CHAMADO_PADRAO):
+                db.add(TipoChamado(nome=nome, cor=cor, ordem=i))
+        try:
+            db.commit()
+        except Exception:  # outro processo completou ao mesmo tempo
+            db.rollback()
