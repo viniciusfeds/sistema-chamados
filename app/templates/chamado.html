@@ -65,6 +65,36 @@
   {% endif %}
 </div>
 
+{% if u.equipe %}
+<div class="card" id="equipamentos">
+  <h2>Equipamentos {% if ch.equipamentos %}<span class="muted" style="font-weight:400">({{ ch.equipamentos|length }})</span>{% endif %}</h2>
+  {% if ch.equipamentos %}
+  <div class="equip-chips">
+    {% for e in ch.equipamentos %}
+    <a class="equip-chip" href="/inventario/{{ e.id }}"><b>{{ e.nome }}</b>
+      <span>{{ e.marca_modelo or e.tipo_rotulo }}{% if e.ip %} · <span class="mono">{{ e.ip }}</span>{% endif %}</span></a>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted" style="margin-top:0">Nenhum equipamento vinculado a este chamado.</p>{% endif %}
+  {% if equip_unidade %}
+  <details style="margin-top:10px"><summary>Escolher equipamentos de {{ ch.unidade.nome }}</summary>
+    <form method="post" action="/chamados/{{ ch.numero }}/equipamentos" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="equip-opcoes">
+      {% for e in equip_unidade %}
+      <label class="check" style="margin:0"><input type="checkbox" name="equipamento_ids" value="{{ e.id }}" style="width:auto"
+        {{ 'checked' if e in ch.equipamentos }}> <span><b>{{ e.nome }}</b> <span class="muted">{{ e.tipo_rotulo }}{% if e.ip %} · {{ e.ip }}{% endif %}</span></span></label>
+      {% endfor %}
+      </div>
+      <button class="btn sec peq" style="margin-top:10px">Salvar equipamentos</button>
+    </form>
+  </details>
+  {% else %}
+  <p class="dica">Esta unidade ainda não tem equipamentos no inventário. <a href="/inventario/novo?unidade={{ ch.unidade_id }}">Cadastrar</a></p>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="card" id="acoes">
   <h2>Ações</h2>
   {% if ch.acoes %}

@@ -134,3 +134,19 @@ label.check input{width:auto;margin-top:3px}
 .envio{font-weight:700;font-size:.85rem}
 .envio-pendente{color:#777}.envio-enviado{color:#1F5FA8}.envio-entregue{color:#2E7D4F}.envio-lido{color:#1F9E55}.envio-falhou{color:#B3261E}
 code{background:#F2F2F2;border-radius:4px;padding:1px 5px;font-size:.9em}
+
+/* --- v1.3: inventário --- */
+.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace;font-size:.92em}
+input.mono{font-size:.95rem}
+.gar{display:inline-block;font-weight:700;font-size:.85rem;border-radius:6px;padding:1px 8px;white-space:nowrap}
+.gar-ok{color:#1E5E3A;background:#E6F4EA}
+.gar-vence{color:#8A5300;background:#FFF3D6}
+.gar-vencida{color:#8E1C16;background:#FDECEC}
+tr.inativo td{opacity:.6}
+.senha-box{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.equip-chips{display:flex;flex-wrap:wrap;gap:8px}
+.equip-chip{display:flex;flex-direction:column;border:1px solid var(--linha);border-left:4px solid var(--laranja);
+  border-radius:8px;padding:6px 12px;text-decoration:none;color:var(--texto);background:#FFFCFA}
+.equip-chip:hover{background:#FFF0E8}
+.equip-chip span{font-size:.85rem;color:var(--cinza)}
+.equip-opcoes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}

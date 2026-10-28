@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades %}
+{% block titulo %}Inventário{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div>
+    <h1>Inventário</h1>
+    <div class="muted">Equipamentos instalados nos clientes · visível só para a equipe {{ config.EMPRESA_NOME }}</div>
+  </div>
+  <a class="btn" href="/inventario/novo{% if f.unidade %}?unidade={{ f.unidade }}{% endif %}">+ Novo equipamento</a>
+</div>
+
+{% if vencendo %}
+<div class="flash aviso">{{ vencendo }} equipamento(s) com garantia vencendo nos próximos 30 dias.
+  <a href="?garantia=vence{% if f.cliente %}&cliente={{ f.cliente }}{% endif %}">Ver</a></div>
+{% endif %}
+
+<div class="card">
+  <form class="filtros com-cliente" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Nome, marca, modelo, IP, MAC, nº de série ou local"></div>
+    <div><label for="cliente">Cliente</label>
+      <select id="cliente" name="cliente" onchange="this.form.unidade.value='';this.form.submit()"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label for="unidade">Unidade</label>
+      {% set gs = grupos %}
+      {% if f.cliente %}{% set gs = gs|selectattr('0.id', 'equalto', f.cliente)|list %}{% endif %}
+      {{ select_unidades(gs, 'unidade', f.unidade, 'Todas', False) }}</div>
+    <div><label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo"><option value="">Todos</option>
+      {% for k, r in TIPOS_EQUIPAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if f.tipo == k }}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label for="garantia">Garantia</label>
+      <select id="garantia" name="garantia"><option value="">Todas</option>
+        <option value="vence" {{ 'selected' if f.garantia == 'vence' }}>Vencendo (30 dias)</option>
+        <option value="vencida" {{ 'selected' if f.garantia == 'vencida' }}>Vencida</option></select></div>
+    <div><label class="check" style="margin:0 0 10px"><input type="checkbox" name="inativos" value="1" {{ 'checked' if f.inativos }} style="width:auto"> Mostrar fora de uso</label></div>
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/inventario">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if equipamentos %}
+<table class="resp">
+  <thead><tr><th>Equipamento</th><th>Unidade</th><th>Marca / Modelo</th><th>IP</th><th>MAC</th><th>Garantia</th><th>Chamados</th></tr></thead>
+  <tbody>
+  {% for e in equipamentos %}
+  {% set g = e.situacao_garantia(hoje) %}
+  <tr class="link {{ 'inativo' if not e.ativo }}" onclick="location.href='/inventario/{{ e.id }}'">
+    <td data-l="Equipamento"><a href="/inventario/{{ e.id }}"><b>{{ e.nome }}</b></a>{% if e.tem_senha %} <span title="Tem senha cadastrada">🔒</span>{% endif %}
+      <div class="muted">{{ e.tipo_rotulo }}{% if e.local %} · {{ e.local }}{% endif %}</div>
+      {% if not e.ativo %}<span class="tag cinza">fora de uso</span>{% endif %}</td>
+    <td data-l="Unidade">{{ e.unidade.nome }}</td>
+    <td data-l="Marca / Modelo">{{ e.marca_modelo or '—' }}</td>
+    <td data-l="IP" class="mono">{{ e.ip or '—' }}</td>
+    <td data-l="MAC" class="mono">{{ e.mac or '—' }}</td>
+    <td data-l="Garantia">{% if g[0] %}<span class="gar gar-{{ g[0] }}">{{ e.garantia_ate|data }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td data-l="Chamados">{{ e.chamados|length or '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="vazio">Nenhum equipamento encontrado. <a href="/inventario/novo{% if f.unidade %}?unidade={{ f.unidade }}{% endif %}">Cadastrar o primeiro</a>.</div>
+{% endif %}
+</div>
+<p class="muted">{{ equipamentos|length }} equipamento(s).</p>
+{% endblock %}

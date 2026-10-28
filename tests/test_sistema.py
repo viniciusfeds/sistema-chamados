@@ -7,6 +7,7 @@ from pathlib import Path
 _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/teste.db"
 os.environ["SECRET_KEY"] = "teste"
+os.environ["DADOS_DIR"] = _tmp
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -15,7 +16,7 @@ from sqlalchemy import select  # noqa: E402
 from app.auth import hash_senha  # noqa: E402
 from app.db import SessionLocal, criar_tabelas  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Chamado, Cliente, EnvioWhatsApp, Unidade, Usuario  # noqa: E402
+from app.models import AcessoSenha, Chamado, Cliente, EnvioWhatsApp, Equipamento, Unidade, Usuario  # noqa: E402
 from scripts.gerenciar import importar  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -621,3 +622,136 @@ def test_whatsapp_teste_admin(wa):
     r = a.post("/admin/whatsapp/teste", data={"telefone": "99", "csrf": tok})
     assert "Telefone inválido" in r.text
     assert entrar("tec@t.com").get("/admin/whatsapp").status_code == 403
+
+
+# ------------------------------------------------------------------ inventário (v1.3)
+def _novo_equip(c, **campos):
+    tok = _csrf(c.get("/inventario/novo").text)
+    dados = {"unidade_id": IDS["carrao"], "tipo": "dvr", "nome": "DVR Recepção", "marca": "Intelbras",
+             "modelo": "MHDX 1216", "ip": "192.168.0.50", "mac": "00-1a-2b-3c-4d-5e", "usuario": "admin",
+             "senha": "Sky@2026!", "garantia_ate": "", "csrf": tok}
+    dados.update(campos)
+    return c.post("/inventario/novo", data=dados)
+
+
+def test_inventario_so_equipe():
+    for email in ("carrao@t.com", "gestor@t.com"):
+        c = entrar(email)
+        assert c.get("/inventario").status_code == 403
+        assert c.get("/inventario/novo").status_code == 403
+        assert "/inventario" not in c.get("/").text
+
+
+def test_inventario_cadastro_senha_cifrada_e_registro():
+    c = entrar("tec@t.com")
+    r = _novo_equip(c)
+    assert "DVR Recepção cadastrado" in r.text and "00:1A:2B:3C:4D:5E" in r.text
+    assert "Sky@2026!" not in r.text
+    with SessionLocal() as db:
+        eq = db.scalar(select(Equipamento).where(Equipamento.nome == "DVR Recepção"))
+        assert eq.senha_cifrada and "Sky@2026" not in eq.senha_cifrada
+        eid = eq.id
+    tok = _csrf(c.get(f"/inventario/{eid}").text)
+    r = c.post(f"/inventario/{eid}/senha", data={"csrf": tok})
+    assert r.json() == {"senha": "Sky@2026!"} and r.headers["cache-control"] == "no-store"
+    assert c.post(f"/inventario/{eid}/senha", data={"csrf": "x"}).status_code == 400
+    with SessionLocal() as db:
+        acoes = [a.acao for a in db.scalars(select(AcessoSenha).where(AcessoSenha.equipamento_id == eid))]
+        assert acoes.count("ver") == 1 and "alterar" in acoes
+    assert "Registro de acesso à senha" in c.get(f"/inventario/{eid}").text
+    # busca por IP e por MAC
+    assert "DVR Recepção" in c.get("/inventario?q=192.168.0.50").text
+    assert "DVR Recepção" in c.get("/inventario?q=3C:4D").text
+    assert "DVR Recepção" not in c.get(f"/inventario?cliente={IDS['top']}").text
+
+
+def test_inventario_validacao_e_ip_repetido():
+    c = entrar("tec@t.com")
+    r = _novo_equip(c, nome="Câmera X", ip="192.168.0.300")
+    assert "IP inválido" in r.text and 'value="Câmera X"' in r.text
+    r = _novo_equip(c, nome="Câmera X", ip="", mac="12:34")
+    assert "MAC inválido" in r.text
+    r = _novo_equip(c, nome="", ip="")
+    assert "Informe a identificação" in r.text
+    r = _novo_equip(c, nome="NVR Novo", tipo="dvr", senha="")
+    assert "também está cadastrado" in r.text  # mesmo IP do DVR Recepção na unidade
+
+
+def test_inventario_editar_mantem_e_remove_senha():
+    c = entrar("tec@t.com")
+    with SessionLocal() as db:
+        eid = db.scalar(select(Equipamento).where(Equipamento.nome == "DVR Recepção")).id
+    tok = _csrf(c.get(f"/inventario/{eid}").text)
+    base = {"unidade_id": IDS["carrao"], "tipo": "dvr", "nome": "DVR Recepção", "marca": "Intelbras",
+            "modelo": "MHDX 3116", "ip": "192.168.0.50", "mac": "", "usuario": "admin", "csrf": tok}
+    c.post(f"/inventario/{eid}", data={**base, "senha": ""})
+    assert c.post(f"/inventario/{eid}/senha", data={"csrf": tok}).json()["senha"] == "Sky@2026!"
+    c.post(f"/inventario/{eid}", data={**base, "senha": "Nova#1"})
+    assert c.post(f"/inventario/{eid}/senha", data={"csrf": tok}).json()["senha"] == "Nova#1"
+    c.post(f"/inventario/{eid}", data={**base, "remover_senha": "1"})
+    with SessionLocal() as db:
+        eq = db.get(Equipamento, eid)
+        assert eq.senha_cifrada is None and eq.modelo == "MHDX 3116" and eq.mac is None
+
+
+def test_inventario_chave_errada():
+    from app import inventario
+    from cryptography.fernet import Fernet
+    token = Fernet(Fernet.generate_key()).encrypt(b"x").decode()
+    with pytest.raises(inventario.DadoInvalido):
+        inventario.decifrar(token)
+    c = entrar("tec@t.com")
+    with SessionLocal() as db:
+        eq = Equipamento(unidade_id=IDS["carrao"], nome="Antigo", tipo="outro", senha_cifrada=token)
+        db.add(eq); db.commit(); eid = eq.id
+    tok = _csrf(c.get(f"/inventario/{eid}").text)
+    r = c.post(f"/inventario/{eid}/senha", data={"csrf": tok})
+    assert r.status_code == 409 and "chave" in r.json()["erro"]
+
+
+def test_inventario_vinculo_com_chamado():
+    c = entrar("tec@t.com")
+    with SessionLocal() as db:
+        dvr = db.scalar(select(Equipamento).where(Equipamento.nome == "DVR Recepção")).id
+        outra = Equipamento(unidade_id=IDS["torre"], nome="Câmera Torre", tipo="camera")
+        db.add(outra); db.commit(); outra = outra.id
+        numero = db.scalar(select(Chamado.numero).where(Chamado.unidade_id == IDS["carrao"]))
+    r = c.get(f"/chamados/{numero}")
+    assert "Escolher equipamentos de" in r.text and "DVR Recepção" in r.text
+    tok = _csrf(r.text)
+    r = c.post(f"/chamados/{numero}/equipamentos", data={"equipamento_ids": [dvr, outra], "csrf": tok})
+    assert "equip-chip" in r.text
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == numero))
+        assert [e.id for e in ch.equipamentos] == [dvr]   # equipamento de outra unidade é ignorado
+    r = c.get(f"/inventario/{dvr}")
+    assert f"/chamados/{numero}" in r.text
+    # unidade não vê o quadro de equipamentos
+    assert "equip-chip" not in entrar("carrao@t.com").get(f"/chamados/{numero}").text
+
+
+def test_inventario_garantia_e_exclusao():
+    from datetime import date, timedelta
+    c = entrar("tec@t.com")
+    hoje = date.today()
+    _novo_equip(c, nome="Facial 01", tipo="facial", ip="192.168.0.61", mac="", senha="",
+                garantia_ate=(hoje + timedelta(days=10)).isoformat())
+    _novo_equip(c, nome="Facial 02", tipo="facial", ip="192.168.0.62", mac="", senha="",
+                garantia_ate=(hoje - timedelta(days=1)).isoformat())
+    r = c.get("/inventario?garantia=vence")
+    assert "Facial 01" in r.text and "Facial 02" not in r.text
+    assert "Facial 02" in c.get("/inventario?garantia=vencida").text
+    assert "garantia vencendo" in c.get("/inventario").text
+    with SessionLocal() as db:
+        eid = db.scalar(select(Equipamento).where(Equipamento.nome == "Facial 02")).id
+    tok = _csrf(c.get(f"/inventario/{eid}").text)
+    assert c.post(f"/inventario/{eid}/excluir", data={"csrf": tok}).status_code == 403
+    c.post(f"/inventario/{eid}/alternar", data={"csrf": tok})
+    assert "Facial 02" not in c.get("/inventario").text
+    assert "Facial 02" in c.get("/inventario?inativos=1").text
+    a = entrar("admin@t.com")
+    tok = _csrf(a.get(f"/inventario/{eid}").text)
+    r = a.post(f"/inventario/{eid}/excluir", data={"csrf": tok})
+    assert "excluído" in r.text
+    with SessionLocal() as db:
+        assert db.get(Equipamento, eid) is None

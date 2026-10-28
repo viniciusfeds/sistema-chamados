@@ -44,6 +44,9 @@ ALERTA_HORAS = {"urgente": int(os.environ.get("ALERTA_HORAS_URGENTE", "4")),
                 "normal": int(os.environ.get("ALERTA_HORAS_NORMAL", "48")),
                 "baixa": int(os.environ.get("ALERTA_HORAS_BAIXA", "120"))}
 
+# Inventário: chave das senhas dos equipamentos (se vazio, gera em dados/.chave_inventario)
+INVENTARIO_CHAVE = os.environ.get("INVENTARIO_CHAVE", "").strip()
+
 # Fotos
 FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
 FOTO_MAX_POR_ENVIO = int(os.environ.get("FOTO_MAX_POR_ENVIO", "6"))

@@ -125,6 +125,8 @@ def inicializar():
     """Prepara o banco na primeira subida: cria tabelas, importa os chamados iniciais
     (só se o banco estiver vazio) e cria o administrador a partir de ADMIN_* se não houver nenhum."""
     criar_tabelas()
+    from app import inventario
+    inventario.garantir_chave()
     with SessionLocal() as db:
         vazio = not db.scalar(select(func.count(Chamado.id)))
         tem_admin = bool(db.scalar(select(func.count(Usuario.id)).where(Usuario.papel == "admin")))
@@ -152,6 +154,10 @@ def backup():
     with sqlite3.connect(origem) as src, sqlite3.connect(destino) as dst:
         src.backup(dst)
     print(f"Backup salvo em {destino}")
+    from app import config as _cfg, inventario
+    if not _cfg.INVENTARIO_CHAVE and inventario.arquivo_chave().exists():
+        print(f"IMPORTANTE: guarde também {inventario.arquivo_chave()} em lugar seguro, separado do backup.\n"
+              "Sem esse arquivo as senhas do inventário não podem ser lidas.")
 
 
 if __name__ == "__main__":

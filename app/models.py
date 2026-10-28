@@ -1,7 +1,7 @@
 import secrets
 from datetime import date, datetime, time
 
-from sqlalchemy import (JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text,
+from sqlalchemy import (JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Table, Text,
                         Time, UniqueConstraint, func)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -139,6 +139,8 @@ class Chamado(Base):
                           order_by="EnvioWhatsApp.id")
     acoes = relationship("Acao", back_populates="chamado", cascade="all, delete-orphan",
                          order_by="Acao.id")
+    equipamentos = relationship("Equipamento", secondary="chamado_equipamentos", back_populates="chamados",
+                                order_by="Equipamento.nome")
 
     @property
     def numero_fmt(self):
@@ -257,3 +259,94 @@ class EnvioWhatsApp(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     chamado = relationship("Chamado", back_populates="envios")
+
+
+# ------------------------------------------------------------------ inventário (v1.3)
+TIPOS_EQUIPAMENTO = {
+    "facial": "Leitor facial / Catraca",
+    "acesso": "Controle de acesso",
+    "dvr": "DVR / NVR",
+    "camera": "Câmera",
+    "alarme": "Central de alarme",
+    "roteador": "Roteador / Modem",
+    "switch": "Switch",
+    "wifi": "Access point / Wi-Fi",
+    "totem": "Totem",
+    "computador": "Computador / Notebook",
+    "impressora": "Impressora",
+    "audio": "Áudio / Caixa de som",
+    "outro": "Outro",
+}
+
+chamado_equipamentos = Table(
+    "chamado_equipamentos", Base.metadata,
+    Column("chamado_id", ForeignKey("chamados.id", ondelete="CASCADE"), primary_key=True),
+    Column("equipamento_id", ForeignKey("equipamentos.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Equipamento(Base):
+    """Equipamento instalado numa unidade do cliente. Visível só para a equipe TecnosIT."""
+    __tablename__ = "equipamentos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(20), default="outro")
+    nome: Mapped[str] = mapped_column(String(120))                 # identificação: "Catraca 01", "DVR Recepção"
+    marca: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    modelo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    numero_serie: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(45), nullable=True, index=True)
+    mac: Mapped[str | None] = mapped_column(String(17), nullable=True)
+    porta: Mapped[str | None] = mapped_column(String(60), nullable=True)   # ex.: "80 / 554"
+    local: Mapped[str | None] = mapped_column(String(120), nullable=True)  # onde está instalado
+    usuario: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    senha_cifrada: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fernet (ver app/inventario.py)
+    instalacao: Mapped[date | None] = mapped_column(Date, nullable=True)
+    garantia_ate: Mapped[date | None] = mapped_column(Date, nullable=True)
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    unidade = relationship("Unidade")
+    chamados = relationship("Chamado", secondary="chamado_equipamentos", back_populates="equipamentos",
+                            order_by="Chamado.numero.desc()")
+    acessos = relationship("AcessoSenha", back_populates="equipamento", cascade="all, delete-orphan",
+                           order_by="AcessoSenha.id.desc()")
+
+    @property
+    def tipo_rotulo(self):
+        return TIPOS_EQUIPAMENTO.get(self.tipo, "Outro")
+
+    @property
+    def marca_modelo(self):
+        return " ".join(x for x in (self.marca, self.modelo) if x) or ""
+
+    @property
+    def tem_senha(self):
+        return bool(self.senha_cifrada)
+
+    def situacao_garantia(self, hoje: date):
+        """(chave, texto): None, 'vencida', 'vence' (até 30 dias) ou 'ok'."""
+        if not self.garantia_ate:
+            return None, ""
+        dias = (self.garantia_ate - hoje).days
+        if dias < 0:
+            return "vencida", "Garantia vencida"
+        if dias <= 30:
+            return "vence", f"Vence em {dias} dia{'s' if dias != 1 else ''}" if dias else "Vence hoje"
+        return "ok", "Na garantia"
+
+
+class AcessoSenha(Base):
+    """Registro de quem viu ou alterou a senha de um equipamento."""
+    __tablename__ = "acessos_senha"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    equipamento_id: Mapped[int] = mapped_column(ForeignKey("equipamentos.id", ondelete="CASCADE"), index=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    acao: Mapped[str] = mapped_column(String(20), default="ver")   # ver / alterar / remover
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    equipamento = relationship("Equipamento", back_populates="acessos")
+    usuario = relationship("Usuario")

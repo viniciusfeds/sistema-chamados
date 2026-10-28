@@ -15,6 +15,7 @@
     <a href="/" class="{{ 'ativo' if request.url.path == '/' }}">Painel</a>
     <a href="/chamados/novo" class="{{ 'ativo' if request.url.path == '/chamados/novo' }}">Abrir chamado</a>
     <a href="/relatorio" class="{{ 'ativo' if request.url.path == '/relatorio' }}">Relatório</a>
+    {% if u.equipe %}<a href="/inventario" class="{{ 'ativo' if request.url.path.startswith('/inventario') }}">Inventário</a>{% endif %}
     {% if u.papel == 'admin' %}<a href="/admin" class="{{ 'ativo' if request.url.path == '/admin' }}">Administração</a>{% endif %}
     <a href="/conta" class="{{ 'ativo' if request.url.path == '/conta' }}">Minha conta</a>
     <a href="/sair">Sair</a>

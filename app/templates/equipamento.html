@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_macros.html" import select_unidades, selo %}
+{% block titulo %}{{ eq.nome if eq else 'Novo equipamento' }}{% endblock %}
+
+{% macro formulario(eq, v) -%}
+{% set d = eq if eq else v %}
+<div class="grid2">
+  <div class="campo"><label for="unidade_id">Cliente / unidade</label>
+    {{ select_unidades(grupos, 'unidade_id', (eq.unidade_id if eq else d.unidade_id)) }}</div>
+  <div class="campo"><label for="tipo">Tipo</label>
+    <select id="tipo" name="tipo">
+    {% for k, r in TIPOS_EQUIPAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if (d.tipo or 'outro') == k }}>{{ r }}</option>{% endfor %}</select></div>
+</div>
+<div class="grid2">
+  <div class="campo"><label for="nome">Identificação</label>
+    <input id="nome" name="nome" required maxlength="120" value="{{ d.nome or '' }}" placeholder="Ex.: Catraca 01, DVR Recepção"></div>
+  <div class="campo"><label for="local">Local de instalação</label>
+    <input id="local" name="local" maxlength="120" value="{{ d.local or '' }}" placeholder="Ex.: Entrada principal, rack da recepção"></div>
+</div>
+<div class="grid3">
+  <div class="campo"><label for="marca">Marca</label><input id="marca" name="marca" maxlength="80" value="{{ d.marca or '' }}" placeholder="Ex.: Control iD"></div>
+  <div class="campo"><label for="modelo">Modelo</label><input id="modelo" name="modelo" maxlength="120" value="{{ d.modelo or '' }}" placeholder="Ex.: iDFace"></div>
+  <div class="campo"><label for="numero_serie">Nº de série</label><input id="numero_serie" name="numero_serie" maxlength="120" value="{{ d.numero_serie or '' }}"></div>
+</div>
+<div class="grid3">
+  <div class="campo"><label for="ip">IP</label><input id="ip" name="ip" maxlength="45" value="{{ d.ip or '' }}" placeholder="192.168.15.231" inputmode="decimal" class="mono"></div>
+  <div class="campo"><label for="mac">MAC</label><input id="mac" name="mac" maxlength="20" value="{{ d.mac or '' }}" placeholder="00:1A:2B:3C:4D:5E" class="mono"></div>
+  <div class="campo"><label for="porta">Portas</label><input id="porta" name="porta" maxlength="60" value="{{ d.porta or '' }}" placeholder="Ex.: 80 / 554"></div>
+</div>
+<div class="grid2">
+  <div class="campo"><label for="usuario">Usuário de acesso</label><input id="usuario" name="usuario" maxlength="120" value="{{ d.usuario or '' }}" autocomplete="off" placeholder="Ex.: admin"></div>
+  <div class="campo"><label for="senha">Senha de acesso {% if eq and eq.tem_senha %}<span class="muted">(deixe vazio para manter)</span>{% endif %}</label>
+    <input id="senha" name="senha" type="password" autocomplete="new-password" placeholder="{{ '••••••••' if eq and eq.tem_senha else 'Opcional' }}">
+    <div class="dica">Guardada criptografada. Cada visualização fica registrada.</div>
+    {% if eq and eq.tem_senha %}<label class="check" style="margin:6px 0 0"><input type="checkbox" name="remover_senha" value="1" style="width:auto"> Remover a senha cadastrada</label>{% endif %}</div>
+</div>
+<div class="grid2">
+  <div class="campo"><label for="instalacao">Data de instalação</label><input id="instalacao" type="date" name="instalacao" value="{{ d.instalacao|iso }}"></div>
+  <div class="campo"><label for="garantia_ate">Garantia até</label><input id="garantia_ate" type="date" name="garantia_ate" value="{{ d.garantia_ate|iso }}"></div>
+</div>
+<div class="campo"><label for="observacoes">Observações</label>
+  <textarea id="observacoes" name="observacoes" style="min-height:70px" placeholder="Firmware, configuração, quantidade de cadastros, etc.">{{ d.observacoes or '' }}</textarea></div>
+{%- endmacro %}
+
+{% block conteudo %}
+{% if not eq %}
+<div class="cab"><div><div class="muted"><a href="/inventario">← Inventário</a></div><h1>Novo equipamento</h1></div></div>
+<form class="card" method="post" action="/inventario/novo" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {{ formulario(None, v) }}
+  <button class="btn">Cadastrar equipamento</button>
+</form>
+{% else %}
+{% set g = eq.situacao_garantia(hoje) %}
+<div class="cab">
+  <div>
+    <div class="muted"><a href="/inventario?unidade={{ eq.unidade_id }}">← Inventário de {{ eq.unidade.nome }}</a></div>
+    <h1>{{ eq.nome }} {% if not eq.ativo %}<span class="tag cinza" style="vertical-align:middle">fora de uso</span>{% endif %}</h1>
+    <div class="sub">{{ eq.tipo_rotulo }}{% if eq.marca_modelo %} · {{ eq.marca_modelo }}{% endif %}</div>
+  </div>
+  <a class="btn sec" href="/inventario/novo?unidade={{ eq.unidade_id }}">+ Outro equipamento nesta unidade</a>
+</div>
+
+<div class="card">
+  <dl class="dados">
+    <dt>Cliente</dt><dd>{{ eq.unidade.cliente.nome }}</dd>
+    <dt>Unidade</dt><dd>{{ eq.unidade.nome }}</dd>
+    {% if eq.local %}<dt>Local</dt><dd>{{ eq.local }}</dd>{% endif %}
+    <dt>Marca / Modelo</dt><dd>{{ eq.marca_modelo or '—' }}</dd>
+    {% if eq.numero_serie %}<dt>Nº de série</dt><dd class="mono">{{ eq.numero_serie }}</dd>{% endif %}
+    <dt>IP</dt><dd class="mono">{{ eq.ip or '—' }}{% if eq.porta %} <span class="muted">· portas {{ eq.porta }}</span>{% endif %}</dd>
+    <dt>MAC</dt><dd class="mono">{{ eq.mac or '—' }}</dd>
+    <dt>Acesso</dt><dd>
+      {% if eq.usuario %}Usuário <span class="mono">{{ eq.usuario }}</span>{% endif %}
+      {% if eq.tem_senha %}
+      <span class="senha-box">{% if eq.usuario %} · {% endif %}Senha <span class="mono" id="senha-valor">••••••••</span>
+        <button type="button" class="btn peq sec" id="btn-senha" onclick="verSenha()">Mostrar</button>
+        <button type="button" class="btn peq sec" id="btn-copiar" hidden onclick="copiarSenha(this)">Copiar</button></span>
+      {% elif not eq.usuario %}<span class="muted">Não cadastrado</span>{% endif %}</dd>
+    {% if eq.instalacao %}<dt>Instalação</dt><dd>{{ eq.instalacao|data }}</dd>{% endif %}
+    <dt>Garantia</dt><dd>{% if g[0] %}<span class="gar gar-{{ g[0] }}">{{ eq.garantia_ate|data }} · {{ g[1] }}</span>{% else %}<span class="muted">Não informada</span>{% endif %}</dd>
+  </dl>
+  {% if eq.observacoes %}<h2>Observações</h2><p>{{ eq.observacoes|fmt }}</p>{% endif %}
+</div>
+
+<div class="card" id="chamados">
+  <h2>Chamados deste equipamento {% if eq.chamados %}<span class="muted" style="font-weight:400">({{ eq.chamados|length }})</span>{% endif %}</h2>
+  {% if eq.chamados %}
+  <table class="resp">
+    <thead><tr><th>Ticket</th><th>Assunto</th><th>Abertura</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for c in eq.chamados %}
+    <tr class="link" onclick="location.href='/chamados/{{ c.numero }}'">
+      <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
+      <td data-l="Assunto">{{ c.assunto }}</td>
+      <td data-l="Abertura">{{ c.abertura|data }}</td>
+      <td data-l="Status">{{ selo(status_geral(c)) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum chamado vinculado. Vincule pelo próprio chamado, no quadro “Equipamentos”.</p>{% endif %}
+</div>
+
+<details class="card" id="editar" style="padding:14px 18px">
+  <summary>Editar equipamento</summary>
+  <form method="post" action="/inventario/{{ eq.id }}" style="margin-top:14px" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {{ formulario(eq, v) }}
+    <button class="btn">Salvar alterações</button>
+  </form>
+  <hr style="border:0;border-top:1px solid var(--linha);margin:18px 0">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <form method="post" action="/inventario/{{ eq.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn sec">{{ 'Reativar equipamento' if not eq.ativo else 'Marcar como fora de uso' }}</button></form>
+    {% if u.papel == 'admin' %}
+    <form method="post" action="/inventario/{{ eq.id }}/excluir" onsubmit="return confirm('Excluir {{ eq.nome }} do inventário? Os chamados continuam, só perdem o vínculo.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn perigo">Excluir</button></form>
+    {% endif %}
+  </div>
+  <p class="dica">Equipamento trocado ou retirado: prefira “fora de uso”, que mantém o histórico de chamados.</p>
+</details>
+
+{% if eq.acessos %}
+<details class="card" style="padding:14px 18px">
+  <summary>Registro de acesso à senha ({{ eq.acessos|length }})</summary>
+  <table class="resp" style="margin-top:10px">
+    <thead><tr><th>Quando</th><th>Quem</th><th>O quê</th></tr></thead>
+    <tbody>
+    {% for a in eq.acessos[:50] %}
+    <tr><td data-l="Quando">{{ a.criado_em|local }}</td>
+      <td data-l="Quem">{{ a.usuario.nome if a.usuario else '—' }}</td>
+      <td data-l="O quê">{{ {'ver': 'Visualizou', 'alterar': 'Cadastrou/alterou', 'remover': 'Removeu'}.get(a.acao, a.acao) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
+<script>if (location.hash === '#editar') document.getElementById('editar').open = true;</script>
+{% if eq.tem_senha %}
+<script>
+var _senha = null;
+function verSenha() {
+  var b = document.getElementById('btn-senha'), v = document.getElementById('senha-valor');
+  if (_senha !== null) { _senha = null; v.textContent = '••••••••'; b.textContent = 'Mostrar';
+    document.getElementById('btn-copiar').hidden = true; return; }
+  var fd = new FormData(); fd.append('csrf', '{{ csrf }}');
+  b.disabled = true;
+  fetch('/inventario/{{ eq.id }}/senha', {method: 'POST', body: fd, credentials: 'same-origin'})
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      b.disabled = false;
+      if (d.erro || d.senha === undefined) { v.textContent = d.erro || 'Erro ao carregar'; return; }
+      _senha = d.senha; v.textContent = d.senha; b.textContent = 'Ocultar';
+      document.getElementById('btn-copiar').hidden = false;
+      setTimeout(function () { if (_senha !== null) verSenha(); }, 30000);
+    })
+    .catch(function () { b.disabled = false; v.textContent = 'Erro ao carregar'; });
+}
+function copiarSenha(btn) {
+  if (_senha === null) return;
+  navigator.clipboard && navigator.clipboard.writeText(_senha);
+  btn.textContent = 'Copiado!'; setTimeout(function () { btn.textContent = 'Copiar'; }, 1500);
+}
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

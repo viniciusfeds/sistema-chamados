@@ -17,12 +17,13 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import avisos, config, fotos, pdf, regras, whatsapp
+from . import avisos, config, fotos, inventario, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
-from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, Acao, Anexo, Chamado, Cliente,
-                     ContatoAviso, EnvioWhatsApp, Unidade, Usuario, novo_token)
+from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
+                     Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, Unidade, Usuario,
+                     novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -34,6 +35,7 @@ JANELA_PUBLICO = timedelta(minutes=30)
 @asynccontextmanager
 async def _vida(app):
     criar_tabelas()
+    inventario.garantir_chave()
     yield
 
 
@@ -46,9 +48,13 @@ tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
                        CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, EVENTOS_AVISO=EVENTOS_AVISO,
-                       ROTULO_ENVIO=whatsapp.ROTULO_ENVIO, config=config)
+                       ROTULO_ENVIO=whatsapp.ROTULO_ENVIO, TIPOS_EQUIPAMENTO=TIPOS_EQUIPAMENTO,
+                       config=config)
 tpl.env.filters["fmt"] = regras.para_html
 tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
+tpl.env.filters["iso"] = lambda d: d.isoformat() if isinstance(d, date) else (str(d) if d else "")
+tpl.env.filters["local"] = lambda d: (d.replace(tzinfo=timezone.utc).astimezone(config.FUSO).strftime("%d/%m/%Y %H:%M")
+                                      if d else "")
 
 
 @app.exception_handler(PrecisaLogin)
@@ -123,7 +129,7 @@ def _diag_para_texto(d):
 
 def _opts_chamado():
     return (selectinload(Chamado.acoes), selectinload(Chamado.anexos), selectinload(Chamado.tecnico),
-            selectinload(Chamado.envios),
+            selectinload(Chamado.envios), selectinload(Chamado.equipamentos),
             selectinload(Chamado.unidade).selectinload(Unidade.cliente))
 
 
@@ -388,7 +394,10 @@ def detalhe(request: Request, numero: int, u: Usuario = Depends(usuario_atual),
     num_sol = avisos.numero_whatsapp(ch.solicitante_contato)
     wa_solicitante = avisos.link_whatsapp(avisos.texto_whatsapp(ch, link_publico, True), num_sol) \
         if num_sol else None
-    return render(request, "chamado.html", u=u, ch=ch, sit=sit,
+    equip_unidade = db.scalars(select(Equipamento).where(Equipamento.unidade_id == ch.unidade_id,
+                                                         Equipamento.ativo).order_by(Equipamento.nome)).all() \
+        if u.equipe else []
+    return render(request, "chamado.html", u=u, ch=ch, sit=sit, equip_unidade=equip_unidade,
                   grupos=unidades_permitidas(db, u) if u.equipe else [],
                   tecnicos=tecnicos(db) if u.equipe else [],
                   hoje=agora().date(), agora_hora=agora().strftime("%H:%M"),
@@ -553,6 +562,208 @@ def reabrir(request: Request, numero: int, u: Usuario = Depends(so_equipe), db: 
     db.commit()
     flash(request, f"Ticket {ch.numero_fmt} reativado.")
     return voltar(f"/chamados/{numero}")
+
+
+@app.post("/chamados/{numero}/equipamentos", dependencies=[Depends(checar_csrf)])
+def vincular_equipamentos(request: Request, numero: int, equipamento_ids: list[str] = Form(default=[]),
+                          u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    ch = buscar_chamado(db, numero, u)
+    ids = {i for i in (_int(x) for x in equipamento_ids) if i}
+    novos = db.scalars(select(Equipamento).where(Equipamento.id.in_(ids),
+                                                 Equipamento.unidade_id == ch.unidade_id)).all() if ids else []
+    # mantém vínculos com equipamentos de outra unidade/inativos que não aparecem na lista
+    fora = [e for e in ch.equipamentos if e.unidade_id != ch.unidade_id or not e.ativo]
+    ch.equipamentos = fora + list(novos)
+    db.commit()
+    flash(request, "Equipamentos do chamado atualizados.")
+    return voltar(f"/chamados/{numero}#equipamentos")
+
+
+# ---------------------------------------------------------------- inventário (só equipe TecnosIT)
+def _equip(db, eid) -> Equipamento:
+    eq = db.scalar(select(Equipamento).where(Equipamento.id == eid).options(
+        selectinload(Equipamento.unidade).selectinload(Unidade.cliente),
+        selectinload(Equipamento.chamados).selectinload(Chamado.acoes),
+        selectinload(Equipamento.acessos).selectinload(AcessoSenha.usuario)))
+    if not eq:
+        raise HTTPException(404, "Equipamento não encontrado.")
+    return eq
+
+
+def _grupos_todas_unidades(db):
+    return [(c, [x for x in c.unidades if x.ativa]) for c in clientes_ativos(db) if any(x.ativa for x in c.unidades)]
+
+
+@app.get("/inventario", response_class=HTMLResponse)
+def inventario_lista(request: Request, cliente: str = "", unidade: str = "", tipo: str = "", q: str = "",
+                     garantia: str = "", inativos: str = "", u: Usuario = Depends(so_equipe),
+                     db: Session = Depends(get_db)):
+    cliente, unidade = _int(cliente), _int(unidade)
+    tipo = tipo if tipo in TIPOS_EQUIPAMENTO else ""
+    sel = select(Equipamento).join(Unidade).options(
+        selectinload(Equipamento.unidade).selectinload(Unidade.cliente), selectinload(Equipamento.chamados))
+    if cliente:
+        sel = sel.where(Unidade.cliente_id == cliente)
+    if unidade:
+        sel = sel.where(Equipamento.unidade_id == unidade)
+    if tipo:
+        sel = sel.where(Equipamento.tipo == tipo)
+    if not inativos:
+        sel = sel.where(Equipamento.ativo)
+    if q.strip():
+        like = f"%{q.strip()}%"
+        sel = sel.where(or_(Equipamento.nome.ilike(like), Equipamento.marca.ilike(like),
+                            Equipamento.modelo.ilike(like), Equipamento.ip.ilike(like),
+                            Equipamento.mac.ilike(like), Equipamento.numero_serie.ilike(like),
+                            Equipamento.local.ilike(like)))
+    lista = db.scalars(sel.order_by(Unidade.nome, Equipamento.tipo, Equipamento.nome)).all()
+    hoje = agora().date()
+    if garantia in ("vence", "vencida"):
+        lista = [e for e in lista if e.situacao_garantia(hoje)[0] == garantia]
+    vencendo = sum(1 for e in lista if e.situacao_garantia(hoje)[0] == "vence") if garantia != "vence" else 0
+    return render(request, "inventario.html", u=u, equipamentos=lista, hoje=hoje, vencendo=vencendo,
+                  clientes=clientes_ativos(db), grupos=_grupos_todas_unidades(db),
+                  f=dict(cliente=cliente, unidade=unidade, tipo=tipo, q=q, garantia=garantia, inativos=inativos))
+
+
+def _preencher_equip(eq, db, f) -> list[str]:
+    """Aplica os campos do formulário. Retorna avisos; levanta DadoInvalido em erro."""
+    un = db.get(Unidade, _int(f["unidade_id"]) or 0)
+    if not un:
+        raise inventario.DadoInvalido("Selecione a unidade.")
+    if not f["nome"].strip():
+        raise inventario.DadoInvalido("Informe a identificação do equipamento (ex.: Catraca 01).")
+    eq.unidade_id, eq.unidade = un.id, un
+    eq.tipo = f["tipo"] if f["tipo"] in TIPOS_EQUIPAMENTO else "outro"
+    eq.nome = f["nome"].strip()[:120]
+    for campo, lim in (("marca", 80), ("modelo", 120), ("numero_serie", 120), ("porta", 60),
+                       ("local", 120), ("usuario", 120)):
+        setattr(eq, campo, f[campo].strip()[:lim] or None)
+    eq.observacoes = f["observacoes"].strip() or None
+    eq.ip = inventario.normalizar_ip(f["ip"])
+    eq.mac = inventario.normalizar_mac(f["mac"])
+    eq.instalacao, eq.garantia_ate = _data(f["instalacao"]), _data(f["garantia_ate"])
+    avisos_ = []
+    if eq.ip:
+        dup = db.scalar(select(Equipamento).where(Equipamento.unidade_id == un.id, Equipamento.ip == eq.ip,
+                                                  Equipamento.ativo, Equipamento.id != (eq.id or 0)))
+        if dup:
+            avisos_.append(f"O IP {eq.ip} também está cadastrado em “{dup.nome}” nesta unidade.")
+    return avisos_
+
+
+def _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
+                instalacao, garantia_ate, observacoes):
+    return dict(unidade_id=unidade_id, tipo=tipo, nome=nome, marca=marca, modelo=modelo,
+                numero_serie=numero_serie, ip=ip, mac=mac, porta=porta, local=local, usuario=usuario,
+                instalacao=instalacao, garantia_ate=garantia_ate, observacoes=observacoes)
+
+
+@app.get("/inventario/novo", response_class=HTMLResponse)
+def inventario_novo_form(request: Request, unidade: str = "", u: Usuario = Depends(so_equipe),
+                         db: Session = Depends(get_db)):
+    return render(request, "equipamento.html", u=u, eq=None, grupos=_grupos_todas_unidades(db),
+                  v={"unidade_id": _int(unidade)}, hoje=agora().date())
+
+
+@app.post("/inventario/novo", dependencies=[Depends(checar_csrf)])
+def inventario_novo(request: Request, unidade_id: str = Form(""), tipo: str = Form("outro"), nome: str = Form(""),
+                    marca: str = Form(""), modelo: str = Form(""), numero_serie: str = Form(""),
+                    ip: str = Form(""), mac: str = Form(""), porta: str = Form(""), local: str = Form(""),
+                    usuario: str = Form(""), senha: str = Form(""), instalacao: str = Form(""),
+                    garantia_ate: str = Form(""), observacoes: str = Form(""),
+                    u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    f = _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
+                    instalacao, garantia_ate, observacoes)
+    eq = Equipamento(criado_por_id=u.id)
+    try:
+        avs = _preencher_equip(eq, db, f)
+    except inventario.DadoInvalido as e:
+        request.session["flash"] = {"msg": str(e), "tipo": "erro"}
+        f["unidade_id"] = _int(unidade_id)
+        return render(request, "equipamento.html", u=u, eq=None, grupos=_grupos_todas_unidades(db), v=f,
+                      hoje=agora().date())
+    if senha:
+        eq.senha_cifrada = inventario.cifrar(senha)
+    db.add(eq); db.flush()
+    if senha:
+        db.add(AcessoSenha(equipamento_id=eq.id, usuario_id=u.id, acao="alterar", ip=_ip(request)))
+    db.commit()
+    flash(request, f"Equipamento {eq.nome} cadastrado." + (" Atenção: " + " ".join(avs) if avs else ""),
+          "erro" if avs else "ok")
+    return voltar(f"/inventario/{eq.id}")
+
+
+@app.get("/inventario/{eid}", response_class=HTMLResponse)
+def inventario_detalhe(request: Request, eid: int, u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    eq = _equip(db, eid)
+    return render(request, "equipamento.html", u=u, eq=eq, grupos=_grupos_todas_unidades(db), v={},
+                  hoje=agora().date())
+
+
+@app.post("/inventario/{eid}", dependencies=[Depends(checar_csrf)])
+def inventario_salvar(request: Request, eid: int, unidade_id: str = Form(""), tipo: str = Form("outro"),
+                      nome: str = Form(""), marca: str = Form(""), modelo: str = Form(""),
+                      numero_serie: str = Form(""), ip: str = Form(""), mac: str = Form(""), porta: str = Form(""),
+                      local: str = Form(""), usuario: str = Form(""), senha: str = Form(""),
+                      remover_senha: str = Form(""), instalacao: str = Form(""), garantia_ate: str = Form(""),
+                      observacoes: str = Form(""), u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    eq = _equip(db, eid)
+    f = _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
+                    instalacao, garantia_ate, observacoes)
+    try:
+        avs = _preencher_equip(eq, db, f)
+    except inventario.DadoInvalido as e:
+        db.rollback()
+        flash(request, str(e), "erro")
+        return voltar(f"/inventario/{eid}#editar")
+    if senha:
+        eq.senha_cifrada = inventario.cifrar(senha)
+        db.add(AcessoSenha(equipamento_id=eq.id, usuario_id=u.id, acao="alterar", ip=_ip(request)))
+    elif remover_senha and eq.senha_cifrada:
+        eq.senha_cifrada = None
+        db.add(AcessoSenha(equipamento_id=eq.id, usuario_id=u.id, acao="remover", ip=_ip(request)))
+    db.commit()
+    flash(request, "Equipamento atualizado." + (" Atenção: " + " ".join(avs) if avs else ""),
+          "erro" if avs else "ok")
+    return voltar(f"/inventario/{eid}")
+
+
+@app.post("/inventario/{eid}/senha", dependencies=[Depends(checar_csrf)])
+def inventario_ver_senha(request: Request, eid: int, u: Usuario = Depends(so_equipe),
+                         db: Session = Depends(get_db)):
+    eq = db.get(Equipamento, eid)
+    if not eq or not eq.senha_cifrada:
+        raise HTTPException(404, "Sem senha cadastrada.")
+    try:
+        senha = inventario.decifrar(eq.senha_cifrada)
+    except inventario.DadoInvalido as e:
+        return Response(json.dumps({"erro": str(e)}), media_type="application/json", status_code=409)
+    db.add(AcessoSenha(equipamento_id=eq.id, usuario_id=u.id, acao="ver", ip=_ip(request)))
+    db.commit()
+    return Response(json.dumps({"senha": senha}), media_type="application/json",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.post("/inventario/{eid}/alternar", dependencies=[Depends(checar_csrf)])
+def inventario_alternar(request: Request, eid: int, u: Usuario = Depends(so_equipe),
+                        db: Session = Depends(get_db)):
+    eq = _equip(db, eid)
+    eq.ativo = not eq.ativo
+    db.commit()
+    flash(request, f"Equipamento {'reativado' if eq.ativo else 'marcado como fora de uso'}.")
+    return voltar(f"/inventario/{eid}")
+
+
+@app.post("/inventario/{eid}/excluir", dependencies=[Depends(checar_csrf)])
+def inventario_excluir(request: Request, eid: int, u: Usuario = Depends(so_admin),
+                       db: Session = Depends(get_db)):
+    eq = _equip(db, eid)
+    nome = eq.nome
+    db.delete(eq)
+    db.commit()
+    flash(request, f"Equipamento {nome} excluído.")
+    return voltar("/inventario")
 
 
 # ---------------------------------------------------------------- página pública (sem login)
