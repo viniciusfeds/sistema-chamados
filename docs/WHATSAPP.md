@@ -17,7 +17,7 @@ Quem recebe:
 | **Número de celular exclusivo** | Um chip que **não** esteja em uso no app do WhatsApp nem no WhatsApp Business. Ele precisa receber SMS ou ligação uma vez, para a verificação. |
 | **Conta empresarial na Meta** | Criada em business.facebook.com com o CNPJ da TecnosIT. A **verificação da empresa** aumenta os limites de envio. |
 | **Forma de pagamento** | A Meta cobra por mensagem entregue. A categoria *Utilidade* custa poucos centavos por mensagem no Brasil. |
-| **Endereço público do sistema** | Necessário para que os links das mensagens abram fora da rede local. Defina `URL_PUBLICA` no `.env`. |
+| **Endereço público do sistema** | Necessário para que os links das mensagens abram fora da rede local. Preencha em *Administração → Configurações → Empresa e sistema*. |
 
 ## 2. Passo a passo na Meta
 
