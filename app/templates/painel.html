@@ -80,7 +80,7 @@
     <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
     {% if u.equipe %}<td data-l="Cliente">{{ c.unidade.cliente.nome_curto or c.unidade.cliente.nome }}</td>{% endif %}
     <td data-l="Unidade">{{ c.unidade.nome_curto }}</td>
-    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% endif %}{% if c.anexos %} <span class="tag cinza" title="Fotos">📷 {{ c.anexos|length }}</span>{% endif %}
+    <td data-l="Assunto">{{ c.assunto }}{% if c.origem == 'link' %} <span class="tag" title="Aberto pelo link público por {{ c.solicitante_nome }}">via link</span>{% elif c.origem == 'monitor' %} <span class="tag alerta" title="Aberto pelo monitoramento">automático</span>{% endif %}{% if c.anexos %} <span class="tag cinza" title="Fotos">📷 {{ c.anexos|length }}</span>{% endif %}
       {% if c.tipos %}<div class="tags-linha">{{ tags(c.tipos) }}</div>{% endif %}</td>
     <td data-l="Prioridade">{{ prio(c.prioridade_ok) }}</td>
     {% if u.equipe %}<td data-l="Técnico">{{ c.tecnico.nome if c.tecnico else '—' }}</td>{% endif %}

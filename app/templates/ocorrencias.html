@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selo, abas_inventario with context %}
+{% block titulo %}Ocorrências{% endblock %}
+{% block conteudo %}
+{% if f.status == 'abertas' %}<meta http-equiv="refresh" content="60">{% endif %}
+{{ abas_inventario('ocorrencias') }}
+<div class="cab">
+  <div>
+    <h1>Ocorrências</h1>
+    <div class="muted">Quedas dos equipamentos monitorados. Cada queda abre um chamado automático e alerta a equipe.</div>
+  </div>
+  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+    <div><label for="status">Situação</label>
+      <select id="status" name="status" onchange="this.form.submit()">
+        <option value="abertas" {{ 'selected' if f.status == 'abertas' }}>Abertas (offline agora)</option>
+        <option value="normalizada" {{ 'selected' if f.status == 'normalizada' }}>Normalizadas</option>
+        <option value="encerrada" {{ 'selected' if f.status == 'encerrada' }}>Encerradas</option>
+        <option value="todas" {{ 'selected' if f.status == 'todas' }}>Todas</option></select></div>
+    <div><label for="cliente">Cliente</label>
+      <select id="cliente" name="cliente" onchange="this.form.submit()"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+  </form>
+</div>
+
+{% if not wa_ok %}
+<div class="flash aviso">O WhatsApp automático ainda não está configurado: os alertas aparecem aqui e no topo do sistema, mas não são enviados. <a href="/admin/whatsapp">Configurar</a></div>
+{% elif not destinatarios %}
+<div class="flash erro">Ninguém da equipe está recebendo os alertas no WhatsApp. Cada técnico ativa em <a href="/conta#alertas">Minha conta</a>.</div>
+{% else %}
+<p class="muted" style="margin-top:-6px">Alertas no WhatsApp para: {% for n, t in destinatarios %}<b>{{ n }}</b>{{ ', ' if not loop.last }}{% endfor %}.</p>
+{% endif %}
+
+{% if lista %}
+<div class="oc-lista">
+{% for oc in lista %}
+{% set e = oc.equipamento %}
+<div class="oc oc-{{ oc.status }}">
+  <div class="oc-topo">
+    <div>
+      <span class="oc-st">{{ STATUS_OCORRENCIA[oc.status] }}</span>
+      <a href="/inventario/{{ e.id }}" class="oc-nome">{{ e.nome }}</a>
+      <span class="muted">· {{ e.tipo_rotulo }} · {{ e.unidade.nome }}</span>
+    </div>
+    <div class="oc-tempo">
+      {% if oc.aberta %}<b>offline há {{ tempo(oc.inicio) }}</b>
+      {% else %}fora por <b>{{ tempo(oc.inicio, oc.fim) }}</b>{% endif %}
+    </div>
+  </div>
+  <div class="oc-info">
+    <span>Início: {{ oc.inicio|local }}</span>
+    {% if oc.fim %}<span>Fim: {{ oc.fim|local }}</span>{% endif %}
+    {% if oc.motivo %}<span>Motivo: {{ oc.motivo }}</span>{% endif %}
+    {% if oc.quedas and oc.quedas > 1 %}<span class="tag alerta">caiu {{ oc.quedas }} vezes</span>{% endif %}
+    {% if e.alvo_monitor %}<span class="mono">{{ e.alvo_monitor[0] }}:{{ e.alvo_monitor[1] }}</span>{% endif %}
+  </div>
+  <div class="oc-acoes">
+    {% if oc.chamado %}
+    <a class="btn peq sec" href="/chamados/{{ oc.chamado.numero }}">Chamado {{ oc.chamado.numero_fmt }}</a> {{ selo(status_geral(oc.chamado)) }}
+    {% endif %}
+    {% if oc.assumida_por %}
+    <span class="oc-resp">👷 {{ oc.assumida_por.nome }} <span class="muted">· {{ oc.assumida_em|local }}</span></span>
+    {% elif oc.aberta %}
+    <form method="post" action="/inventario/ocorrencias/{{ oc.id }}/assumir"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn peq">Assumir ocorrência</button></form>
+    {% endif %}
+    {% if oc.aberta %}
+    <details class="oc-encerrar"><summary>Encerrar</summary>
+      <form method="post" action="/inventario/ocorrencias/{{ oc.id }}/encerrar" style="margin-top:6px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input name="observacao" placeholder="Motivo, ex.: unidade fechada / alarme falso" maxlength="300" style="margin-bottom:6px">
+        <button class="btn peq perigo">Encerrar ocorrência</button></form>
+    </details>
+    {% endif %}
+  </div>
+  {% if oc.observacao %}<div class="dica">{{ oc.observacao }}</div>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card vazio">
+  {% if f.status == 'abertas' %}✔ Nenhum equipamento offline no momento.{% else %}Nenhuma ocorrência encontrada.{% endif %}
+</div>
+{% endif %}
+{% endblock %}

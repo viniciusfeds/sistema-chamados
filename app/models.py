@@ -69,6 +69,8 @@ class Usuario(Base):
     cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"), nullable=True)  # gestor
     unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id"), nullable=True)  # unidade
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    telefone: Mapped[str | None] = mapped_column(String(20), nullable=True)        # WhatsApp (só dígitos, com 55)
+    recebe_alertas: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # alertas de monitoramento
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     unidade = relationship("Unidade")
     cliente = relationship("Cliente")
@@ -405,3 +407,31 @@ class TipoChamado(Base):
     cor: Mapped[str] = mapped_column(String(7), default="#5F6B7A")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     ordem: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ------------------------------------------------------------------ ocorrências de monitoramento (v1.5)
+STATUS_OCORRENCIA = {"aberta": "Offline", "normalizada": "Normalizada", "encerrada": "Encerrada"}
+
+
+class Ocorrencia(Base):
+    """Período em que um equipamento monitorado ficou offline. Gera chamado automático e alerta à equipe."""
+    __tablename__ = "ocorrencias"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    equipamento_id: Mapped[int] = mapped_column(ForeignKey("equipamentos.id", ondelete="CASCADE"), index=True)
+    chamado_id: Mapped[int | None] = mapped_column(ForeignKey("chamados.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default="aberta", index=True)   # aberta/normalizada/encerrada
+    inicio: Mapped[datetime] = mapped_column(DateTime)                 # UTC
+    fim: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quedas: Mapped[int] = mapped_column(Integer, default=1)            # quantas vezes caiu nesta ocorrência
+    assumida_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    assumida_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    equipamento = relationship("Equipamento")
+    chamado = relationship("Chamado")
+    assumida_por = relationship("Usuario")
+
+    @property
+    def aberta(self):
+        return self.status == "aberta"

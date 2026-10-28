@@ -27,7 +27,7 @@
   <details style="margin-top:10px"><summary>Modelos que precisam estar aprovados na Meta</summary>
     <p class="dica">Categoria <b>Utilidade</b>, idioma <b>Português (BR)</b>. Copie o texto exatamente como está.</p>
     {% for ev, txt in textos.items() %}
-    <div style="margin:10px 0"><b>{{ nome_modelo(ev) }}</b> <span class="muted">· {{ EVENTOS_AVISO[ev] }}</span>
+    <div style="margin:10px 0"><b>{{ nome_modelo(ev) }}</b> <span class="muted">· {{ EVENTOS_ENVIO[ev] }}{% if ev.startswith('alerta') %} · enviado à equipe TecnosIT{% endif %}</span>
       <textarea readonly style="min-height:110px;margin-top:4px" onclick="this.select()">{{ txt }}</textarea></div>
     {% endfor %}
   </details>
@@ -91,7 +91,7 @@
       <td data-l="Quando" class="muted">{{ e.criado_em.strftime('%d/%m %H:%M') if e.criado_em }} UTC</td>
       <td data-l="Ticket">{% if e.chamado %}<a class="num" href="/chamados/{{ e.chamado.numero }}">{{ e.chamado.numero_fmt }}</a>{% endif %}</td>
       <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
-      <td data-l="Evento">{{ EVENTOS_AVISO.get(e.evento, e.evento) }}</td>
+      <td data-l="Evento">{{ EVENTOS_ENVIO.get(e.evento, e.evento) }}</td>
       <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
         {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>
       <td>{% if e.status == 'falhou' %}<form method="post" action="/whatsapp/envios/{{ e.id }}/reenviar">

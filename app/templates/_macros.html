@@ -86,6 +86,7 @@
 {% macro abas_inventario(ativa) -%}
 <nav class="abas">
   <a href="/inventario/dashboard" class="{{ 'ativa' if ativa == 'dashboard' }}">Dashboard</a>
+  <a href="/inventario/ocorrencias" class="{{ 'ativa' if ativa == 'ocorrencias' }}">Ocorrências{% if alerta_oc and alerta_oc[0] %} <span class="badge-alerta">{{ alerta_oc[0] }}</span>{% endif %}</a>
   <a href="/inventario" class="{{ 'ativa' if ativa == 'lista' }}">Equipamentos</a>
   <a href="/inventario/novo" class="{{ 'ativa' if ativa == 'novo' }}">+ Novo</a>
 </nav>

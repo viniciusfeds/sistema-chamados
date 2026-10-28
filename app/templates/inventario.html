@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, status_monitor, abas_inventario %}
+{% from "_macros.html" import select_unidades, status_monitor, abas_inventario with context %}
 {% block titulo %}Inventário{% endblock %}
 {% block conteudo %}
 {{ abas_inventario('lista') }}

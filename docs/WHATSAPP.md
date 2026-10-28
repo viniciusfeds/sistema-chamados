@@ -31,7 +31,7 @@ Quem recebe:
    - Clique em **Gerar token**, escolha o app e marque as permissões `whatsapp_business_messaging`, `whatsapp_business_management` e `business_management`. Em validade, escolha **Nunca**.
    - O token gerado vai no `WHATSAPP_TOKEN`. Guarde-o com cuidado, porque ele dá acesso para enviar mensagens em nome da TecnosIT.
 6. **Pagamento**: em *WhatsApp Manager → Visão geral*, adicione uma forma de pagamento.
-7. **Modelos de mensagem**: em *WhatsApp Manager → Modelos de mensagem → Criar modelo*, crie os 3 modelos abaixo com:
+7. **Modelos de mensagem**: em *WhatsApp Manager → Modelos de mensagem → Criar modelo*, crie os 5 modelos abaixo com:
    - categoria **Utilidade**;
    - idioma **Português (BR)**;
    - o nome e o texto **exatamente** como estão aqui.
@@ -45,6 +45,8 @@ Quem recebe:
    Prioridade: {{4}}
 
    Acompanhe o atendimento: {{5}}
+
+   — TecnosIT
    ```
    Exemplos para a análise: `0010` · `SkyFit Carrão` · `Caixa de som da sala de dança sem áudio` · `Alta` · `https://chamados.tecnosit.com.br/acompanhar/abc123`
 
@@ -55,8 +57,10 @@ Quem recebe:
    Última ação: {{4}}
 
    Acompanhe: {{5}}
+
+   — TecnosIT
    ```
-   Exemplos: `0010` · `SkyFit Carrão` · `Em andamento` · `25/10/2026 · 15:00 – Técnico a caminho da unidade` · `https://chamados.tecnosit.com.br/acompanhar/abc123`
+   Exemplos para a análise: `0010` · `SkyFit Carrão` · `Em andamento` · `25/10/2026 · 15:00 – Técnico a caminho da unidade` · `https://chamados.tecnosit.com.br/acompanhar/abc123`
 
    **`chamado_concluido`**
    ```
@@ -64,10 +68,37 @@ Quem recebe:
    {{3}}
 
    Veja o relatório completo: {{4}}
-   ```
-   Exemplos: `0010` · `SkyFit Carrão` · `Manutenção realizada no local. Caixa de som funcionando normalmente.` · `https://chamados.tecnosit.com.br/acompanhar/abc123`
 
-   A aprovação costuma levar de minutos a algumas horas. Os avisos só funcionam depois que os 3 modelos estiverem **Ativos**.
+   — TecnosIT
+   ```
+   Exemplos para a análise: `0010` · `SkyFit Carrão` · `Manutenção realizada no local. Caixa de som funcionando normalmente.` · `https://chamados.tecnosit.com.br/acompanhar/abc123`
+
+   **`alerta_equipamento_offline`** *(enviado à equipe TecnosIT)*
+   ```
+   ⚠️ Alerta de monitoramento: *{{1}}* em *{{2}}* está sem resposta desde {{3}}.
+   Motivo: {{4}}
+   Chamado *{{5}}* aberto automaticamente.
+
+   Detalhes: {{6}}
+
+   — TecnosIT
+   ```
+   Exemplos para a análise: `Catraca 01 e Catraca 02` · `SkyFit Cisper` · `28/10 19:19` · `Sem resposta (tempo esgotado)` · `0010` · `https://chamados.tecnosit.com.br/chamados/10`
+
+   **`alerta_equipamento_normalizado`** *(enviado à equipe TecnosIT)*
+   ```
+   ✅ Normalizado: *{{1}}* em *{{2}}* voltou a responder após {{3}} offline.
+   Chamado *{{4}}*.
+
+   Detalhes: {{5}}
+
+   — TecnosIT
+   ```
+   Exemplos para a análise: `Catraca 01` · `SkyFit Cisper` · `25 min` · `0010` · `https://chamados.tecnosit.com.br/chamados/10`
+
+   > A assinatura no final ("— TecnosIT") é obrigatória: a Meta recusa modelo que termina com variável. Se você criou os modelos da v1.2, exclua e recrie com estes textos.
+
+   A aprovação costuma levar de minutos a algumas horas. Os avisos só funcionam depois que os modelos estiverem **Ativos**.
 
 ## 3. Configurar o sistema
 

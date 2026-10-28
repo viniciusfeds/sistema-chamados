@@ -198,3 +198,29 @@ fieldset.monitor-box legend{padding:0 6px}
 .sub-lista li .gar{margin-left:auto}
 .gar-tit{font-size:.95rem;margin:10px 0 2px}
 .ok-tudo{color:#1E5E3A;font-weight:700;margin:4px 0}
+
+/* --- v1.5: ocorrências e alerta --- */
+.badge-alerta{display:inline-block;min-width:20px;text-align:center;background:#B3261E;color:#fff;font-size:.72rem;font-weight:800;
+  border-radius:999px;padding:1px 6px;margin-left:2px;vertical-align:1px}
+.alerta-oc{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#B3261E;color:#fff;
+  padding:10px 14px;border-radius:8px;margin-bottom:14px;font-weight:600}
+.alerta-oc[hidden]{display:none}
+.alerta-oc .btn{background:#fff;color:#B3261E;border-color:#fff}
+.alerta-oc .btn.sec{background:transparent;color:#fff}
+.alerta-oc>span:last-child{display:flex;gap:6px;flex-wrap:wrap}
+.oc-lista{display:flex;flex-direction:column;gap:10px}
+.oc{background:#fff;border:1px solid var(--linha);border-left:5px solid #8A94A3;border-radius:var(--raio);padding:12px 16px}
+.oc-aberta{border-left-color:#B3261E;background:#FFFBFA}
+.oc-normalizada{border-left-color:#1E7B45}
+.oc-topo{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.oc-st{display:inline-block;font-size:.72rem;font-weight:800;text-transform:uppercase;color:#fff;background:#8A94A3;border-radius:999px;padding:2px 9px;margin-right:6px;vertical-align:2px}
+.oc-aberta .oc-st{background:#B3261E}
+.oc-normalizada .oc-st{background:#1E7B45}
+.oc-nome{font-weight:800;font-size:1.05rem}
+.oc-tempo{color:var(--cinza)}
+.oc-aberta .oc-tempo b{color:#B3261E}
+.oc-info{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.88rem;color:var(--cinza);margin:6px 0}
+.oc-acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.oc-acoes form{margin:0}
+.oc-resp{font-weight:700}
+details.oc-encerrar{margin:0;padding:3px 10px}

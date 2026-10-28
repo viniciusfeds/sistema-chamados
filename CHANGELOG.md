@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.5.0 — 2026-10-28
+- **Ocorrências** (nova aba em *Inventário*): quando um equipamento monitorado cai, o sistema abre a ocorrência e um **chamado automático** (prioridade Alta, tag pelo tipo do equipamento, equipamento vinculado)
+- **Alerta à equipe no WhatsApp** (modelos `alerta_equipamento_offline` e `alerta_equipamento_normalizado`): cada técnico informa o WhatsApp e ativa os alertas em *Minha conta* (ou o admin, em *Usuários*)
+- **Alerta no sistema**: faixa vermelha no topo de todas as telas da equipe, contador no menu *Inventário*, aviso sonoro e notificação do navegador quando surge uma nova queda
+- **Assumir ocorrência**: registra quem foi acionado, define o técnico e coloca o chamado em andamento
+- Quedas na mesma unidade em até 15 min viram **um único chamado e um único alerta** (ex.: internet da unidade fora); se cair de novo até 30 min depois de voltar, a mesma ocorrência é reaberta
+- Ao voltar, a ocorrência é normalizada e a equipe recebe o aviso; se ninguém mexeu no chamado, ele **fecha sozinho** ("Normalizado sem intervenção técnica")
+- Encerrar ocorrência manualmente (alarme falso, unidade fechada); desligar o monitoramento ou marcar o equipamento como fora de uso encerra as ocorrências abertas
+- Chamados automáticos aparecem com a etiqueta **automático**; por padrão o cliente não recebe aviso deles (`MONITOR_AVISAR_CLIENTE=1` para avisar)
+- **Correção**: os textos dos modelos de WhatsApp agora terminam com a assinatura da empresa (a Meta recusa modelo que termina com variável). Quem já cadastrou os modelos da v1.2 deve recriá-los com o texto novo.
+
 ## 1.4.0 — 2026-10-28
 - **Tipos de chamado (tags)**: CFTV, Controle de acesso, Rede / Internet, Áudio e vídeo, Alarme, Manutenção preventiva, Instalação e Suporte / Configuração já vêm cadastrados; o administrador cria, renomeia, muda a cor e desativa em *Administração → Tipos de chamado*
 - Um chamado pode ter vários tipos: escolha na abertura (equipe) ou no quadro de classificação do chamado; as tags aparecem no painel e no chamado

@@ -52,6 +52,13 @@ MONITOR_ATIVO = os.environ.get("MONITOR_ATIVO", "1") == "1"
 MONITOR_INTERVALO_MIN = max(1, int(os.environ.get("MONITOR_INTERVALO_MIN", "5")))
 MONITOR_FALHAS = max(1, int(os.environ.get("MONITOR_FALHAS", "2")))   # falhas seguidas para ficar offline
 MONITOR_TIMEOUT = float(os.environ.get("MONITOR_TIMEOUT", "4"))
+# Ocorrências (v1.5): chamado automático quando um equipamento monitorado cai
+MONITOR_ABRIR_CHAMADO = os.environ.get("MONITOR_ABRIR_CHAMADO", "1") == "1"
+MONITOR_PRIORIDADE = os.environ.get("MONITOR_PRIORIDADE", "alta")
+MONITOR_AGRUPAR_MIN = int(os.environ.get("MONITOR_AGRUPAR_MIN", "15"))    # quedas na mesma unidade viram 1 chamado
+MONITOR_REABRIR_MIN = int(os.environ.get("MONITOR_REABRIR_MIN", "30"))    # caiu de novo logo após voltar: mesma ocorrência
+MONITOR_FECHAR_AO_VOLTAR = os.environ.get("MONITOR_FECHAR_AO_VOLTAR", "1") == "1"  # se ninguém mexeu no chamado
+MONITOR_AVISAR_CLIENTE = os.environ.get("MONITOR_AVISAR_CLIENTE", "0") == "1"      # avisos normais ao cliente
 
 # Fotos
 FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
@@ -76,6 +83,8 @@ WHATSAPP_IDIOMA = os.environ.get("WHATSAPP_IDIOMA", "pt_BR")
 WHATSAPP_MODELO_ABERTO = os.environ.get("WHATSAPP_MODELO_ABERTO", "chamado_aberto")
 WHATSAPP_MODELO_ATUALIZADO = os.environ.get("WHATSAPP_MODELO_ATUALIZADO", "chamado_atualizado")
 WHATSAPP_MODELO_CONCLUIDO = os.environ.get("WHATSAPP_MODELO_CONCLUIDO", "chamado_concluido")
+WHATSAPP_MODELO_ALERTA_OFF = os.environ.get("WHATSAPP_MODELO_ALERTA_OFF", "alerta_equipamento_offline")
+WHATSAPP_MODELO_ALERTA_ON = os.environ.get("WHATSAPP_MODELO_ALERTA_ON", "alerta_equipamento_normalizado")
 WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")   # webhook (opcional)
 WHATSAPP_APP_SECRET = os.environ.get("WHATSAPP_APP_SECRET", "")       # webhook (opcional)
 

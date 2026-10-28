@@ -15,7 +15,7 @@
     <a href="/" class="{{ 'ativo' if request.url.path == '/' }}">Painel</a>
     <a href="/chamados/novo" class="{{ 'ativo' if request.url.path == '/chamados/novo' }}">Abrir chamado</a>
     <a href="/relatorio" class="{{ 'ativo' if request.url.path == '/relatorio' }}">Relatório</a>
-    {% if u.equipe %}<a href="/inventario" class="{{ 'ativo' if request.url.path.startswith('/inventario') }}">Inventário</a>{% endif %}
+    {% if u.equipe %}<a href="/inventario" class="{{ 'ativo' if request.url.path.startswith('/inventario') }}">Inventário{% if alerta_oc and alerta_oc[0] %} <span class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</span>{% endif %}</a>{% endif %}
     {% if u.papel == 'admin' %}<a href="/admin" class="{{ 'ativo' if request.url.path == '/admin' }}">Administração</a>{% endif %}
     <a href="/conta" class="{{ 'ativo' if request.url.path == '/conta' }}">Minha conta</a>
     <a href="/sair">Sair</a>
@@ -24,9 +24,55 @@
 </div></header>
 {% endif %}
 <main>
+{% if u and u.equipe %}
+<div class="alerta-oc" id="alerta-oc" {{ 'hidden' if not (alerta_oc and alerta_oc[0]) }}>
+  <span>⚠ <b id="alerta-oc-n">{{ alerta_oc[0] if alerta_oc else 0 }}</b> equipamento(s) offline
+    <span id="alerta-oc-sem">{% if alerta_oc and alerta_oc[1] %}· {{ alerta_oc[1] }} sem responsável{% endif %}</span></span>
+  <span><a class="btn peq" href="/inventario/ocorrencias">Ver ocorrências</a>
+    <button type="button" class="btn peq sec" id="btn-notif" hidden onclick="ativarNotif()">Ativar notificações</button></span>
+</div>
+{% endif %}
 {% if flash %}<div class="flash {{ flash.tipo }}">{{ flash.msg }}</div>{% endif %}
 {% block conteudo %}{% endblock %}
 <footer class="rodape-versao">{{ config.SISTEMA_NOME }} · por {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
 </main>
+{% if u and u.equipe %}
+<script>
+(function () {
+  var CHAVE = 'nexus_oc_n', titulo = document.title;
+  function ler() { try { return parseInt(sessionStorage.getItem(CHAVE) || '-1', 10); } catch (e) { return -1; } }
+  function gravar(n) { try { sessionStorage.setItem(CHAVE, String(n)); } catch (e) {} }
+  function bipe() {
+    try { var c = new (window.AudioContext || window.webkitAudioContext)(), o = c.createOscillator(), g = c.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(c.destination); g.gain.value = 0.15;
+      o.start(); setTimeout(function () { o.frequency.value = 660; }, 180); setTimeout(function () { o.stop(); c.close(); }, 420);
+    } catch (e) {}
+  }
+  function aplicar(d, inicial) {
+    var box = document.getElementById('alerta-oc'), ant = ler();
+    box.hidden = !d.abertas;
+    document.getElementById('alerta-oc-n').textContent = d.abertas;
+    document.getElementById('alerta-oc-sem').textContent = d.sem_responsavel ? '· ' + d.sem_responsavel + ' sem responsável' : '';
+    var b = document.getElementById('badge-oc'); if (b) b.textContent = d.abertas;
+    document.title = (d.abertas ? '(' + d.abertas + ' offline) ' : '') + titulo;
+    if (!inicial && ant >= 0 && d.abertas > ant) {
+      bipe();
+      if (window.Notification && Notification.permission === 'granted')
+        new Notification('Equipamento offline', {body: d.abertas + ' ocorrência(s) aberta(s) no {{ config.SISTEMA_NOME }}', tag: 'nexus-oc'});
+    }
+    gravar(d.abertas);
+  }
+  window.ativarNotif = function () {
+    Notification.requestPermission().then(function () { document.getElementById('btn-notif').hidden = true; });
+  };
+  if (window.Notification && Notification.permission === 'default') document.getElementById('btn-notif').hidden = false;
+  aplicar({abertas: {{ alerta_oc[0] if alerta_oc else 0 }}, sem_responsavel: {{ alerta_oc[1] if alerta_oc else 0 }}}, ler() < 0);
+  setInterval(function () {
+    fetch('/inventario/ocorrencias/contagem', {credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (d) { if (d) aplicar(d, false); }).catch(function () {});
+  }, 60000);
+})();
+</script>
+{% endif %}
 </body>
 </html>

@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from . import config
+from . import config, ocorrencias
 from .db import SessionLocal
 from .models import Equipamento, EventoMonitor
 
@@ -44,7 +44,8 @@ def testar(host: str, porta: int, timeout: float | None = None):
 
 
 def registrar(db, eq: Equipamento, ok: bool, ms, erro, agora=None):
-    """Aplica o resultado de um teste ao equipamento (com tolerância de falhas)."""
+    """Aplica o resultado de um teste ao equipamento (com tolerância de falhas).
+    Retorna o novo status quando ele muda ("online"/"offline"), senão None."""
     agora = agora or _agora()
     eq.monitor_ultima = agora
     if ok:
@@ -55,9 +56,13 @@ def registrar(db, eq: Equipamento, ok: bool, ms, erro, agora=None):
         eq.monitor_ms, eq.monitor_erro = None, erro
         novo = "offline" if eq.monitor_falhas >= config.MONITOR_FALHAS else eq.monitor_status
     if novo and novo != eq.monitor_status:
+        anterior = eq.monitor_status
         eq.monitor_status, eq.monitor_desde = novo, agora
         db.add(EventoMonitor(equipamento_id=eq.id, status=novo, criado_em=agora,
                              detalhe=None if ok else erro))
+        # primeiro teste "online" não é um retorno; offline sempre conta
+        return novo if (novo == "offline" or anterior == "offline") else None
+    return None
 
 
 def verificar_todos():
@@ -69,9 +74,13 @@ def verificar_todos():
         with ThreadPoolExecutor(max_workers=min(16, len(alvos))) as ex:
             resultados = list(ex.map(lambda a: testar(*a[1]), alvos))
         agora = _agora()
+        caidos, voltaram = [], []
         for (eq, _), (ok, ms, erro) in zip(alvos, resultados):
-            registrar(db, eq, ok, ms, erro, agora)
+            mud = registrar(db, eq, ok, ms, erro, agora)
+            (caidos if mud == "offline" else voltaram if mud == "online" else []).append(eq)
+        alertas = ocorrencias.processar(db, caidos, voltaram, agora) if caidos or voltaram else []
         db.commit()
+        ocorrencias.enviar_alertas(db, alertas)
         return len(alvos)
 
 
@@ -81,8 +90,10 @@ def verificar_um(db, eq: Equipamento):
     ok, ms, erro = testar(*eq.alvo_monitor)
     if not ok:  # teste manual confirma na hora, sem esperar a tolerância
         eq.monitor_falhas = max(eq.monitor_falhas or 0, config.MONITOR_FALHAS - 1)
-    registrar(db, eq, ok, ms, erro)
-    return ok, ms, erro
+    mud = registrar(db, eq, ok, ms, erro)
+    alertas = ocorrencias.processar(db, [eq] if mud == "offline" else [], [eq] if mud == "online" else []) \
+        if mud else []
+    return ok, ms, erro, alertas
 
 
 def _pegar_trava() -> bool:

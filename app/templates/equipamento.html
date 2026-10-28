@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import select_unidades, selo, status_monitor, abas_inventario %}
+{% from "_macros.html" import select_unidades, selo, status_monitor, abas_inventario with context %}
 {% block titulo %}{{ eq.nome if eq else 'Novo equipamento' }}{% endblock %}
 
 {% macro formulario(eq, v) -%}

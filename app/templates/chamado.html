@@ -48,7 +48,7 @@
     <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
     <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
     {% if ch.solicitante_nome %}
-    <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% endif %}</dd>
+    <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% elif ch.origem == 'monitor' %} <span class="tag alerta">automático</span>{% endif %}</dd>
     {% if u.equipe and (ch.solicitante_contato or ch.solicitante_email) %}
     <dt>Contato</dt><dd>{% if ch.solicitante_contato %}{% set fone = ch.solicitante_contato|replace(' ','')|replace('(','')|replace(')','')|replace('-','')|replace('+','') %}
       <a href="https://wa.me/{{ '55' ~ fone if fone|length <= 11 else fone }}" target="_blank" rel="noopener">{{ ch.solicitante_contato }}</a>{% endif %}
@@ -175,7 +175,7 @@
     <thead><tr><th>Evento</th><th>Para</th><th>Status</th><th></th></tr></thead>
     <tbody>
     {% for e in ch.envios|reverse %}
-    <tr><td data-l="Evento">{{ EVENTOS_AVISO.get(e.evento, e.evento) }}</td>
+    <tr><td data-l="Evento">{{ EVENTOS_ENVIO.get(e.evento, e.evento) }}</td>
       <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
       <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
         {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>

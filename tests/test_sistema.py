@@ -888,3 +888,143 @@ def test_monitor_conexao_real_e_dashboard():
             assert not e.monitorar and e.monitor_status is None
     finally:
         srv.close()
+
+
+# ------------------------------------------------------------------ ocorrências (v1.5)
+def _simular(eqs_ids, ok, erro="Sem resposta (tempo esgotado)"):
+    """Aplica um ciclo de monitoramento com o resultado dado e processa as ocorrências."""
+    from app import config, monitor, ocorrencias
+    with SessionLocal() as db:
+        caidos, voltaram = [], []
+        for eid in eqs_ids:
+            eq = db.get(Equipamento, eid)
+            for _ in range(1 if ok else config.MONITOR_FALHAS):
+                mud = monitor.registrar(db, eq, ok, 10 if ok else None, None if ok else erro)
+                if mud == "offline":
+                    caidos.append(eq)
+                elif mud == "online":
+                    voltaram.append(eq)
+        alertas = ocorrencias.processar(db, caidos, voltaram)
+        db.commit()
+        ocorrencias.enviar_alertas(db, alertas)
+
+
+def _chamado_da_ocorrencia(eid):
+    from app.models import Ocorrencia
+    with SessionLocal() as db:
+        oc = db.scalars(select(Ocorrencia).where(Ocorrencia.equipamento_id == eid).order_by(Ocorrencia.id.desc())).first()
+        return (oc.id, oc.status, oc.chamado.numero if oc.chamado else None, oc.quedas) if oc else None
+
+
+def test_ocorrencia_fluxo_completo(wa):
+    from app import regras
+    enviados, _ = wa
+    c = entrar("tec@t.com")
+    tok = _csrf(c.get("/conta").text)
+    assert "Informe seu WhatsApp" in c.post("/conta/alertas", data={"recebe_alertas": "1", "csrf": tok}).text
+    r = c.post("/conta/alertas", data={"telefone": "(11) 95555-4444", "recebe_alertas": "1", "csrf": tok})
+    assert "Alertas de monitoramento ativados" in r.text
+    with SessionLocal() as db:
+        cam = Equipamento(unidade_id=IDS["torre"], nome="Câmera Portaria", tipo="camera", monitorar=True,
+                          ip_externo="torre.ddns.net", monitor_porta=554)
+        dvr = Equipamento(unidade_id=IDS["torre"], nome="DVR Torre", tipo="dvr", monitorar=True,
+                          ip_externo="torre.ddns.net", monitor_porta=37777)
+        db.add_all([cam, dvr]); db.commit(); cam, dvr = cam.id, dvr.id
+    _simular([cam, dvr], True)          # primeiro teste online: não gera nada
+    assert _chamado_da_ocorrencia(cam) is None and not enviados
+    # internet da unidade caiu: os dois juntos -> 1 chamado, 1 alerta
+    _simular([cam, dvr], False)
+    oc_cam, oc_dvr = _chamado_da_ocorrencia(cam), _chamado_da_ocorrencia(dvr)
+    assert oc_cam[1] == oc_dvr[1] == "aberta" and oc_cam[2] == oc_dvr[2] and oc_cam[2]
+    num = oc_cam[2]
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert ch.origem == "monitor" and ch.prioridade == "alta"
+        assert {e.nome for e in ch.equipamentos} == {"Câmera Portaria", "DVR Torre"}
+        assert [t.nome for t in ch.tipos] == ["CFTV"] and regras.status_geral(ch) == "aberto"
+    alertas = [p for p in enviados if p["template"]["name"] == "alerta_equipamento_offline"]
+    assert len(alertas) == 1 and alertas[0]["to"] == "5511955554444"
+    params = [x["text"] for x in alertas[0]["template"]["components"][0]["parameters"]]
+    assert len(params) == 6 and "Câmera Portaria e DVR Torre" == params[0] and params[4] == f"{num:04d}"
+    # alerta no topo e contagem
+    r = c.get("/")
+    assert 'id="alerta-oc"' in r.text and "equipamento(s) offline" in r.text
+    assert c.get("/inventario/ocorrencias/contagem").json()["abertas"] >= 2
+    r = c.get("/inventario/ocorrencias")
+    assert "Câmera Portaria" in r.text and "Assumir ocorrência" in r.text and f"Chamado {num:04d}" in r.text
+    assert entrar("gestor@t.com").get("/inventario/ocorrencias").status_code == 403
+    # um volta: chamado continua aberto (o outro ainda está fora)
+    _simular([cam], True)
+    assert _chamado_da_ocorrencia(cam)[1] == "normalizada"
+    with SessionLocal() as db:
+        assert regras.status_geral(db.scalar(select(Chamado).where(Chamado.numero == num))) == "aberto"
+    # o outro volta: ninguém mexeu -> chamado fecha sozinho
+    _simular([dvr], True)
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert regras.status_geral(ch) == "concluido"
+        assert any("Normalizado sem intervenção" in a.descricao for a in ch.acoes)
+    assert len([p for p in enviados if p["template"]["name"] == "alerta_equipamento_normalizado"]) == 2
+    # caiu de novo logo depois: reabre a mesma ocorrência e o mesmo chamado
+    _simular([cam], False)
+    oc = _chamado_da_ocorrencia(cam)
+    assert oc[0] == oc_cam[0] and oc[1] == "aberta" and oc[2] == num and oc[3] == 2
+    with SessionLocal() as db:
+        assert regras.status_geral(db.scalar(select(Chamado).where(Chamado.numero == num))) == "aberto"
+    # técnico assume: chamado em andamento, técnico definido
+    r = c.post(f"/inventario/ocorrencias/{oc[0]}/assumir", data={"csrf": _csrf(c.get('/inventario/ocorrencias').text)})
+    assert "Você assumiu" in r.text
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert regras.status_geral(ch) == "andamento" and ch.tecnico.nome == "Tec"
+    # volta: como a equipe mexeu, o chamado NÃO fecha sozinho
+    _simular([cam], True)
+    with SessionLocal() as db:
+        assert regras.status_geral(db.scalar(select(Chamado).where(Chamado.numero == num))) == "andamento"
+    assert "automático" in c.get("/").text
+
+
+def test_ocorrencia_encerrar_e_desligar_monitoramento():
+    c = entrar("tec@t.com")
+    with SessionLocal() as db:
+        eq = Equipamento(unidade_id=IDS["carrao"], nome="Switch Carrão", tipo="switch", monitorar=True,
+                         ip="10.0.0.2", monitor_endereco="interno", monitor_porta=80)
+        eq2 = Equipamento(unidade_id=IDS["carrao"], nome="Roteador Carrão", tipo="roteador", monitorar=True,
+                          ip="10.0.0.1", monitor_endereco="interno", monitor_porta=80)
+        db.add_all([eq, eq2]); db.commit(); eid, eid2 = eq.id, eq2.id
+    _simular([eid], False)
+    oid = _chamado_da_ocorrencia(eid)[0]
+    with SessionLocal() as db:
+        ch = db.get(Equipamento, eid).chamados[0]
+        assert [t.nome for t in ch.tipos] == ["Rede / Internet"]
+    tok = _csrf(c.get("/inventario/ocorrencias").text)
+    r = c.post(f"/inventario/ocorrencias/{oid}/encerrar", data={"observacao": "Unidade fechada", "csrf": tok})
+    assert "Ocorrência encerrada" in r.text and _chamado_da_ocorrencia(eid)[1] == "encerrada"
+    # desligar o monitoramento encerra a ocorrência aberta
+    _simular([eid2], False)
+    assert _chamado_da_ocorrencia(eid2)[1] == "aberta"
+    c.post(f"/inventario/{eid2}", data={"unidade_id": IDS["carrao"], "tipo": "roteador", "nome": "Roteador Carrão",
+                                        "ip": "10.0.0.1", "csrf": tok})
+    assert _chamado_da_ocorrencia(eid2)[1] == "encerrada"
+
+
+def test_admin_alertas_usuario_e_modelos_meta():
+    from app import whatsapp
+    a = entrar("admin@t.com")
+    tok = _csrf(a.get("/admin").text)
+    with SessionLocal() as db:
+        adm = db.scalar(select(Usuario).where(Usuario.email == "admin@t.com")).id
+        unid = db.scalar(select(Usuario).where(Usuario.email == "carrao@t.com")).id
+    r = a.post(f"/admin/usuarios/{adm}", data={"operacao": "alertas", "telefone": "11 97777-6666",
+                                               "recebe_alertas": "1", "csrf": tok})
+    assert "Alertas de Admin atualizados" in r.text and "+5511977776666" in r.text
+    a.post(f"/admin/usuarios/{unid}", data={"operacao": "alertas", "telefone": "11 97777-1111",
+                                            "recebe_alertas": "1", "csrf": tok})
+    with SessionLocal() as db:
+        assert not db.get(Usuario, unid).recebe_alertas      # usuário de unidade não recebe alerta da equipe
+        nomes = [n for n, _ in whatsapp.destinatarios_equipe(db)]
+        assert "Admin" in nomes and "Recepção Carrão" not in nomes
+    # a Meta não aceita modelo que termine ou comece com variável
+    for txt in whatsapp.TEXTOS_MODELOS.values():
+        assert not txt.rstrip().endswith("}}") and not txt.lstrip().startswith("{{")
+    assert "alerta_equipamento_offline" in a.get("/admin/whatsapp").text

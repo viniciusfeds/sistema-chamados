@@ -27,7 +27,7 @@ ROTULO_ENVIO = {"pendente": "Na fila", "enviado": "Enviado", "entregue": "Entreg
                 "falhou": "Falhou"}
 
 # Textos dos modelos que devem ser cadastrados na Meta (ver docs/WHATSAPP.md).
-TEXTOS_MODELOS = {
+_TEXTOS = {
     "abertura": ("Novo chamado *{{1}}* aberto para *{{2}}*.\n"
                  "Assunto: {{3}}\nPrioridade: {{4}}\n\n"
                  "Acompanhe o atendimento: {{5}}"),
@@ -37,7 +37,21 @@ TEXTOS_MODELOS = {
     "conclusao": ("O chamado *{{1}}* ({{2}}) foi concluído.\n"
                   "{{3}}\n\n"
                   "Veja o relatório completo: {{4}}"),
+    "alerta_offline": ("⚠️ Alerta de monitoramento: *{{1}}* em *{{2}}* está sem resposta desde {{3}}.\n"
+                       "Motivo: {{4}}\n"
+                       "Chamado *{{5}}* aberto automaticamente.\n\n"
+                       "Detalhes: {{6}}"),
+    "alerta_online": ("✅ Normalizado: *{{1}}* em *{{2}}* voltou a responder após {{3}} offline.\n"
+                      "Chamado *{{4}}*.\n\n"
+                      "Detalhes: {{5}}"),
 }
+
+# A Meta não aceita modelo que termine (ou comece) com variável: todos fecham com a assinatura.
+TEXTOS_MODELOS = {k: v + "\n\n— " + config.EMPRESA_NOME for k, v in _TEXTOS.items()}
+
+# Rótulos de todos os eventos que geram envio (clientes + equipe)
+EVENTOS_ENVIO = {"abertura": "Chamado aberto", "status": "Mudança de status", "conclusao": "Chamado concluído",
+                 "alerta_offline": "Alerta: equipamento offline", "alerta_online": "Equipamento normalizado"}
 
 
 def configurado() -> bool:
@@ -46,7 +60,8 @@ def configurado() -> bool:
 
 def nome_modelo(evento):
     return {"abertura": config.WHATSAPP_MODELO_ABERTO, "status": config.WHATSAPP_MODELO_ATUALIZADO,
-            "conclusao": config.WHATSAPP_MODELO_CONCLUIDO}[evento]
+            "conclusao": config.WHATSAPP_MODELO_CONCLUIDO, "alerta_offline": config.WHATSAPP_MODELO_ALERTA_OFF,
+            "alerta_online": config.WHATSAPP_MODELO_ALERTA_ON}[evento]
 
 
 def normalizar_telefone(t: str | None) -> str | None:
@@ -107,6 +122,33 @@ def disparar(db, ch: Chamado, evento: str, link: str) -> list[int]:
     for nome, tel in destinatarios(db, ch, evento):
         env = EnvioWhatsApp(chamado_id=ch.id, evento=evento, destino_nome=nome, telefone=tel,
                             modelo=nome_modelo(evento), parametros=parametros(ch, evento, link))
+        db.add(env); db.flush(); ids.append(env.id)
+    db.commit()
+    for i in ids:
+        _em_segundo_plano(enviar, i)
+    return ids
+
+
+def destinatarios_equipe(db):
+    """Usuários da equipe (admin/técnico) ativos que marcaram receber alertas e têm WhatsApp."""
+    from .models import Usuario
+    lista, vistos = [], set()
+    for u in db.scalars(select(Usuario).where(Usuario.ativo, Usuario.recebe_alertas,
+                                              Usuario.papel.in_(("admin", "tecnico")))).all():
+        tel = normalizar_telefone(u.telefone)
+        if tel and tel not in vistos:
+            vistos.add(tel); lista.append((u.nome, tel))
+    return lista
+
+
+def disparar_equipe(db, chamado_id, evento: str, params: list[str]) -> list[int]:
+    """Alerta de monitoramento para a equipe TecnosIT. Não faz nada se a API não estiver configurada."""
+    if not configurado():
+        return []
+    ids = []
+    for nome, tel in destinatarios_equipe(db):
+        env = EnvioWhatsApp(chamado_id=chamado_id, evento=evento, destino_nome=nome, telefone=tel,
+                            modelo=nome_modelo(evento), parametros=[_p(x, 500) for x in params])
         db.add(env); db.flush(); ids.append(env.id)
     db.commit()
     for i in ids:

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import selo, status_monitor, abas_inventario %}
+{% from "_macros.html" import selo, status_monitor, abas_inventario with context %}
 {% block titulo %}Dashboard do inventário{% endblock %}
 {% block conteudo %}
 <meta http-equiv="refresh" content="60">
@@ -29,7 +29,8 @@
 </div>
 
 <div class="card" id="offline">
-  <h2>{% if offline %}⚠ {% endif %}Equipamentos offline</h2>
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">{% if offline %}⚠ {% endif %}Equipamentos offline</h2>
+    <a class="btn peq sec" href="/inventario/ocorrencias">Ver ocorrências</a></div>
   {% if offline %}
   <table class="resp">
     <thead><tr><th>Equipamento</th><th>Unidade</th><th>Endereço testado</th><th>Offline há</th><th>Motivo</th></tr></thead>

@@ -18,13 +18,13 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import avisos, config, fotos, inventario, monitor, pdf, regras, whatsapp
+from . import avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
                      Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
-                     TipoChamado, Unidade, Usuario, novo_token)
+                     STATUS_OCORRENCIA, Ocorrencia, TipoChamado, Unidade, Usuario, novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -53,6 +53,7 @@ tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
                        CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, EVENTOS_AVISO=EVENTOS_AVISO,
                        ROTULO_ENVIO=whatsapp.ROTULO_ENVIO, TIPOS_EQUIPAMENTO=TIPOS_EQUIPAMENTO,
+                       EVENTOS_ENVIO=whatsapp.EVENTOS_ENVIO, STATUS_OCORRENCIA=STATUS_OCORRENCIA,
                        config=config)
 tpl.env.filters["fmt"] = regras.para_html
 tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
@@ -78,6 +79,10 @@ def agora_utc():
 
 def render(request, nome, **ctx):
     ctx.setdefault("u", None)
+    if ctx["u"] is not None and ctx["u"].equipe:
+        from .db import SessionLocal
+        with SessionLocal() as _db:
+            ctx["alerta_oc"] = ocorrencias.contagem(_db)
     ctx.update(request=request, csrf=csrf_token(request),
                flash=request.session.pop("flash", None))
     return tpl.TemplateResponse(request, nome, ctx)
@@ -678,6 +683,8 @@ def _preencher_equip(eq, db, f) -> list[str]:
     if monitorar and not eq.alvo_monitor:
         raise inventario.DadoInvalido("Para monitorar, informe a porta e o "
                                       + ("IP interno." if eq.monitor_endereco == "interno" else "IP externo / DDNS."))
+    if eq.id and eq.monitorar and not monitorar:
+        ocorrencias.encerrar_do_equipamento(db, eq, "Monitoramento desligado")
     if not monitorar or eq.monitorar != monitorar or eq.alvo_monitor != alvo_antes:
         eq.monitor_status = eq.monitor_desde = eq.monitor_ms = eq.monitor_erro = None
         eq.monitor_falhas = 0
@@ -764,6 +771,77 @@ def inventario_dashboard(request: Request, cliente: str = "", u: Usuario = Depen
                   faixas=faixas, ranking=ranking, chamados_validos=chamados_validos, duracao=_duracao,
                   clientes=clientes_ativos(db), f=dict(cliente=cliente), hoje=hoje,
                   intervalo=config.MONITOR_INTERVALO_MIN, monitor_ativo=config.MONITOR_ATIVO)
+
+
+@app.get("/inventario/ocorrencias", response_class=HTMLResponse)
+def inventario_ocorrencias(request: Request, status: str = "abertas", cliente: str = "",
+                           u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    cliente = _int(cliente)
+    sel = select(Ocorrencia).join(Equipamento).join(Unidade).options(
+        selectinload(Ocorrencia.equipamento).selectinload(Equipamento.unidade).selectinload(Unidade.cliente),
+        selectinload(Ocorrencia.chamado).selectinload(Chamado.acoes), selectinload(Ocorrencia.assumida_por))
+    if status == "abertas":
+        sel = sel.where(Ocorrencia.status == "aberta")
+    elif status in ("normalizada", "encerrada"):
+        sel = sel.where(Ocorrencia.status == status)
+    else:
+        status = "todas"
+    if cliente:
+        sel = sel.where(Unidade.cliente_id == cliente)
+    lista = db.scalars(sel.order_by(Ocorrencia.status != "aberta", Ocorrencia.inicio.desc()).limit(300)).all()
+    return render(request, "ocorrencias.html", u=u, lista=lista, clientes=clientes_ativos(db),
+                  f=dict(status=status, cliente=cliente), tempo=ocorrencias.duracao,
+                  destinatarios=whatsapp.destinatarios_equipe(db), wa_ok=whatsapp.configurado())
+
+
+@app.get("/inventario/ocorrencias/contagem")
+def inventario_ocorrencias_contagem(u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    abertas, sem = ocorrencias.contagem(db)
+    return {"abertas": abertas, "sem_responsavel": sem}
+
+
+def _ocorrencia(db, oid) -> Ocorrencia:
+    oc = db.get(Ocorrencia, oid)
+    if not oc:
+        raise HTTPException(404, "Ocorrência não encontrada.")
+    return oc
+
+
+@app.post("/inventario/ocorrencias/{oid}/assumir", dependencies=[Depends(checar_csrf)])
+def ocorrencia_assumir(request: Request, oid: int, voltar_para: str = Form("/inventario/ocorrencias"),
+                       u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    oc = _ocorrencia(db, oid)
+    if oc.assumida_por_id:
+        flash(request, f"Esta ocorrência já foi assumida por {oc.assumida_por.nome}.", "erro")
+    else:
+        oc.assumida_por_id, oc.assumida_em = u.id, agora_utc()
+        ch = oc.chamado
+        if ch and not ch.cancelado:
+            antes = regras.status_geral(ch)
+            hoje, hm = _agora_hm()
+            if not ch.tecnico_id:
+                ch.tecnico_id = u.id
+            ch.acoes.append(Acao(data=hoje, hora=hm, status="Em andamento", autor_id=u.id,
+                                 descricao=f"Ocorrência assumida por {u.nome}: equipe acionada"))
+            _apos_mudanca(ch, antes)
+            db.commit()
+            if config.MONITOR_AVISAR_CLIENTE:
+                avisar_whatsapp(request, db, ch, antes)
+        db.commit()
+        flash(request, f"Você assumiu a ocorrência de {oc.equipamento.nome}.")
+    return voltar(voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/")
+
+
+@app.post("/inventario/ocorrencias/{oid}/encerrar", dependencies=[Depends(checar_csrf)])
+def ocorrencia_encerrar(request: Request, oid: int, observacao: str = Form(""),
+                        u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    oc = _ocorrencia(db, oid)
+    if oc.status == "aberta":
+        oc.status, oc.fim = "encerrada", agora_utc()
+        oc.observacao = (observacao.strip() or f"Encerrada manualmente por {u.nome}")[:2000]
+        db.commit()
+        flash(request, "Ocorrência encerrada. O chamado continua aberto até ser concluído.")
+    return voltar("/inventario/ocorrencias")
 
 
 @app.get("/inventario/novo", response_class=HTMLResponse)
@@ -860,10 +938,11 @@ def inventario_ver_senha(request: Request, eid: int, u: Usuario = Depends(so_equ
 def inventario_testar(request: Request, eid: int, u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     eq = _equip(db, eid)
     try:
-        ok, ms, erro = monitor.verificar_um(db, eq)
+        ok, ms, erro, alertas = monitor.verificar_um(db, eq)
     except ValueError as e:
         flash(request, str(e), "erro"); return voltar(f"/inventario/{eid}")
     db.commit()
+    ocorrencias.enviar_alertas(db, alertas)
     host, porta = eq.alvo_monitor
     if ok:
         flash(request, f"Online: {host}:{porta} respondeu em {ms} ms.")
@@ -877,6 +956,8 @@ def inventario_alternar(request: Request, eid: int, u: Usuario = Depends(so_equi
                         db: Session = Depends(get_db)):
     eq = _equip(db, eid)
     eq.ativo = not eq.ativo
+    if not eq.ativo:
+        ocorrencias.encerrar_do_equipamento(db, eq, "Equipamento marcado como fora de uso")
     db.commit()
     flash(request, f"Equipamento {'reativado' if eq.ativo else 'marcado como fora de uso'}.")
     return voltar(f"/inventario/{eid}")
@@ -1185,6 +1266,7 @@ def admin_usuario(request: Request, nome: str = Form(...), email: str = Form(...
 
 @app.post("/admin/usuarios/{uid}", dependencies=[Depends(checar_csrf)])
 def admin_usuario_op(request: Request, uid: int, operacao: str = Form(...), senha: str = Form(""),
+                     telefone: str = Form(""), recebe_alertas: str = Form(""),
                      u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     alvo = db.get(Usuario, uid)
     if not alvo:
@@ -1195,6 +1277,12 @@ def admin_usuario_op(request: Request, uid: int, operacao: str = Form(...), senh
         else:
             alvo.ativo = not alvo.ativo
             flash(request, f"Usuário {'ativado' if alvo.ativo else 'desativado'}.")
+    elif operacao == "alertas":
+        tel = whatsapp.normalizar_telefone(telefone) if telefone.strip() else None
+        if (telefone.strip() and not tel) or (recebe_alertas and not tel):
+            flash(request, "Informe um WhatsApp válido (DDD + número).", "erro"); return voltar("/admin#usuarios")
+        alvo.telefone, alvo.recebe_alertas = tel, bool(recebe_alertas) and alvo.equipe
+        flash(request, f"Alertas de {alvo.nome} atualizados.")
     elif operacao == "senha":
         if len(senha) < 8:
             flash(request, "A senha precisa ter pelo menos 8 caracteres.", "erro"); return voltar("/admin#usuarios")
@@ -1305,6 +1393,22 @@ async def webhook_receber(request: Request):
 @app.get("/conta", response_class=HTMLResponse)
 def conta(request: Request, u: Usuario = Depends(usuario_atual)):
     return render(request, "conta.html", u=u)
+
+
+@app.post("/conta/alertas", dependencies=[Depends(checar_csrf)])
+def conta_alertas(request: Request, telefone: str = Form(""), recebe_alertas: str = Form(""),
+                  u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
+    tel = whatsapp.normalizar_telefone(telefone) if telefone.strip() else None
+    if telefone.strip() and not tel:
+        flash(request, "WhatsApp inválido. Use DDD + número, ex.: 11 91234-5678.", "erro")
+        return voltar("/conta")
+    if recebe_alertas and not tel:
+        flash(request, "Informe seu WhatsApp para receber os alertas.", "erro")
+        return voltar("/conta")
+    u.telefone, u.recebe_alertas = tel, bool(recebe_alertas)
+    db.commit()
+    flash(request, "Alertas de monitoramento " + ("ativados." if u.recebe_alertas else "desativados."))
+    return voltar("/conta")
 
 
 @app.post("/conta", dependencies=[Depends(checar_csrf)])

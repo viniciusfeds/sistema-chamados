@@ -11,4 +11,17 @@
     <button class="btn">Trocar senha</button>
   </form>
 </div>
+{% if u.equipe %}
+<div class="card" style="max-width:480px" id="alertas">
+  <h2>Alertas de monitoramento</h2>
+  <p class="dica" style="margin-top:0">Quando um equipamento monitorado cair, o sistema abre um chamado automático e avisa no WhatsApp de quem estiver marcado aqui.</p>
+  <form method="post" action="/conta/alertas">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label for="telefone">Meu WhatsApp</label>
+      <input id="telefone" name="telefone" inputmode="tel" value="{{ ('+' ~ u.telefone) if u.telefone else '' }}" placeholder="(11) 91234-5678"></div>
+    <label class="check"><input type="checkbox" name="recebe_alertas" value="1" style="width:auto" {{ 'checked' if u.recebe_alertas }}> Receber alertas de equipamento offline e normalizado</label>
+    <button class="btn sec">Salvar</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

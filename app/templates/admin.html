@@ -104,13 +104,14 @@
 <div class="card" id="usuarios">
   <h2>Usuários</h2>
   <table class="resp" style="margin-bottom:14px">
-    <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead>
+    <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Alertas</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for x in usuarios %}
     <tr>
       <td data-l="Nome"><b>{{ x.nome }}</b></td>
       <td data-l="E-mail">{{ x.email }}</td>
       <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}</td>
+      <td data-l="Alertas">{% if x.equipe %}{% if x.recebe_alertas %}<span class="tag">WhatsApp +{{ x.telefone }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endif %}</td>
       <td data-l="Situação">{{ 'Ativo' if x.ativo else 'Inativo' }}</td>
       <td>
         <details style="margin:0;padding:4px 8px"><summary>Opções</summary>
@@ -120,6 +121,14 @@
             <button class="btn peq" name="operacao" value="senha">Trocar senha</button>
             {% if x.id != u.id %}<button class="btn peq sec" name="operacao" value="alternar">{{ 'Desativar' if x.ativo else 'Ativar' }}</button>{% endif %}
           </form>
+          {% if x.equipe %}
+          <form method="post" action="/admin/usuarios/{{ x.id }}" style="margin-top:10px;border-top:1px solid var(--linha);padding-top:8px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input name="telefone" inputmode="tel" placeholder="WhatsApp, ex.: 11 91234-5678" value="{{ ('+' ~ x.telefone) if x.telefone else '' }}" style="margin-bottom:6px">
+            <label class="check" style="margin:0 0 6px"><input type="checkbox" name="recebe_alertas" value="1" style="width:auto" {{ 'checked' if x.recebe_alertas }}> Recebe alertas de monitoramento</label>
+            <button class="btn peq sec" name="operacao" value="alertas">Salvar alertas</button>
+          </form>
+          {% endif %}
         </details>
       </td>
     </tr>
