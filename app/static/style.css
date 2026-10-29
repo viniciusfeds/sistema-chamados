@@ -234,3 +234,22 @@ details.oc-encerrar{margin:0;padding:3px 10px}
 .cfg-indice{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 14px}
 .cfg-indice a{font-size:.85rem;font-weight:700;text-decoration:none;border:1px solid var(--linha);background:#fff;border-radius:999px;padding:4px 12px}
 .cfg-salvar{position:sticky;bottom:0;background:var(--fundo);padding:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--linha)}
+
+/* --- v1.7: agente local --- */
+.chave-agente{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:8px}
+.chave-agente .copiar{flex:1;min-width:260px;max-width:460px}
+.chave-agente .copiar input{font-family:ui-monospace,Consolas,monospace;letter-spacing:.04em}
+.downloads{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.download{border:1px solid var(--linha);border-radius:var(--raio);padding:14px 16px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.download h3{margin:0;display:flex;align-items:center;gap:8px}
+.download .btn{align-self:flex-start}
+.passos{margin:6px 0 0;padding-left:20px}
+.passos li{margin:3px 0}
+.agente{border:1px solid var(--linha);border-left:5px solid #8A94A3;border-radius:var(--raio);padding:12px 16px;background:#fff;margin-bottom:10px}
+.agente.on{border-left-color:#1E7B45}
+.agente.off{border-left-color:#B3261E;background:#FFFBFA}
+.agente-topo{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.agente-info{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.88rem;color:var(--cinza);margin:6px 0}
+.logs{font-family:ui-monospace,Consolas,monospace;font-size:.8rem;background:#1E1E1E;color:#DADADA;border-radius:8px;padding:10px 12px;max-height:280px;overflow:auto;margin-top:8px}
+.logs .l-erro{color:#FF8A80}
+.logs .l-aviso{color:#FFD180}

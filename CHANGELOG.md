@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 1.7.0 — 2026-10-28
+- **Agente local** (*Administração → ⬇ Agente local*): programa instalado num computador da unidade que testa os equipamentos **pela rede interna** (ping ou porta) e envia resultados e logs ao Nexus. Só faz conexão de saída: **não precisa liberar portas nem redirecionar nada no roteador**
+- Downloads para **Windows** (Instalar.bat: pede permissão de administrador, a chave e a unidade; roda como tarefa do sistema, iniciando com o Windows, sem ninguém logado) e **Linux** (serviço systemd, Python 3 sem dependências)
+- **Chave de ativação no cadastro do cliente** (*Administração → Clientes*), com copiar e gerar nova chave. Na instalação o agente pergunta a unidade; reinstalar no mesmo computador reaproveita o agente
+- Equipamentos com **Testar pelo: Agente local** (padrão): basta o IP interno; sem porta, o teste é por ping
+- O próprio agente é monitorado: se a unidade ficar sem internet/energia, abre **uma** ocorrência (“agente sem contato”) e os equipamentos dela aparecem como **Sem dados**, sem disparar um alerta para cada um
+- Página do agente com status, último contato, versão, sistema, IP local/público, equipamentos e **log enviado pelo agente**; desativar/reativar/excluir
+- Configurações: intervalo do agente (padrão 60 s) e minutos sem contato para considerá-lo offline (padrão 5)
+- Guia: `docs/AGENTE.md`
+
 ## 1.6.0 — 2026-10-28
 - **Administração → Configurações**: tudo o que antes exigia editar o `.env` agora é ajustado pela tela e vale na hora, sem reiniciar:
   - empresa e sistema (nomes, WhatsApp, rodapé do PDF, responsável padrão, endereço público);

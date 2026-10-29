@@ -4,6 +4,7 @@
 {% block conteudo %}
 <div class="cab"><h1>Administração</h1>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sec" href="/admin/configuracoes">⚙ Configurações</a>
+  <a class="btn sec" href="/admin/agentes">⬇ Agente local</a>
   <a class="btn sec" href="/admin/whatsapp">WhatsApp automático</a></div></div>
 
 <div class="card" id="clientes">
@@ -27,6 +28,14 @@
     {% else %}
       <p class="muted" style="margin:4px 0">Link público desativado.</p>
     {% endif %}
+    <div class="chave-agente">
+      <span class="muted">Chave do agente local:</span>
+      {{ copiar(c.chave_agente or '', 'Copiar chave') }}
+      <form method="post" action="/admin/clientes/{{ c.id }}" style="display:inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq sec" name="operacao" value="nova_chave" onclick="return confirm('Gerar uma nova chave para {{ c.nome }}? A chave atual deixa de ativar novos agentes (os já instalados continuam funcionando).')">Gerar nova chave</button></form>
+      <a class="dica" href="/admin/agentes">Baixar o agente ↗</a>
+    </div>
     <details style="margin-top:8px"><summary>Editar nome</summary>
       <form method="post" action="/admin/clientes/{{ c.id }}" class="grid3" style="margin-top:8px;align-items:end">
         <input type="hidden" name="csrf" value="{{ csrf }}">

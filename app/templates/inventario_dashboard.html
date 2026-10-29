@@ -39,7 +39,7 @@
     <tr class="link parado" onclick="location.href='/inventario/{{ e.id }}'">
       <td data-l="Equipamento"><a href="/inventario/{{ e.id }}"><b>{{ e.nome }}</b></a><div class="muted">{{ e.tipo_rotulo }}</div></td>
       <td data-l="Unidade">{{ e.unidade.nome }}</td>
-      <td data-l="Endereço testado" class="mono">{% if alvo %}{{ alvo[0] }}:{{ alvo[1] }}{% endif %}</td>
+      <td data-l="Endereço testado" class="mono">{{ e.alvo_texto }}</td>
       <td data-l="Offline há"><b style="color:#B3261E">{{ duracao(e.monitor_desde) }}</b><div class="muted">desde {{ e.monitor_desde|local }}</div></td>
       <td data-l="Motivo" class="muted">{{ e.monitor_erro or '' }}</td>
     </tr>

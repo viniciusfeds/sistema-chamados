@@ -1,0 +1,25 @@
+﻿NEXUS AGENTE __NEXUS_VERSAO__ - Windows
+=====================================
+
+O agente fica num computador da unidade (ex.: PC da recepção) e testa, pela rede
+interna, os equipamentos cadastrados no Nexus Desk para aquela unidade. Os resultados
+vão para o Nexus pela internet (só conexão de saída): não é preciso liberar portas
+nem fazer redirecionamento no roteador.
+
+INSTALAR
+1. Extraia esta pasta no computador da unidade (ex.: Área de Trabalho).
+2. Dê dois cliques em "Instalar.bat" e confirme a permissão de administrador.
+3. Digite a CHAVE DE ATIVAÇÃO do cliente
+   (Nexus Desk > Administração > Clientes > Chave do agente).
+4. Escolha a unidade em que o computador está.
+Pronto: o agente inicia sozinho com o Windows, mesmo sem ninguém logado.
+
+CONFERIR
+- "Ver status.bat" mostra se está rodando e as últimas linhas do log.
+- No Nexus: Administração > Agentes.
+
+REMOVER
+- "Desinstalar.bat".
+
+Requisitos: Windows 10/11 ou Windows Server 2016+, acesso à internet,
+o computador deve ficar ligado. Servidor: __NEXUS_URL__

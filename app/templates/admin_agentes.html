@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block titulo %}Agente local{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><div class="muted"><a href="/admin">← Administração</a></div><h1>Agente local</h1>
+    <div class="muted">Programa instalado num computador da unidade que testa os equipamentos pela rede interna e envia tudo ao {{ config.SISTEMA_NOME }}.
+      Só faz conexão de saída: <b>não precisa liberar portas nem redirecionar nada no roteador</b>.</div></div>
+</div>
+
+{% if servidor.startswith('http://localhost') or servidor.startswith('http://127.') or servidor.startswith('http://192.168.') or servidor.startswith('http://10.') %}
+<div class="flash erro">O agente vai falar com <b>{{ servidor }}</b>, que só funciona na rede local. Para as unidades, defina o
+  <a href="/admin/configuracoes#empresa">Endereço público do sistema</a> (ex.: https://chamados.tecnosit.com.br) antes de baixar.</div>
+{% endif %}
+
+<div class="card">
+  <h2>Download</h2>
+  <div class="downloads">
+    <div class="download">
+      <h3>🪟 Windows</h3>
+      <div class="muted">Windows 10/11 ou Server. Ideal para o PC da recepção.</div>
+      <ol class="passos">
+        <li>Baixe e extraia o .zip no computador da unidade.</li>
+        <li>Dois cliques em <b>Instalar.bat</b> (confirme como administrador).</li>
+        <li>Digite a <b>chave de ativação</b> do cliente e escolha a unidade.</li>
+      </ol>
+      <a class="btn" href="/admin/agentes/download/windows">⬇ Baixar para Windows</a>
+    </div>
+    <div class="download">
+      <h3>🐧 Linux</h3>
+      <div class="muted">Mini PC, Raspberry Pi ou servidor (systemd, Python 3).</div>
+      <ol class="passos">
+        <li>Copie e extraia o .zip no equipamento.</li>
+        <li>Rode <code>sudo sh instalar.sh</code>.</li>
+        <li>Digite a <b>chave de ativação</b> do cliente e escolha a unidade.</li>
+      </ol>
+      <a class="btn sec" href="/admin/agentes/download/linux">⬇ Baixar para Linux</a>
+    </div>
+  </div>
+  <p class="dica">Versão {{ versao }} · conecta em <span class="mono">{{ servidor }}</span>.
+    A chave de ativação de cada cliente fica em <a href="/admin#clientes">Administração → Clientes</a>.
+    Depois de instalado, marque os equipamentos com <b>Testar pelo: Agente local</b> no inventário.</p>
+</div>
+
+<div class="card" id="lista">
+  <h2>Agentes instalados <span class="muted" style="font-weight:400">({{ agentes|length }})</span></h2>
+  {% for ag in agentes %}
+  {% set on = online(ag) %}
+  <div class="agente {{ 'on' if on else ('off' if ag.ativo else '') }}">
+    <div class="agente-topo">
+      <div>
+        {% if not ag.ativo %}<span class="mon mon-aguardando">Desativado</span>
+        {% elif on %}<span class="mon mon-online">Online</span>
+        {% else %}<span class="mon mon-offline">Sem contato</span>{% endif %}
+        <b style="margin-left:6px">{{ ag.hostname or ag.nome }}</b>
+        <span class="muted">· {{ ag.unidade.cliente.nome }} · {{ ag.unidade.nome }}</span>
+      </div>
+      <div class="muted">{% if ag.ultimo_contato %}último contato {{ ag.ultimo_contato|local }} ({{ duracao(ag.ultimo_contato) }} atrás){% else %}ainda sem contato{% endif %}</div>
+    </div>
+    <div class="agente-info">
+      <span>{{ contagem.get(ag.unidade_id, 0) }} equipamento(s) monitorado(s) por ele</span>
+      {% if ag.versao %}<span>versão {{ ag.versao }}</span>{% endif %}
+      {% if ag.so %}<span>{{ ag.so }}</span>{% endif %}
+      {% if ag.ip_local %}<span>IP local <span class="mono">{{ ag.ip_local }}</span></span>{% endif %}
+      {% if ag.ip_publico %}<span>IP público <span class="mono">{{ ag.ip_publico }}</span></span>{% endif %}
+      {% if ag.ativado_em %}<span>ativado em {{ ag.ativado_em|local }}</span>{% endif %}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <a class="btn peq sec" href="/inventario?unidade={{ ag.unidade_id }}&monitor_st=monitorados">Equipamentos</a>
+      {% if ag.equipamento %}<a class="btn peq sec" href="/inventario/{{ ag.equipamento_id }}">Histórico de contato</a>{% endif %}
+      <form method="post" action="/admin/agentes/{{ ag.id }}" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq {{ 'perigo' if ag.ativo else 'sec' }}" name="operacao" value="alternar"
+          {% if ag.ativo %}onclick="return confirm('Desativar este agente? Ele para de ser aceito pelo Nexus.')"{% endif %}>{{ 'Desativar' if ag.ativo else 'Reativar' }}</button>
+        {% if not ag.ativo %}<button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Excluir o agente e o histórico de contato dele?')">Excluir</button>{% endif %}
+      </form>
+    </div>
+    {% if ag.logs %}
+    <details style="margin-top:8px"><summary>Log do agente ({{ ag.logs|length }})</summary>
+      <div class="logs">{% for l in ag.logs[:80] %}<div class="l-{{ l.nivel }}">{{ (l.quando or l.criado_em)|local }} [{{ l.nivel|upper }}] {{ l.mensagem }}</div>{% endfor %}</div>
+    </details>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted">Nenhum agente instalado ainda. Baixe acima, instale num computador da unidade e use a chave de ativação do cliente.</p>
+  {% endfor %}
+</div>
+{% endblock %}

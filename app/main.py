@@ -18,13 +18,14 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
+from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
                      Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
-                     STATUS_OCORRENCIA, Ocorrencia, TipoChamado, Unidade, Usuario, novo_token)
+                     STATUS_OCORRENCIA, Agente, Ocorrencia, TipoChamado, Unidade, Usuario, nova_chave_agente,
+                     novo_token)
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -685,11 +686,15 @@ def _preencher_equip(eq, db, f) -> list[str]:
     eq.mac = inventario.normalizar_mac(f["mac"])
     eq.ip_externo = inventario.normalizar_host(f["ip_externo"])
     eq.monitor_porta = inventario.normalizar_porta(f["monitor_porta"])
-    eq.monitor_endereco = "interno" if f["monitor_endereco"] == "interno" else "externo"
+    if eq.monitor_endereco != "heartbeat":
+        eq.monitor_endereco = f["monitor_endereco"] if f["monitor_endereco"] in ("agente", "interno", "externo") \
+            else "agente"
     monitorar = bool(f["monitorar"])
     if monitorar and not eq.alvo_monitor:
-        raise inventario.DadoInvalido("Para monitorar, informe a porta e o "
-                                      + ("IP interno." if eq.monitor_endereco == "interno" else "IP externo / DDNS."))
+        raise inventario.DadoInvalido(
+            "Para monitorar pelo agente local, informe o IP interno." if eq.monitor_endereco == "agente"
+            else "Para monitorar, informe a porta e o "
+            + ("IP interno." if eq.monitor_endereco == "interno" else "IP externo / DDNS."))
     if eq.id and eq.monitorar and not monitorar:
         ocorrencias.encerrar_do_equipamento(db, eq, "Monitoramento desligado")
     if not monitorar or eq.monitorar != monitorar or eq.alvo_monitor != alvo_antes:
@@ -708,7 +713,7 @@ def _preencher_equip(eq, db, f) -> list[str]:
 
 def _form_equip(unidade_id, tipo, nome, marca, modelo, numero_serie, ip, mac, porta, local, usuario,
                 instalacao, garantia_ate, observacoes, ip_externo="", monitorar="", monitor_porta="",
-                monitor_endereco="externo"):
+                monitor_endereco="agente"):
     return dict(unidade_id=unidade_id, tipo=tipo, nome=nome, marca=marca, modelo=modelo,
                 numero_serie=numero_serie, ip=ip, mac=mac, porta=porta, local=local, usuario=usuario,
                 instalacao=instalacao, garantia_ate=garantia_ate, observacoes=observacoes, ip_externo=ip_externo,
@@ -728,6 +733,7 @@ def _duracao(desde):
 
 
 tpl.env.globals["duracao"] = _duracao
+tpl.env.globals["sem_dados"] = lambda e: e.sem_dados(agora_utc(), config.AGENTE_OFFLINE_MIN)
 
 
 @app.get("/inventario/dashboard", response_class=HTMLResponse)
@@ -950,11 +956,10 @@ def inventario_testar(request: Request, eid: int, u: Usuario = Depends(so_equipe
         flash(request, str(e), "erro"); return voltar(f"/inventario/{eid}")
     db.commit()
     ocorrencias.enviar_alertas(db, alertas)
-    host, porta = eq.alvo_monitor
     if ok:
-        flash(request, f"Online: {host}:{porta} respondeu em {ms} ms.")
+        flash(request, f"Online: {eq.alvo_texto} respondeu em {ms} ms.")
     else:
-        flash(request, f"Offline: {host}:{porta} não respondeu ({erro}).", "erro")
+        flash(request, f"Offline: {eq.alvo_texto} não respondeu ({erro}).", "erro")
     return voltar(f"/inventario/{eid}")
 
 
@@ -1162,6 +1167,10 @@ def admin_cliente_op(request: Request, cid: int, operacao: str = Form(...), nome
     if operacao == "link":
         cli.abertura_publica = not cli.abertura_publica
         flash(request, f"Link público de {cli.nome} {'ativado' if cli.abertura_publica else 'desativado'}.")
+    elif operacao == "nova_chave":
+        cli.chave_agente = nova_chave_agente()
+        flash(request, f"Nova chave do agente gerada para {cli.nome}. Os agentes já instalados continuam "
+                       "funcionando; a chave antiga não ativa mais nenhum.")
     elif operacao == "novo_link":
         cli.slug_publico = novo_token()
         flash(request, f"Novo link gerado para {cli.nome}. O link antigo parou de funcionar.")
@@ -1418,6 +1427,109 @@ async def webhook_receber(request: Request):
         raise HTTPException(400, "JSON inválido.")
     whatsapp.processar_webhook(dados)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- agente local (API sem sessão, por token)
+def _json(dados, status=200):
+    return Response(json.dumps(dados, ensure_ascii=False), status_code=status,
+                    media_type="application/json; charset=utf-8", headers={"Cache-Control": "no-store"})
+
+
+async def _corpo_json(request):
+    corpo = await request.body()
+    if len(corpo) > 512 * 1024:
+        raise agentes.ErroAgente("Envio grande demais.", 413)
+    try:
+        dados = json.loads(corpo or b"{}")
+    except ValueError:
+        raise agentes.ErroAgente("JSON inválido.", 400)
+    if not isinstance(dados, dict):
+        raise agentes.ErroAgente("JSON inválido.", 400)
+    return dados
+
+
+@app.post("/api/agente/ativar", include_in_schema=False)
+async def api_agente_ativar(request: Request, db: Session = Depends(get_db)):
+    try:
+        d = await _corpo_json(request)
+        return _json(agentes.ativar(db, d.get("chave"), _int(d.get("unidade_id")), d.get("hostname"), d.get("so"),
+                                    d.get("versao"), d.get("ip_local"), _ip(request)))
+    except agentes.ErroAgente as e:
+        return _json({"erro": str(e)}, e.status)
+
+
+@app.post("/api/agente/sincronizar", include_in_schema=False)
+async def api_agente_sincronizar(request: Request, db: Session = Depends(get_db)):
+    try:
+        ag = agentes.agente_pelo_token(db, request.headers.get("authorization"))
+        d = await _corpo_json(request)
+        return _json(agentes.sincronizar(db, ag, d, _ip(request)))
+    except agentes.ErroAgente as e:
+        return _json({"erro": str(e)}, e.status)
+
+
+@app.get("/admin/agentes", response_class=HTMLResponse)
+def admin_agentes(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    lista = db.scalars(select(Agente).join(Unidade).order_by(Unidade.nome, Agente.nome).options(
+        selectinload(Agente.unidade).selectinload(Unidade.cliente), selectinload(Agente.equipamento),
+        selectinload(Agente.logs))).all()
+    contagem = {}
+    for un_id, n in db.execute(select(Equipamento.unidade_id, func.count(Equipamento.id)).where(
+            Equipamento.ativo, Equipamento.monitorar, Equipamento.monitor_endereco == "agente")
+            .group_by(Equipamento.unidade_id)):
+        contagem[un_id] = n
+    return render(request, "admin_agentes.html", u=u, agentes=lista, contagem=contagem, online=agentes.online,
+                  clientes=db.scalars(select(Cliente).where(Cliente.ativo).order_by(Cliente.nome)).all(),
+                  servidor=base_url(request), versao=agentes.VERSAO_ATUAL)
+
+
+@app.post("/admin/agentes/{aid}", dependencies=[Depends(checar_csrf)])
+def admin_agente_op(request: Request, aid: int, operacao: str = Form(...), u: Usuario = Depends(so_admin),
+                    db: Session = Depends(get_db)):
+    ag = db.get(Agente, aid)
+    if not ag:
+        raise HTTPException(404)
+    if operacao == "alternar":
+        ag.ativo = not ag.ativo
+        if ag.equipamento:
+            ag.equipamento.monitorar = ag.ativo
+            if not ag.ativo:
+                ocorrencias.encerrar_do_equipamento(db, ag.equipamento, "Agente desativado")
+                ag.equipamento.monitor_status = None
+        flash(request, f"Agente {ag.nome} {'reativado' if ag.ativo else 'desativado: ele para de enviar dados'}.")
+    elif operacao == "excluir":
+        if ag.equipamento:
+            db.delete(ag.equipamento)
+        db.delete(ag)
+        flash(request, "Agente removido. Desinstale também no computador da unidade.")
+    db.commit()
+    return voltar("/admin/agentes")
+
+
+@app.get("/admin/agentes/download/{so}")
+def admin_agente_download(request: Request, so: str, u: Usuario = Depends(so_admin)):
+    import io
+    import zipfile
+    pastas = {"windows": "NexusAgente-Windows", "linux": "NexusAgente-Linux"}
+    if so not in pastas:
+        raise HTTPException(404)
+    origem = APP_DIR / "agente" / so
+    servidor = base_url(request)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for arq in sorted(origem.rglob("*")):
+            if arq.is_dir() or "__pycache__" in arq.parts:
+                continue
+            dados = arq.read_bytes()
+            if arq.suffix.lower() in (".ps1", ".bat", ".py", ".sh", ".txt", ".service", ".json"):
+                dados = dados.replace(b"__NEXUS_URL__", servidor.encode()).replace(
+                    b"__NEXUS_VERSAO__", agentes.VERSAO_ATUAL.encode())
+            info = zipfile.ZipInfo(f"{pastas[so]}/{arq.relative_to(origem).as_posix()}")
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (0o755 if arq.suffix in (".sh", ".py") else 0o644) << 16
+            z.writestr(info, dados)
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="{pastas[so]}-{agentes.VERSAO_ATUAL}.zip"'})
 
 
 @app.get("/conta", response_class=HTMLResponse)

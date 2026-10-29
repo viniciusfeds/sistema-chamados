@@ -1030,6 +1030,130 @@ def test_admin_alertas_usuario_e_modelos_meta():
     assert "alerta_equipamento_offline" in a.get("/admin/whatsapp").text
 
 
+# ------------------------------------------------------------------ agente local (v1.7)
+def _api(c, caminho, corpo, token=None):
+    return c.post(caminho, json=corpo, headers={"Authorization": f"Bearer {token}"} if token else {})
+
+
+def test_agente_ativacao_e_sincronizacao(wa):
+    from app import agentes, regras
+    from app.models import Agente, AgenteLog, Ocorrencia
+    enviados, _ = wa
+    c = TestClient(app)
+    with SessionLocal() as db:
+        top = db.get(Cliente, IDS["top"])
+        chave = top.chave_agente
+        db.add(Unidade(nome="Top Torre B", cliente_id=top.id)); db.commit()
+    assert chave and chave.startswith("NXA-") and len(chave) == 23
+    # chave errada
+    r = _api(c, "/api/agente/ativar", {"chave": "NXA-AAAA-BBBB-CCCC-DDDD"})
+    assert r.status_code == 403 and "inválida" in r.json()["erro"]
+    # cliente com 2 unidades: pede a unidade
+    r = _api(c, "/api/agente/ativar", {"chave": chave.lower(), "hostname": "RECEPCAO-PC"})
+    assert r.status_code == 200 and {u["nome"] for u in r.json()["unidades"]} == {"Top Torre A", "Top Torre B"}
+    r = _api(c, "/api/agente/ativar", {"chave": chave, "unidade_id": IDS["torre"], "hostname": "RECEPCAO-PC",
+                                       "so": "Windows 11 Pro", "versao": "1.0.0", "ip_local": "192.168.0.10"})
+    d = r.json()
+    assert r.status_code == 200 and d["token"].startswith("nxt_") and d["unidade"] == "Top Torre A"
+    token = d["token"]
+    with SessionLocal() as db:
+        ag = db.get(Agente, d["agente_id"])
+        assert ag.equipamento.tipo == "agente" and ag.equipamento.monitor_endereco == "heartbeat"
+        assert ag.token_hash != token
+        cam = Equipamento(unidade_id=IDS["torre"], nome="Câmera Hall", tipo="camera", monitorar=True,
+                          monitor_endereco="agente", ip="192.168.0.50")
+        nvr = Equipamento(unidade_id=IDS["torre"], nome="NVR Hall", tipo="dvr", monitorar=True,
+                          monitor_endereco="agente", ip="192.168.0.51", monitor_porta=37777)
+        outra = Equipamento(unidade_id=IDS["carrao"], nome="Fora da unidade", tipo="camera", monitorar=True,
+                            monitor_endereco="agente", ip="10.0.0.9")
+        db.add_all([cam, nvr, outra]); db.commit(); cam, nvr, outra = cam.id, nvr.id, outra.id
+    # sem token / token inválido
+    assert _api(c, "/api/agente/sincronizar", {}).status_code == 401
+    assert _api(c, "/api/agente/sincronizar", {}, "nxt_errado").status_code == 401
+    # primeira sincronização: recebe a lista (só equipamentos desta unidade testados por agente)
+    r = _api(c, "/api/agente/sincronizar", {"versao": "1.0.0", "logs": [{"nivel": "info", "mensagem": "Agente iniciado"}]},
+             token)
+    lista = r.json()["equipamentos"]
+    assert {e["id"] for e in lista} == {cam, nvr} and next(e for e in lista if e["id"] == nvr)["porta"] == 37777
+    assert r.json()["intervalo_seg"] == 60
+    # resultados: câmera cai (2 ciclos), equipamento de outra unidade é ignorado
+    for _ in range(2):
+        _api(c, "/api/agente/sincronizar", {"resultados": [
+            {"id": cam, "ok": False, "erro": "Sem resposta ao ping"}, {"id": nvr, "ok": True, "ms": 3},
+            {"id": outra, "ok": False}]}, token)
+    with SessionLocal() as db:
+        assert db.get(Equipamento, cam).monitor_status == "offline"
+        assert db.get(Equipamento, nvr).monitor_status == "online" and db.get(Equipamento, nvr).monitor_ms == 3
+        assert db.get(Equipamento, outra).monitor_status is None
+        oc = db.scalar(select(Ocorrencia).where(Ocorrencia.equipamento_id == cam))
+        assert oc.status == "aberta" and oc.chamado.origem == "monitor"
+        assert db.scalar(select(AgenteLog).where(AgenteLog.mensagem == "Agente iniciado"))
+    # agente para de mandar notícias -> ele próprio vira offline (uma ocorrência para a unidade)
+    from datetime import timedelta
+    with SessionLocal() as db:
+        ag = db.get(Agente, d["agente_id"])
+        ag.ultimo_contato = ag.ultimo_contato - timedelta(minutes=30)
+        db.commit()
+        caidos = agentes.verificar_agentes(db)
+        assert [e.tipo for e in caidos] == ["agente"] and "sem contato" in caidos[0].monitor_erro
+        from app import ocorrencias
+        ocorrencias.processar(db, caidos, [])
+        db.commit()
+        agente_eq = ag.equipamento_id
+        e_cam = db.get(Equipamento, cam)
+        e_cam.monitor_ultima = e_cam.monitor_ultima - timedelta(minutes=30); db.commit()
+    tec = entrar("tec@t.com")
+    r = tec.get(f"/inventario?unidade={IDS['torre']}&monitor_st=monitorados")
+    assert "Sem dados" in r.text            # câmera: agente não manda resultado recente
+    # agente volta: normaliza a ocorrência dele
+    _api(c, "/api/agente/sincronizar", {"resultados": [{"id": cam, "ok": True, "ms": 2}]}, token)
+    with SessionLocal() as db:
+        assert db.get(Equipamento, agente_eq).monitor_status == "online"
+        assert db.scalar(select(Ocorrencia).where(Ocorrencia.equipamento_id == agente_eq)).status == "normalizada"
+        assert db.get(Equipamento, cam).monitor_status == "online"
+    # "Testar agora" não vale para equipamento do agente
+    r = tec.post(f"/inventario/{cam}/testar", data={"csrf": _csrf(tec.get(f"/inventario/{cam}").text)})
+    assert "testado pelo agente" in r.text
+    # admin vê o agente; desativar faz o token parar de valer
+    a = entrar("admin@t.com")
+    r = a.get("/admin/agentes")
+    assert "RECEPCAO-PC" in r.text and "Online" in r.text and "Agente iniciado" in r.text
+    a.post(f"/admin/agentes/{d['agente_id']}", data={"operacao": "alternar", "csrf": _csrf(r.text)})
+    assert _api(c, "/api/agente/sincronizar", {}, token).status_code == 401
+    # reinstalar no mesmo PC reaproveita o agente e reativa
+    r = _api(c, "/api/agente/ativar", {"chave": chave, "unidade_id": IDS["torre"], "hostname": "RECEPCAO-PC"})
+    assert r.json()["agente_id"] == d["agente_id"]
+    assert _api(c, "/api/agente/sincronizar", {}, r.json()["token"]).status_code == 200
+    # nova chave do cliente: a antiga não ativa mais
+    tok = _csrf(a.get("/admin").text)
+    a.post(f"/admin/clientes/{IDS['top']}", data={"operacao": "nova_chave", "csrf": tok})
+    assert _api(c, "/api/agente/ativar", {"chave": chave, "unidade_id": IDS["torre"]}).status_code == 403
+    assert entrar("tec@t.com").get("/admin/agentes").status_code == 403
+
+
+def test_agente_downloads():
+    import io
+    import zipfile
+    a = entrar("admin@t.com")
+    for so, esperados in (("windows", {"Instalar.bat", "instalar.ps1", "NexusAgente.ps1", "Desinstalar.bat",
+                                       "Ver status.bat", "LEIA-ME.txt"}),
+                          ("linux", {"nexus_agente.py", "instalar.sh", "desinstalar.sh", "LEIA-ME.txt"})):
+        r = a.get(f"/admin/agentes/download/{so}")
+        assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        nomes = {n.split("/", 1)[1] for n in z.namelist()}
+        assert nomes == esperados, nomes
+        for n in z.namelist():
+            dados = z.read(n)
+            assert b"__NEXUS_URL__" not in dados and b"__NEXUS_VERSAO__" not in dados
+        if so == "windows":
+            for arq in ("NexusAgente.ps1", "instalar.ps1"):   # UTF-8 com BOM: acentos certos no PowerShell 5.1
+                assert z.read(next(n for n in z.namelist() if n.endswith(arq))).startswith(b"\xef\xbb\xbf")
+            assert b"$Servidor = 'http://testserver'" in z.read(next(n for n in z.namelist() if n.endswith("instalar.ps1")))
+    assert entrar("tec@t.com").get("/admin/agentes/download/windows").status_code == 403
+    assert a.get("/admin/agentes/download/mac").status_code == 404
+
+
 # ------------------------------------------------------------------ configurações pela tela (v1.6) — manter por último
 def _form_config(c, **mudar):
     from app import ajustes

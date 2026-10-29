@@ -36,12 +36,14 @@
   <div class="grid2">
     <div class="campo"><label for="monitor_endereco">Testar pelo</label>
       <select id="monitor_endereco" name="monitor_endereco">
-        <option value="externo" {{ 'selected' if (d.monitor_endereco or 'externo') == 'externo' }}>IP externo / DDNS (pela internet)</option>
+        <option value="agente" {{ 'selected' if (d.monitor_endereco or 'agente') in ('agente', 'heartbeat') }}>Agente local da unidade (recomendado, sem liberar portas)</option>
+        <option value="externo" {{ 'selected' if d.monitor_endereco == 'externo' }}>IP externo / DDNS (pela internet)</option>
         <option value="interno" {{ 'selected' if d.monitor_endereco == 'interno' }}>IP interno (mesma rede do servidor)</option></select></div>
-    <div class="campo"><label for="monitor_porta">Porta a testar</label>
+    <div class="campo"><label for="monitor_porta">Porta a testar <span class="muted">(pelo agente é opcional: vazio = ping)</span></label>
       <input id="monitor_porta" name="monitor_porta" inputmode="numeric" maxlength="5" value="{{ d.monitor_porta or '' }}" placeholder="Ex.: 80, 37777, 8000" class="mono"></div>
   </div>
-  <div class="dica">A cada {{ config.MONITOR_INTERVALO_MIN }} min o sistema tenta conectar nesse endereço e porta. Use uma porta liberada (redirecionada) no roteador do cliente.</div>
+  <div class="dica"><b>Agente local:</b> testa o IP interno a cada {{ config.AGENTE_INTERVALO_SEG }} s, de dentro da rede da unidade (instale o agente em <a href="/admin/agentes">Administração → Agentes</a>).
+    <b>IP externo:</b> o servidor testa a cada {{ config.MONITOR_INTERVALO_MIN }} min e a porta precisa estar redirecionada no roteador.</div>
 </fieldset>
 <div class="grid2">
   <div class="campo"><label for="usuario">Usuário de acesso</label><input id="usuario" name="usuario" maxlength="120" value="{{ d.usuario or '' }}" autocomplete="off" placeholder="Ex.: admin"></div>
@@ -105,12 +107,15 @@
 <div class="card" id="monitor">
   <div class="cab" style="margin-bottom:6px">
     <h2 style="margin:0">Monitoramento</h2>
+    {% if eq.pelo_servidor %}
     <form method="post" action="/inventario/{{ eq.id }}/testar"><input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn peq sec">Testar agora</button></form>
+    {% elif eq.monitor_endereco == 'heartbeat' %}<a class="btn peq sec" href="/admin/agentes">Ver agente</a>
+    {% else %}<span class="tag">testado pelo agente da unidade</span>{% endif %}
   </div>
   {% set alvo = eq.alvo_monitor %}
   <p style="margin:4px 0 10px">{{ status_monitor(eq) }}
-    <span class="muted">{% if alvo %}<span class="mono">{{ alvo[0] }}:{{ alvo[1] }}</span>{% endif %}
+    <span class="muted">{% if alvo %}<span class="mono">{{ eq.alvo_texto }}</span>{% endif %}
     {% if eq.monitor_desde %} · desde {{ eq.monitor_desde|local }} ({{ duracao(eq.monitor_desde) }}){% endif %}
     {% if eq.monitor_ms is not none %} · {{ eq.monitor_ms }} ms{% endif %}
     {% if eq.monitor_ultima %} · último teste {{ eq.monitor_ultima|local }}{% endif %}</span></p>

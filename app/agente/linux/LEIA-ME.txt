@@ -1,0 +1,21 @@
+NEXUS AGENTE __NEXUS_VERSAO__ - Linux (mini PC, Raspberry Pi, servidor)
+=====================================================================
+
+O agente testa, pela rede interna da unidade, os equipamentos cadastrados no Nexus Desk
+e envia os resultados para o Nexus (só conexão de saída: nenhuma porta precisa ser
+liberada no roteador).
+
+INSTALAR (Debian, Ubuntu, Raspberry Pi OS e similares)
+  sudo sh instalar.sh
+  -> digite a CHAVE DE ATIVAÇÃO do cliente (Nexus Desk > Administração > Clientes)
+  -> escolha a unidade
+O serviço "nexus-agente" inicia sozinho com o sistema.
+
+CONFERIR
+  systemctl status nexus-agente
+  sudo NEXUS_DADOS=/etc/nexus-agente python3 /opt/nexus-agente/nexus_agente.py status
+
+REMOVER
+  sudo sh desinstalar.sh
+
+Requisitos: python3 (3.8+) e ping (iputils-ping). Servidor: __NEXUS_URL__

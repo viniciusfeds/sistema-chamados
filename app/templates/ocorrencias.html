@@ -51,7 +51,7 @@
     {% if oc.fim %}<span>Fim: {{ oc.fim|local }}</span>{% endif %}
     {% if oc.motivo %}<span>Motivo: {{ oc.motivo }}</span>{% endif %}
     {% if oc.quedas and oc.quedas > 1 %}<span class="tag alerta">caiu {{ oc.quedas }} vezes</span>{% endif %}
-    {% if e.alvo_monitor %}<span class="mono">{{ e.alvo_monitor[0] }}:{{ e.alvo_monitor[1] }}</span>{% endif %}
+    {% if e.alvo_monitor %}<span class="mono">{{ e.alvo_texto }}</span>{% endif %}
   </div>
   <div class="oc-acoes">
     {% if oc.chamado %}

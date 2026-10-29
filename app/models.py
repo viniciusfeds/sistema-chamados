@@ -29,6 +29,12 @@ def novo_token(n=16):
     return secrets.token_urlsafe(n)
 
 
+def nova_chave_agente():
+    """Chave de ativação do agente local, ex.: NXA-7K2Q-M9PD-4XTB-H3WN (sem letras ambíguas)."""
+    alfa = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "NXA-" + "-".join("".join(secrets.choice(alfa) for _ in range(4)) for _ in range(4))
+
+
 class Cliente(Base):
     __tablename__ = "clientes"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -37,6 +43,8 @@ class Cliente(Base):
     slug_publico: Mapped[str] = mapped_column(String(80), unique=True, index=True, default=novo_token)
     abertura_publica: Mapped[bool] = mapped_column(Boolean, default=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    chave_agente: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True,
+                                                     default=nova_chave_agente)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     unidades = relationship("Unidade", back_populates="cliente", order_by="Unidade.nome")
 
@@ -278,6 +286,7 @@ TIPOS_EQUIPAMENTO = {
     "computador": "Computador / Notebook",
     "impressora": "Impressora",
     "audio": "Áudio / Caixa de som",
+    "agente": "Agente Nexus (monitoramento local)",
     "outro": "Outro",
 }
 
@@ -312,7 +321,9 @@ class Equipamento(Base):
     # monitoramento (v1.4): teste de conexão TCP em endereço:porta a cada MONITOR_INTERVALO_MIN
     monitorar: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     monitor_porta: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    monitor_endereco: Mapped[str | None] = mapped_column(String(10), nullable=True, default="externo")  # externo/interno
+    # externo/interno: testado pelo servidor · agente: testado pelo agente local da unidade ·
+    # heartbeat: o próprio agente (online enquanto ele manda notícias)
+    monitor_endereco: Mapped[str | None] = mapped_column(String(10), nullable=True, default="agente")
     monitor_status: Mapped[str | None] = mapped_column(String(12), nullable=True)   # online / offline / None
     monitor_desde: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC, início do status atual
     monitor_ultima: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC, último teste
@@ -341,9 +352,34 @@ class Equipamento(Base):
 
     @property
     def alvo_monitor(self):
-        """(host, porta) testado no monitoramento, ou None se faltar dado."""
-        host = self.ip if self.monitor_endereco == "interno" else (self.ip_externo or None)
+        """(host, porta) testado no monitoramento, ou None se faltar dado. Pelo agente a porta é
+        opcional (sem porta = ping)."""
+        modo = self.monitor_endereco or "externo"
+        if modo == "heartbeat":
+            return ("agente", None)
+        if modo == "agente":
+            return (self.ip, self.monitor_porta) if self.ip else None
+        host = self.ip if modo == "interno" else (self.ip_externo or None)
         return (host, self.monitor_porta) if host and self.monitor_porta else None
+
+    @property
+    def pelo_servidor(self):
+        return (self.monitor_endereco or "externo") in ("externo", "interno")
+
+    @property
+    def alvo_texto(self):
+        a = self.alvo_monitor
+        if not a:
+            return ""
+        if self.monitor_endereco == "heartbeat":
+            return "contato do agente"
+        return f"{a[0]}:{a[1]}" if a[1] else f"ping {a[0]}"
+
+    def sem_dados(self, agora_utc, limite_min):
+        """Testado pelo agente, mas sem resultado recente (agente parado ou unidade sem internet)."""
+        if not self.monitorar or self.monitor_endereco != "agente":
+            return False
+        return self.monitor_ultima is None or (agora_utc - self.monitor_ultima).total_seconds() > limite_min * 60
 
     @property
     def tem_senha(self):
@@ -443,3 +479,38 @@ class Configuracao(Base):
     chave: Mapped[str] = mapped_column(String(60), primary_key=True)
     valor: Mapped[str | None] = mapped_column(Text, nullable=True)
     atualizado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+# ------------------------------------------------------------------ agente local (v1.7)
+class Agente(Base):
+    """Agente instalado na rede de uma unidade: testa os equipamentos localmente e envia ao Nexus."""
+    __tablename__ = "agentes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades.id"), index=True)
+    equipamento_id: Mapped[int | None] = mapped_column(ForeignKey("equipamentos.id", ondelete="SET NULL"),
+                                                       nullable=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    hostname: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    so: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    versao: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ip_local: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ip_publico: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ativado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ultimo_contato: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    unidade = relationship("Unidade")
+    equipamento = relationship("Equipamento")
+    logs = relationship("AgenteLog", back_populates="agente", cascade="all, delete-orphan",
+                        order_by="AgenteLog.id.desc()")
+
+
+class AgenteLog(Base):
+    __tablename__ = "agentes_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agente_id: Mapped[int] = mapped_column(ForeignKey("agentes.id", ondelete="CASCADE"), index=True)
+    nivel: Mapped[str] = mapped_column(String(10), default="info")
+    mensagem: Mapped[str] = mapped_column(String(500))
+    quando: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # hora do agente (UTC)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    agente = relationship("Agente", back_populates="logs")

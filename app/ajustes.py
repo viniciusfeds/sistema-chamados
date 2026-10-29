@@ -58,6 +58,11 @@ SECOES = [
         Campo("MONITOR_FALHAS", "Falhas seguidas para considerar offline", "int",
               "Evita alarme falso por uma oscilação rápida.", minimo=1, maximo=10),
         Campo("MONITOR_TIMEOUT", "Tempo de espera de cada teste (segundos)", "num", minimo=1, maximo=30),
+        Campo("AGENTE_INTERVALO_SEG", "Agente local: testar a cada (segundos)", "int",
+              "Vale para os equipamentos testados pelo agente instalado na unidade.", minimo=15, maximo=3600),
+        Campo("AGENTE_OFFLINE_MIN", "Agente local: offline após (minutos sem contato)", "int",
+              "Sem notícias do agente nesse tempo, abre ocorrência (unidade sem internet ou PC desligado).",
+              minimo=2, maximo=120),
     ]),
     ("ocorrencias", "Ocorrências e chamado automático", "O que acontece quando um equipamento monitorado cai.", [
         Campo("MONITOR_ABRIR_CHAMADO", "Abrir chamado automático quando cair", "bool"),

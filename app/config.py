@@ -52,6 +52,9 @@ MONITOR_ATIVO = os.environ.get("MONITOR_ATIVO", "1") == "1"
 MONITOR_INTERVALO_MIN = max(1, int(os.environ.get("MONITOR_INTERVALO_MIN", "5")))
 MONITOR_FALHAS = max(1, int(os.environ.get("MONITOR_FALHAS", "2")))   # falhas seguidas para ficar offline
 MONITOR_TIMEOUT = float(os.environ.get("MONITOR_TIMEOUT", "4"))
+# Agente local (v1.7)
+AGENTE_INTERVALO_SEG = int(os.environ.get("AGENTE_INTERVALO_SEG", "60"))   # ciclo de testes do agente
+AGENTE_OFFLINE_MIN = int(os.environ.get("AGENTE_OFFLINE_MIN", "5"))        # sem notícias => agente offline
 # Ocorrências (v1.5): chamado automático quando um equipamento monitorado cai
 MONITOR_ABRIR_CHAMADO = os.environ.get("MONITOR_ABRIR_CHAMADO", "1") == "1"
 MONITOR_PRIORIDADE = os.environ.get("MONITOR_PRIORIDADE", "alta")

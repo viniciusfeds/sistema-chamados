@@ -66,15 +66,17 @@ def registrar(db, eq: Equipamento, ok: bool, ms, erro, agora=None):
 
 
 def verificar_todos():
+    from . import agentes
     with SessionLocal() as db:
         lista = db.scalars(select(Equipamento).where(Equipamento.ativo, Equipamento.monitorar)).all()
-        alvos = [(eq, eq.alvo_monitor) for eq in lista if eq.alvo_monitor]
-        if not alvos:
-            return 0
-        with ThreadPoolExecutor(max_workers=min(16, len(alvos))) as ex:
-            resultados = list(ex.map(lambda a: testar(*a[1]), alvos))
+        # o servidor só testa os de IP externo/interno; os demais são testados pelo agente da unidade
+        alvos = [(eq, eq.alvo_monitor) for eq in lista if eq.pelo_servidor and eq.alvo_monitor]
+        resultados = []
+        if alvos:
+            with ThreadPoolExecutor(max_workers=min(16, len(alvos))) as ex:
+                resultados = list(ex.map(lambda a: testar(*a[1]), alvos))
         agora = _agora()
-        caidos, voltaram = [], []
+        caidos, voltaram = agentes.verificar_agentes(db, agora), []
         for (eq, _), (ok, ms, erro) in zip(alvos, resultados):
             mud = registrar(db, eq, ok, ms, erro, agora)
             (caidos if mud == "offline" else voltaram if mud == "online" else []).append(eq)
@@ -85,6 +87,9 @@ def verificar_todos():
 
 
 def verificar_um(db, eq: Equipamento):
+    if eq.monitor_endereco in ("agente", "heartbeat"):
+        raise ValueError("Este equipamento é testado pelo agente instalado na unidade; o resultado chega a cada "
+                         f"{config.AGENTE_INTERVALO_SEG} s.")
     if not eq.alvo_monitor:
         raise ValueError("Informe o endereço e a porta a monitorar.")
     ok, ms, erro = testar(*eq.alvo_monitor)

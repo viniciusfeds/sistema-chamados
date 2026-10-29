@@ -61,7 +61,7 @@ def _completar_dados():
 
     from sqlalchemy import select
 
-    from .models import TIPOS_CHAMADO_PADRAO, Chamado, Cliente, TipoChamado, Unidade, novo_token
+    from .models import TIPOS_CHAMADO_PADRAO, Chamado, Cliente, TipoChamado, Unidade, nova_chave_agente, novo_token
     with SessionLocal() as db:
         sem_cliente = db.scalars(select(Unidade).where(Unidade.cliente_id.is_(None))).all()
         if sem_cliente:
@@ -74,6 +74,8 @@ def _completar_dados():
                 un.cliente_id = cli.id
         for ch in db.scalars(select(Chamado).where(Chamado.token_publico.is_(None))).all():
             ch.token_publico = novo_token(18)
+        for cli in db.scalars(select(Cliente).where(Cliente.chave_agente.is_(None))).all():
+            cli.chave_agente = nova_chave_agente()
         for ch in db.scalars(select(Chamado).where(Chamado.origem.is_(None))).all():
             ch.origem = "sistema"
         if not db.scalar(select(TipoChamado.id).limit(1)):

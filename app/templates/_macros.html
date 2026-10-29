@@ -79,6 +79,7 @@
 
 {% macro status_monitor(e) -%}
 {% if not e.monitorar %}<span class="muted">—</span>
+{% elif sem_dados(e) %}<span class="mon mon-aguardando" title="O agente da unidade não envia resultados há alguns minutos">Sem dados</span>
 {% elif e.monitor_status == 'online' %}<span class="mon mon-online">Online</span>
 {% elif e.monitor_status == 'offline' %}<span class="mon mon-offline">Offline</span>
 {% else %}<span class="mon mon-aguardando">Aguardando teste</span>{% endif %}
