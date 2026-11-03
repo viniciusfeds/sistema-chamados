@@ -1,0 +1,8 @@
+Coloque aqui os certificados usados pelo Nexus Desk (esta pasta NAO vai para o GitHub):
+
+  inter.crt / inter.key   -> certificado da integração do Banco Inter
+                             (no .env: INTER_CERT_ARQUIVO=certificados/inter.crt
+                                       INTER_CHAVE_ARQUIVO=certificados/inter.key)
+
+A pasta é montada no container como somente leitura (docker-compose.yml).
+Depois de trocar um arquivo, rode:  docker compose up -d

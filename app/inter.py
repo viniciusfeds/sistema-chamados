@@ -50,7 +50,23 @@ def cert_paths():
     return PASTA / "cert.crt", PASTA / "cert.key.enc"
 
 
+def _arq_env(nome):
+    v = (nome or "").strip()
+    if not v:
+        return None
+    p = Path(v)
+    return p if p.is_absolute() else config.BASE_DIR / p
+
+
+def cert_env():
+    """(crt, key) informados no .env (INTER_CERT_ARQUIVO / INTER_CHAVE_ARQUIVO), se existirem."""
+    c, k = _arq_env(config.INTER_CERT_ARQUIVO), _arq_env(config.INTER_CHAVE_ARQUIVO)
+    return (c, k) if c and k and c.exists() and k.exists() else None
+
+
 def certificado_salvo() -> bool:
+    if cert_env():
+        return True
     c, k = cert_paths()
     return c.exists() and k.exists()
 
@@ -69,13 +85,14 @@ def salvar_certificado(crt: bytes, key: bytes):
 
 
 def info_certificado() -> dict:
-    c, _ = cert_paths()
+    env = cert_env()
+    c = env[0] if env else cert_paths()[0]
     if not c.exists():
         return {}
     try:
         from cryptography import x509
         cert = x509.load_pem_x509_certificate(c.read_bytes())
-        return {"sujeito": cert.subject.rfc4514_string()[:160],
+        return {"sujeito": cert.subject.rfc4514_string()[:160], "origem": "arquivo do .env" if env else "enviado pela tela",
                 "validade": cert.not_valid_after_utc.date() if hasattr(cert, "not_valid_after_utc")
                 else cert.not_valid_after.date()}
     except Exception:  # noqa: BLE001
@@ -83,9 +100,22 @@ def info_certificado() -> dict:
 
 
 def _contexto():
+    env = cert_env()
+    if env:                                   # arquivos apontados no .env (chave em texto, só leitura)
+        c, k = env
+        chave = ("env", str(c), c.stat().st_mtime, k.stat().st_mtime)
+        if _ctx["chave"] != chave:
+            ctx = ssl.create_default_context()
+            try:
+                ctx.load_cert_chain(str(c), str(k))
+            except (ssl.SSLError, OSError) as e:
+                raise ErroInter(f"Certificado do .env inválido ou não combina com a chave: {e}")
+            _ctx.update(chave=chave, ctx=ctx)
+        return _ctx["ctx"]
     c, k = cert_paths()
     if not certificado_salvo():
-        raise ErroInter("Envie o certificado do Inter (.crt e .key) em Financeiro → Banco Inter.")
+        raise ErroInter("Envie o certificado do Inter (.crt e .key) em Financeiro → Banco Inter, "
+                        "ou aponte os arquivos no .env (INTER_CERT_ARQUIVO / INTER_CHAVE_ARQUIVO).")
     chave = (c.stat().st_mtime, k.stat().st_mtime)
     if _ctx["chave"] != chave:
         import os

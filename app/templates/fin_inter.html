@@ -31,12 +31,14 @@
 <form class="card" method="post" action="/financeiro/inter/certificado" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <h2>3. Certificado da integração</h2>
-  {% if cert_ok %}<p>✔ Certificado salvo{% if cert.validade %} · válido até <b>{{ cert.validade|data }}</b>{% endif %}<br><span class="muted mono" style="font-size:.8rem">{{ cert.sujeito }}</span></p>{% endif %}
+  {% if cert_ok %}<p>✔ Certificado {{ cert.origem or 'salvo' }}{% if cert.validade %} · válido até <b>{{ cert.validade|data }}</b>{% endif %}<br><span class="muted mono" style="font-size:.8rem">{{ cert.sujeito }}</span></p>{% endif %}
   <div class="grid2">
     <div class="campo"><label>Certificado (.crt)</label><input type="file" name="crt" accept=".crt,.pem,.cer" required></div>
     <div class="campo"><label>Chave privada (.key)</label><input type="file" name="key" accept=".key,.pem" required></div>
   </div>
-  <p class="dica">A chave fica guardada criptografada no servidor. Quando o Inter renovar o certificado, envie os arquivos novos aqui.</p>
+  <p class="dica">A chave fica guardada criptografada no servidor. Quando o Inter renovar o certificado, envie os arquivos novos aqui.
+    <br>Alternativa: coloque os arquivos na pasta <span class="mono">certificados</span> (ao lado do <span class="mono">.env</span>) e informe
+    <span class="mono">INTER_CERT_ARQUIVO</span> e <span class="mono">INTER_CHAVE_ARQUIVO</span> no <span class="mono">.env</span> — nesse caso o arquivo do .env tem prioridade.</p>
   <button class="btn">{{ 'Trocar certificado' if cert_ok else 'Enviar certificado' }}</button>
 </form>
 

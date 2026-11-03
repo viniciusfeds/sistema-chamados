@@ -13,6 +13,7 @@ services:
       - "${PORTA:-9000}:${PORTA:-9000}"   # faixa liberada: 9000–9100
     volumes:
       - chamados_dados:/app/dados
+      - ./certificados:/app/certificados:ro   # certificado do Inter (e, depois, o A1 das notas)
 
   # --- Opcional: PostgreSQL em vez de SQLite -------------------------------
   # Suba com:  docker compose --profile postgres up -d --build

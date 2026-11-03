@@ -114,6 +114,9 @@ INTER_CLIENT_SECRET = os.environ.get("INTER_CLIENT_SECRET", "")
 INTER_CONTA = os.environ.get("INTER_CONTA", "")                         # x-conta-corrente (opcional)
 INTER_DIAS_AGENDA = int(os.environ.get("INTER_DIAS_AGENDA", "30"))      # dias após o vencimento até expirar
 INTER_WEBHOOK_TOKEN = os.environ.get("INTER_WEBHOOK_TOKEN", "")
+# Certificado do Inter direto por arquivo (alternativa ao envio pela tela). Caminho relativo à pasta do sistema.
+INTER_CERT_ARQUIVO = os.environ.get("INTER_CERT_ARQUIVO", "")
+INTER_CHAVE_ARQUIVO = os.environ.get("INTER_CHAVE_ARQUIVO", "")
 
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")

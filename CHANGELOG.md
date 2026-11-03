@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.9.1 — 2026-11-03
+- Tudo do faturamento e do Banco Inter também pode ir no **.env** (veja `.env.example`): dados da empresa,
+  padrões de orçamento/cobrança, credenciais do Inter e **certificado por arquivo**
+  (`INTER_CERT_ARQUIVO` / `INTER_CHAVE_ARQUIVO`, na nova pasta `certificados/`, montada só leitura no container)
+- Valores salvos pela tela de Configurações continuam tendo prioridade sobre o .env
+
 ## 1.9.0 — 2026-11-03
 - **Boleto com PIX pelo Banco Inter** (API Cobrança v3, certificado mTLS):
   - *Financeiro → Banco Inter*: passo a passo, envio do certificado (.crt/.key — a chave fica criptografada),
