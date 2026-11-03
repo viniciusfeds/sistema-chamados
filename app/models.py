@@ -644,6 +644,7 @@ class Orcamento(Base):
     observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
     desconto: Mapped[int] = mapped_column(Integer, default=0)                   # centavos, sobre o total
     imposto_servicos_pct: Mapped[float] = mapped_column(default=0)
+    imposto_produtos_pct: Mapped[float | None] = mapped_column(nullable=True, default=0)
     token_publico: Mapped[str] = mapped_column(String(40), unique=True, default=lambda: novo_token(18))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     respondido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -678,8 +679,16 @@ class Orcamento(Base):
         return self._soma("produto")
 
     @property
-    def impostos(self):
+    def impostos_servicos(self):
         return round(self.total_servicos * (self.imposto_servicos_pct or 0) / 100)
+
+    @property
+    def impostos_produtos(self):
+        return round(self.total_produtos * (self.imposto_produtos_pct or 0) / 100)
+
+    @property
+    def impostos(self):
+        return self.impostos_produtos + self.impostos_servicos
 
     @property
     def total(self):

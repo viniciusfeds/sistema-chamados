@@ -138,7 +138,8 @@ def orc_novo(request: Request, chamado: str = "", cliente: str = "", u: Usuario 
              db: Session = Depends(get_db)):
     o = Orcamento(numero=0, titulo="", status="rascunho", emissao=hoje(), validade_dias=config.ORC_VALIDADE_DIAS,
                   condicoes=config.ORC_CONDICOES, garantia=config.ORC_GARANTIA, observacoes=config.ORC_OBSERVACOES,
-                  imposto_servicos_pct=config.ORC_IMPOSTO_SERVICOS_PCT, desconto=0, itens=[])
+                  imposto_servicos_pct=config.ORC_IMPOSTO_SERVICOS_PCT,
+                  imposto_produtos_pct=config.ORC_IMPOSTO_PRODUTOS_PCT, desconto=0, itens=[])
     ch = db.scalar(select(Chamado).where(Chamado.numero == _int(chamado))) if _int(chamado) else None
     if ch:
         o.chamado_id, o.chamado, o.unidade_id = ch.id, ch, ch.unidade_id
@@ -189,6 +190,7 @@ async def orc_salvar(request: Request, u: Usuario = Depends(so_admin), db: Sessi
         o.condicoes, o.garantia, o.observacoes = _opt(f.get("condicoes")), _opt(f.get("garantia")), _opt(f.get("observacoes"))
         o.desconto = centavos(f.get("desconto"))
         o.imposto_servicos_pct = max(0.0, min(50.0, financeiro.numero(f.get("imposto_servicos_pct"), 0)))
+        o.imposto_produtos_pct = max(0.0, min(50.0, financeiro.numero(f.get("imposto_produtos_pct"), 0)))
         tipos, descs, qtds = f.getlist("item_tipo"), f.getlist("item_desc"), f.getlist("item_qtd")
         uns, vals, cats = f.getlist("item_un"), f.getlist("item_valor"), f.getlist("item_cat")
         custos, margens = f.getlist("item_custo"), f.getlist("item_margem")
@@ -280,6 +282,7 @@ def orc_duplicar(request: Request, numero: int, u: Usuario = Depends(so_admin), 
                   unidade_id=o.unidade_id, chamado_id=o.chamado_id, emissao=hoje(), validade_dias=o.validade_dias,
                   prazo_execucao=o.prazo_execucao, condicoes=o.condicoes, garantia=o.garantia,
                   observacoes=o.observacoes, desconto=o.desconto, imposto_servicos_pct=o.imposto_servicos_pct,
+                  imposto_produtos_pct=o.imposto_produtos_pct,
                   itens=[ItemOrcamento(ordem=i.ordem, tipo=i.tipo, descricao=i.descricao, unidade=i.unidade,
                                        quantidade=i.quantidade, valor_unitario=i.valor_unitario,
                                        custo_unitario=i.custo_unitario, margem=i.margem,

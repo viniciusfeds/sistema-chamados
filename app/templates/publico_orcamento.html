@@ -21,7 +21,8 @@
   {% endif %}{% endfor %}
   <div class="totais" style="margin-top:12px">
     {% if o.total_produtos and o.total_servicos %}<div><span>Produtos</span><span>{{ o.total_produtos|brl }}</span></div><div><span>Serviços</span><span>{{ o.total_servicos|brl }}</span></div>{% endif %}
-    {% if o.impostos %}<div><span>Impostos sobre serviços ({{ o.imposto_servicos_pct|qtd }}%)</span><span>{{ o.impostos|brl }}</span></div>{% endif %}
+    {% if o.impostos_produtos %}<div><span>Impostos sobre produtos ({{ o.imposto_produtos_pct|qtd }}%)</span><span>{{ o.impostos_produtos|brl }}</span></div>{% endif %}
+    {% if o.impostos_servicos %}<div><span>Impostos sobre serviços ({{ o.imposto_servicos_pct|qtd }}%)</span><span>{{ o.impostos_servicos|brl }}</span></div>{% endif %}
     {% if o.desconto %}<div><span>Desconto</span><span>– {{ o.desconto|brl }}</span></div>{% endif %}
     <div class="total"><span>Total</span><span>{{ o.total|brl }}</span></div>
   </div>

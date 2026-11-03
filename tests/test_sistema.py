@@ -1587,3 +1587,14 @@ def test_custo_e_margem_nao_vao_para_o_cliente():
     if shutil.which("pdftotext"):
         texto = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
         assert "700,00" in texto and "500,00" not in texto and "Custo" not in texto
+
+
+def test_imposto_sobre_produtos_e_servicos():
+    from app.models import ItemOrcamento, Orcamento
+    o = Orcamento(numero=1, titulo="x", emissao=date.today(), imposto_produtos_pct=10, imposto_servicos_pct=5, desconto=0,
+                  itens=[ItemOrcamento(tipo="produto", descricao="a", quantidade=2, valor_unitario=10000),
+                         ItemOrcamento(tipo="servico", descricao="b", quantidade=1, valor_unitario=40000)])
+    assert (o.impostos_produtos, o.impostos_servicos, o.total) == (2000, 2000, 64000)
+    so_prod = Orcamento(numero=2, titulo="y", emissao=date.today(), imposto_produtos_pct=8, imposto_servicos_pct=0,
+                        desconto=0, itens=[ItemOrcamento(tipo="produto", descricao="a", quantidade=1, valor_unitario=50000)])
+    assert so_prod.impostos == 4000 and so_prod.total == 54000

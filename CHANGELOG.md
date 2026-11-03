@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.12.1 — 2026-11-03
+- Orçamento: **imposto sobre produtos** além do imposto sobre serviços (antes só serviços tinham imposto, e um
+  orçamento só de produtos ficava sem). Cada um com padrão em Configurações → Orçamentos e cobrança, linhas separadas
+  no PDF e na página do cliente, e aviso no editor quando a % não se aplica
+
 ## 1.12.0 — 2026-11-03
 - **Preço de compra e margem** (uso interno — nunca aparecem para o cliente):
   - Catálogo: preço de compra + margem sobre o custo calculam o preço de venda; digitar o preço de venda recalcula a

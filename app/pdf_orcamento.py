@@ -132,8 +132,10 @@ def pdf_orcamento(orc) -> bytes:
     tot = []
     if orc.total_produtos and orc.total_servicos:
         tot += [("Equipamentos e materiais", brl(orc.total_produtos)), ("Serviços", brl(orc.total_servicos))]
-    if orc.impostos:
-        tot.append((f"Impostos sobre serviços ({qtd_fmt(orc.imposto_servicos_pct)}%)", brl(orc.impostos)))
+    if orc.impostos_produtos:
+        tot.append((f"Impostos sobre produtos ({qtd_fmt(orc.imposto_produtos_pct)}%)", brl(orc.impostos_produtos)))
+    if orc.impostos_servicos:
+        tot.append((f"Impostos sobre serviços ({qtd_fmt(orc.imposto_servicos_pct)}%)", brl(orc.impostos_servicos)))
     if orc.desconto:
         tot.append(("Desconto", "– " + brl(orc.desconto)))
     tb = Table([[Paragraph(a, sTot), Paragraph(b, sTot)] for a, b in tot] +

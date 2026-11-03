@@ -130,8 +130,9 @@
   {% endif %}
 
   <div class="grid2" style="align-items:start;margin-top:10px">
-    <div class="grid2">
-      <div class="campo"><label>Impostos sobre serviços (%)</label><input name="imposto_servicos_pct" id="imp" value="{{ o.imposto_servicos_pct|qtd }}" inputmode="decimal"></div>
+    <div class="grid3">
+      <div class="campo"><label>Impostos s/ produtos (%)</label><input name="imposto_produtos_pct" id="imp-p" value="{{ (o.imposto_produtos_pct or 0)|qtd }}" inputmode="decimal"></div>
+      <div class="campo"><label>Impostos s/ serviços (%)</label><input name="imposto_servicos_pct" id="imp" value="{{ o.imposto_servicos_pct|qtd }}" inputmode="decimal"></div>
       <div class="campo"><label>Desconto (R$)</label><input name="desconto" id="desc" value="{{ o.desconto|brl_num if o.desconto else '' }}" inputmode="decimal"></div>
     </div>
     <div><div class="totais" id="totais"></div>
@@ -207,11 +208,18 @@
       if (cu) { custoT += Math.round(q * Math.round(num(cu) * 100)); vendaC += t; comCusto++; } else if (tr.querySelector('[name=item_desc]').value.trim()) semCusto++;
       if (tr.querySelector('[name=item_tipo]').value === 'produto') prod += t; else serv += t;
     });
-    var imp = Math.round(serv * num(document.getElementById('imp').value) / 100), desc = Math.round(num(document.getElementById('desc').value) * 100);
+    var impP = Math.round(prod * num(document.getElementById('imp-p').value) / 100),
+        impS = Math.round(serv * num(document.getElementById('imp').value) / 100), imp = impP + impS,
+        desc = Math.round(num(document.getElementById('desc').value) * 100);
     var tot = Math.max(0, serv + prod + imp - desc), h = '';
     if (prod) h += '<div><span>Produtos</span><span>' + brl(prod) + '</span></div>';
     if (serv) h += '<div><span>Serviços</span><span>' + brl(serv) + '</span></div>';
-    if (imp) h += '<div><span>Impostos sobre serviços</span><span>' + brl(imp) + '</span></div>';
+    if (impP) h += '<div><span>Impostos sobre produtos</span><span>' + brl(impP) + '</span></div>';
+    if (impS) h += '<div><span>Impostos sobre serviços</span><span>' + brl(impS) + '</span></div>';
+    var pctP = num(document.getElementById('imp-p').value), pctS = num(document.getElementById('imp').value);
+    if ((pctP && !prod) || (pctS && !serv)) h += '<div class="muted" style="font-size:.82rem">' +
+      (pctS && !serv ? 'Sem serviços: o imposto sobre serviços não se aplica. ' : '') +
+      (pctP && !prod ? 'Sem produtos: o imposto sobre produtos não se aplica.' : '') + '</div>';
     if (desc) h += '<div><span>Desconto</span><span>– ' + brl(desc) + '</span></div>';
     document.getElementById('totais').innerHTML = h + '<div class="total"><span>Total</span><span>' + brl(tot) + '</span></div>';
     var an = document.getElementById('analise');
