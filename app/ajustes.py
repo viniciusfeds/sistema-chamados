@@ -50,6 +50,9 @@ SECOES = [
         Campo("ALERTA_HORAS_NORMAL", "Parado após (h) — Normal", "int", minimo=1, maximo=2000),
         Campo("ALERTA_HORAS_BAIXA", "Parado após (h) — Baixa", "int", minimo=1, maximo=5000),
         Campo("FOTO_MAX_POR_ENVIO", "Fotos por envio (máx.)", "int", minimo=1, maximo=20),
+        Campo("CHAMADO_VALIDACAO_DIAS", "Concluir sozinho se o solicitante não validar em (dias)", "int",
+              "Para chamados em “Aguardando validação”. 0 = só conclui quando o solicitante confirmar.",
+              minimo=0, maximo=60),
         Campo("FOTO_MAX_MB", "Tamanho máximo de cada foto (MB)", "int", minimo=1, maximo=50),
     ]),
     ("monitor", "Monitoramento", "Teste de conexão dos equipamentos marcados como monitorados.", [

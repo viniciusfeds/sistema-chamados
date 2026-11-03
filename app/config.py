@@ -66,6 +66,8 @@ MONITOR_AVISAR_CLIENTE = os.environ.get("MONITOR_AVISAR_CLIENTE", "0") == "1"   
 # Fotos
 FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
 FOTO_MAX_POR_ENVIO = int(os.environ.get("FOTO_MAX_POR_ENVIO", "6"))
+# Sem resposta do solicitante em X dias, o chamado "Aguardando validação" é concluído sozinho (0 = nunca)
+CHAMADO_VALIDACAO_DIAS = int(os.environ.get("CHAMADO_VALIDACAO_DIAS", "3"))
 
 # Endereço público do sistema (usado nos links de WhatsApp/e-mail). Ex.: https://chamados.tecnosit.com.br
 URL_PUBLICA = os.environ.get("URL_PUBLICA", "").rstrip("/")

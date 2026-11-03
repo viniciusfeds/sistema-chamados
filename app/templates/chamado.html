@@ -24,6 +24,26 @@
 <div class="flash erro">⏱ Chamado sem nova ação há {{ horas }}h, acima do prazo da prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}.</div>
 {% endif %}
 
+{% if sit == 'validacao' %}
+<form class="card validar" method="post" action="/chamados/{{ ch.numero }}/validar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if u.equipe %}
+  <h2>Aguardando validação do solicitante</h2>
+  <p class="muted" style="margin-top:0">O solicitante confirma pelo link de acompanhamento{% if wa_solicitante %} (botão “Avisar {{ ch.solicitante_nome.split()[0] }}” acima){% endif %}.
+    {% if config.CHAMADO_VALIDACAO_DIAS %}Sem resposta em {{ config.CHAMADO_VALIDACAO_DIAS }} dia(s), conclui sozinho.{% endif %}
+    Se ele confirmou por telefone ou WhatsApp, registre aqui:</p>
+  {% else %}
+  <h2>O atendimento resolveu o problema?</h2>
+  <p class="muted" style="margin-top:0">A equipe concluiu o atendimento e aguarda sua confirmação.</p>
+  {% endif %}
+  <div class="campo"><label>Comentário <span class="muted">(obrigatório se ainda houver problema)</span></label><textarea name="obs" rows="2"></textarea></div>
+  <div class="acoes-orc">
+    <button class="btn" name="resolvido" value="sim">✔ {{ 'Solicitante confirmou: resolvido' if u.equipe else 'Sim, está resolvido' }}</button>
+    <button class="btn perigo" name="resolvido" value="nao">{{ 'Solicitante disse que continua' if u.equipe else 'Não, o problema continua' }}</button>
+  </div>
+</form>
+{% endif %}
+
 {% if u.equipe and not ch.cancelado %}
 <form class="card classif" method="post" action="/chamados/{{ ch.numero }}/classificar">
   <input type="hidden" name="csrf" value="{{ csrf }}">

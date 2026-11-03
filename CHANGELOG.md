@@ -1,5 +1,22 @@
 # Histórico de versões
 
+## 1.13.0 — 2026-11-03
+- **Assinatura eletrônica de contratos** (sem sistema externo), em Financeiro → Contratos → contrato:
+  - texto gerado por **modelo** com os dados do cliente e do contrato (modelo padrão de manutenção incluído,
+    editável em *Modelos de contrato*), revisável antes do envio
+  - signatários do cliente e testemunhas; cada um recebe **link próprio** (WhatsApp ou e-mail) e assina pelo
+    celular com nome completo, CPF e **rubrica desenhada**; também pode recusar com motivo
+  - a empresa assina pelo próprio sistema (representante logado)
+  - ao enviar, o texto é **travado** e recebe hash SHA-256; cada assinatura registra data/hora, IP, navegador e o hash
+  - **PDF final** com o contrato e a página “Registro de assinaturas eletrônicas”, enviado por e-mail a todos
+  - página pública **/verificar/código** para conferir autenticidade
+- **Chamados: status “Aguardando validação do solicitante”**: o técnico registra a ação com esse status; o
+  solicitante confirma pelo link de acompanhamento (ou logado) — *resolvido* conclui, *continua* volta para Pendente
+  com o relato; a equipe pode registrar a confirmação feita por telefone. Sem resposta em X dias (padrão 3,
+  em Configurações → Chamados), conclui sozinho
+- IP real do visitante atrás do Cloudflare (cabeçalho CF-Connecting-IP) — também corrige o limite de chamados
+  pela página pública, que contava todos os acessos como um único IP
+
 ## 1.12.2 — 2026-11-03
 - Configurações → Orçamentos e cobrança: campo **Próximo número de orçamento** (antes “Numeração começa em”),
   mostrando o último usado e qual será o próximo; aviso se o número escolhido já foi usado

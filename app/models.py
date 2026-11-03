@@ -22,7 +22,8 @@ PRIORIDADES = {  # chave -> (rótulo, cor, ordem)
 }
 
 # Status de cada ação (linha da tabela "Ações")
-STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando"]
+STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando", "Aguardando validação"]
+VALIDACAO = "Aguardando validação"   # ação que espera o solicitante confirmar que ficou resolvido
 
 
 def novo_token(n=16):
@@ -754,9 +755,18 @@ class Contrato(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # documento e assinatura eletrônica
+    doc_texto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    doc_status: Mapped[str | None] = mapped_column(String(12), nullable=True)   # rascunho/aguardando/assinado/cancelado
+    doc_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)     # SHA-256 do texto enviado
+    doc_codigo: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # código de verificação
+    doc_enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    doc_concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cliente_fiscal = relationship("ClienteFiscal")
     catalogo = relationship("ItemCatalogo")
     titulos = relationship("Titulo", back_populates="contrato")
+    assinaturas = relationship("Assinatura", back_populates="contrato", order_by="Assinatura.ordem",
+                               cascade="all, delete-orphan")
 
 
 class Titulo(Base):
@@ -815,3 +825,47 @@ class Titulo(Base):
 
     def dias_atraso(self, hoje):
         return max(0, (hoje - self.vencimento).days) if self.status == "aberto" else 0
+
+
+PAPEIS_ASSINATURA = {"contratante": "Contratante", "contratada": "Contratada", "testemunha": "Testemunha"}
+
+
+class ModeloContrato(Base):
+    __tablename__ = "modelos_contrato"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    texto: Mapped[str] = mapped_column(Text)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Assinatura(Base):
+    """Quem assina o documento do contrato e as evidências da assinatura eletrônica."""
+    __tablename__ = "assinaturas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    papel: Mapped[str] = mapped_column(String(12), default="contratante")
+    nome: Mapped[str] = mapped_column(String(160))
+    email: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    telefone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cpf: Mapped[str | None] = mapped_column(String(11), nullable=True)
+    token: Mapped[str] = mapped_column(String(40), unique=True, default=lambda: novo_token(20))
+    status: Mapped[str] = mapped_column(String(10), default="pendente")      # pendente / assinado / recusado
+    assinado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # UTC
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    navegador: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    imagem: Mapped[str | None] = mapped_column(Text, nullable=True)        # rubrica desenhada (data:image/png)
+    hash_assinado: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    motivo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)  # contratada (equipe)
+    contrato = relationship("Contrato", back_populates="assinaturas")
+
+    @property
+    def cpf_fmt(self):
+        d = self.cpf or ""
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}" if len(d) == 11 else d
+
+    @property
+    def cpf_mascarado(self):
+        d = self.cpf or ""
+        return f"***.{d[3:6]}.{d[6:9]}-**" if len(d) == 11 else ""

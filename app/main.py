@@ -1002,7 +1002,10 @@ def _cliente_publico(db, slug) -> Cliente:
 
 
 def _ip(request: Request) -> str:
-    return (request.client.host if request.client else "")[:64]
+    """IP do visitante. Atrás do Cloudflare Tunnel o container só vê o cloudflared, então usa o cabeçalho
+    CF-Connecting-IP (o Cloudflare sempre o sobrescreve com o IP real)."""
+    cf = (request.headers.get("cf-connecting-ip") or "").strip()
+    return (cf or (request.client.host if request.client else ""))[:64]
 
 
 FOTOS_PUBLICO = 3
@@ -1082,6 +1085,46 @@ def publico_acompanhar(request: Request, token: str, db: Session = Depends(get_d
     recem = request.session.pop("aberto_agora", None) == token
     return render(request, "publico_acompanhar.html", ch=ch, sit=regras.status_geral(ch), recem=recem,
                   texto_padrao=regras.TEXTO_PADRAO, link=f"{base_url(request)}/acompanhar/{token}")
+
+
+@app.post("/acompanhar/{token}/validar", dependencies=[Depends(checar_csrf)])
+def publico_validar(request: Request, token: str, resolvido: str = Form(...), nome: str = Form(""),
+                    obs: str = Form(""), db: Session = Depends(get_db)):
+    from . import validacao
+    ch = _chamado_publico(db, token)
+    if not validacao.aguardando(ch):
+        flash(request, "Este chamado não está aguardando validação.", "erro")
+        return voltar(f"/acompanhar/{token}")
+    nome = nome.strip()[:120] or (ch.solicitante_nome or "Solicitante")
+    if resolvido != "sim" and not obs.strip():
+        flash(request, "Conte o que ainda não está funcionando para a equipe retomar o atendimento.", "erro")
+        return voltar(f"/acompanhar/{token}")
+    antes = validacao.validar(db, ch, resolvido == "sim", nome, obs)
+    db.commit()
+    avisar_whatsapp(request, db, ch, antes)
+    flash(request, "Obrigado! Atendimento confirmado e chamado concluído." if resolvido == "sim"
+          else "Recebemos seu retorno. A equipe vai retomar o atendimento.")
+    return voltar(f"/acompanhar/{token}")
+
+
+@app.post("/chamados/{numero}/validar", dependencies=[Depends(checar_csrf)])
+def chamado_validar(request: Request, numero: int, resolvido: str = Form(...), obs: str = Form(""),
+                    u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    from . import validacao
+    ch = buscar_chamado(db, numero, u)
+    if not validacao.aguardando(ch):
+        flash(request, "Este chamado não está aguardando validação.", "erro")
+        return voltar(f"/chamados/{numero}")
+    if resolvido != "sim" and not obs.strip():
+        flash(request, "Descreva o que ainda não está funcionando.", "erro")
+        return voltar(f"/chamados/{numero}")
+    nome = u.nome + (" (pela equipe, em nome do solicitante)" if u.equipe else "")
+    antes = validacao.validar(db, ch, resolvido == "sim", nome, obs, autor_id=u.id)
+    db.commit()
+    avisar_whatsapp(request, db, ch, antes)
+    flash(request, "Atendimento validado — chamado concluído." if resolvido == "sim"
+          else "Chamado voltou para Pendente com o relato.")
+    return voltar(f"/chamados/{numero}")
 
 
 @app.get("/acompanhar/{token}/pdf")
@@ -1609,7 +1652,7 @@ async def _erro(request: Request, exc: StarletteHTTPException):
     padrao = {404: "Página não encontrada.", 405: "Ação não permitida."}
     msg = padrao.get(exc.status_code, exc.detail) if exc.detail in ("Not Found", "Method Not Allowed") \
         else exc.detail
-    publico = request.url.path.startswith(("/abrir/", "/acompanhar/", "/orcamento/", "/boleto/"))
+    publico = request.url.path.startswith(("/abrir/", "/acompanhar/", "/orcamento/", "/boleto/", "/assinar/", "/verificar/"))
     return tpl.TemplateResponse(request, "erro.html", {"request": request, "erro": msg, "publico": publico,
                                                       "codigo": exc.status_code, "u": None},
                                 status_code=exc.status_code)
@@ -1617,3 +1660,4 @@ async def _erro(request: Request, exc: StarletteHTTPException):
 
 # Faturamento (orçamentos, contas a receber, contratos) — rotas em módulo próprio
 from . import rotas_clientes, rotas_financeiro  # noqa: E402,F401
+from . import rotas_assinatura  # noqa: E402,F401

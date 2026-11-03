@@ -384,3 +384,8 @@ table.itens th.interno{background:#C98A00}
 .analise{margin:10px 0 0 auto;max-width:360px;background:#FFFBEA;border:1px solid #EADFB4;border-radius:8px;padding:10px 12px;font-size:.92rem}
 .analise div{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
 .analise .neg{color:#B3261E;font-weight:800}
+.card.validar{border:2px solid #0E7C86;background:#F3FBFB}
+.card.validar h2{color:#0E7C86}
+.doc-texto{width:100%;font-family:Georgia,serif;font-size:.95rem;line-height:1.5}
+.doc-leitura{font-family:Georgia,serif;line-height:1.6;max-height:520px;overflow-y:auto;padding:4px 6px;white-space:normal}
+canvas.rubrica{width:100%;height:150px;border:2px dashed #C9C9C9;border-radius:10px;background:#fff;touch-action:none;display:block}

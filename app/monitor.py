@@ -125,6 +125,12 @@ def _laco(parar: threading.Event):
         try:
             ajustes.atualizar_se_mudou(0)   # pega mudanças feitas na tela de Configurações
             n = verificar_todos() if config.MONITOR_ATIVO else 0
+            try:                                # chamados em validação sem resposta do solicitante
+                from . import validacao
+                with SessionLocal() as db:
+                    validacao.concluir_sem_resposta(db)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Falha na validação automática: %s", e)
             if n:
                 log.info("Monitoramento: %s equipamento(s) verificados", n)
         except Exception as e:  # nunca derruba o sistema

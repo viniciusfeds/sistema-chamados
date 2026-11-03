@@ -1627,3 +1627,121 @@ def test_proximo_numero_de_orcamento_nas_configuracoes():
         r = adm.post("/admin/configuracoes", data=form)
         assert "já foi usado" in r.text
     config.ORC_NUMERO_INICIAL = 1
+
+
+def test_aguardando_validacao_do_solicitante():
+    from datetime import datetime, timedelta, timezone
+    from app import config, regras, validacao
+    from app.models import Acao
+    c = entrar("tec@t.com")
+    tok = _csrf(c.get("/chamados/novo").text)
+    c.post("/chamados/novo", data={"csrf": tok, "unidade_id": str(IDS["carrao"]), "titulo": "Câmera sem imagem",
+                                   "assunto": "CFTV", "problema": "Câmera 3 sem imagem", "acao_descricao": "Troca do conector",
+                                   "acao_status": "Aguardando validação"})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).order_by(Chamado.id.desc()))
+        assert regras.status_geral(ch) == "validacao"
+        num, token = ch.numero, ch.token_publico
+    pub = TestClient(app)
+    pag = pub.get(f"/acompanhar/{token}")
+    assert "O atendimento resolveu o problema?" in pag.text
+    # "continua" sem relato é recusado; com relato volta para Pendente
+    r = pub.post(f"/acompanhar/{token}/validar", data={"csrf": _csrf(pag.text), "resolvido": "nao", "nome": "Ana"})
+    assert "Conte o que ainda não está funcionando" in r.text
+    r = pub.post(f"/acompanhar/{token}/validar", data={"csrf": _csrf(pag.text), "resolvido": "nao", "nome": "Ana",
+                                                       "obs": "Ainda sem imagem à noite"})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert regras.status_geral(ch) == "pendente" and any("Ainda sem imagem" in a.descricao for a in ch.acoes)
+        for a in ch.acoes:
+            if a.status == "Pendente":
+                a.status = "Concluído"              # técnico voltou e resolveu
+        ch.acoes.append(Acao(descricao="Ajuste do IR", status="Aguardando validação")); db.commit()
+    # usuário da unidade valida logado
+    un = entrar("carrao@t.com")
+    pg = un.get(f"/chamados/{num}")
+    assert "O atendimento resolveu o problema?" in pg.text
+    un.post(f"/chamados/{num}/validar", data={"csrf": _csrf(pg.text), "resolvido": "sim"})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert regras.status_geral(ch) == "concluido" and any("validado por Recepção Carrão" in a.descricao for a in ch.acoes)
+        # conclusão automática sem resposta
+        ch.acoes.append(Acao(descricao="Nova visita", status="Aguardando validação",
+                             criado_em=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=config.CHAMADO_VALIDACAO_DIAS + 1)))
+        db.commit()
+        assert len(validacao.concluir_sem_resposta(db)) == 1
+        db.expire_all()
+        ch = db.scalar(select(Chamado).where(Chamado.numero == num))
+        assert regras.status_geral(ch) == "concluido" and any("automaticamente" in a.descricao for a in ch.acoes)
+    assert c.get(f"/chamados/{num}/pdf").status_code == 200
+    assert c.get("/").status_code == 200 and "Aguardando validação" in c.get("/").text
+
+
+def test_contrato_assinatura_eletronica():
+    import base64
+    from app.models import Assinatura, ClienteFiscal, Contrato
+    import io
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", (300, 100), (0, 0, 0, 0))
+    ImageDraw.Draw(im).line([(10, 80), (120, 20), (290, 70)], fill=(20, 30, 70, 255), width=6)
+    buf = io.BytesIO(); im.save(buf, "PNG")
+    png = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    adm = entrar("admin@t.com")
+    with SessionLocal() as db:
+        cf = db.scalar(select(ClienteFiscal).where(ClienteFiscal.documento == "11222333000181"))
+        c = Contrato(cliente_fiscal_id=cf.id, descricao="Manutenção CFTV Torre A", valor=45000, dia_vencimento=10,
+                     inicio=date(2026, 11, 1))
+        db.add(c); db.commit(); cid = c.id
+    pag = adm.get(f"/financeiro/contratos/{cid}")
+    assert pag.status_code == 200 and "Gerar texto pelo modelo" in pag.text
+    tok = _csrf(pag.text)
+    mid = re.search(r'<select name="modelo_id"[^>]*><option value="(\d+)"', pag.text).group(1)
+    r = adm.post(f"/financeiro/contratos/{cid}/documento", data={"csrf": tok, "acao": "gerar", "modelo_id": mid})
+    assert "Condomínio Top Ltda" in r.text and "R$ 450,00" in r.text and "{{" not in r.text.split('id="documento"')[1][:4000]
+    # enviar sem signatário é barrado
+    r = adm.post(f"/financeiro/contratos/{cid}/documento", data={"csrf": tok, "acao": "enviar"})
+    assert "pelo menos um signatário" in r.text
+    adm.post(f"/financeiro/contratos/{cid}/signatarios", data={"csrf": tok, "nome": "Carlos Síndico", "email": "",
+                                                              "telefone": "11 91234-5678", "papel": "contratante"})
+    r = adm.post(f"/financeiro/contratos/{cid}/documento", data={"csrf": tok, "acao": "enviar"})
+    assert "enviado para assinatura" in r.text and "wa.me/5511912345678" in r.text
+    with SessionLocal() as db:
+        c = db.get(Contrato, cid)
+        assert c.doc_status == "aguardando" and len(c.doc_hash) == 64 and len(c.assinaturas) == 2
+        cli = next(a for a in c.assinaturas if a.papel == "contratante")
+        token, h, codigo = cli.token, c.doc_hash, c.doc_codigo
+    # texto travado
+    r = adm.post(f"/financeiro/contratos/{cid}/documento", data={"csrf": tok, "acao": "salvar", "texto": "mudei"})
+    assert "não pode ser alterado" in r.text
+    pub = TestClient(app)
+    pg = pub.get(f"/assinar/{token}")
+    assert pg.status_code == 200 and "Assinar o contrato" in pg.text
+    t2 = _csrf(pg.text)
+    base = {"csrf": t2, "nome": "Carlos Alberto Síndico", "cpf": "529.982.247-25", "imagem": png, "aceite": "1", "hash_visto": h}
+    assert "CPF inválido" in pub.post(f"/assinar/{token}", data={**base, "cpf": "111.111.111-11"}).text
+    assert "Recarregue" in pub.post(f"/assinar/{token}", data={**base, "hash_visto": "x" * 64}).text
+    assert "rubrica" in pub.post(f"/assinar/{token}", data={**base, "imagem": ""}).text
+    r = pub.post(f"/assinar/{token}", data=base, headers={"cf-connecting-ip": "200.1.2.3", "user-agent": "TesteBrowser/1"})
+    assert "Assinatura registrada" in r.text
+    with SessionLocal() as db:
+        a = db.scalar(select(Assinatura).where(Assinatura.token == token))
+        assert a.status == "assinado" and a.ip == "200.1.2.3" and a.cpf == "52998224725" and a.hash_assinado == h
+        assert db.get(Contrato, cid).doc_status == "aguardando"          # falta a empresa
+    pag = adm.get(f"/financeiro/contratos/{cid}")
+    assert "Assinar pela" in pag.text
+    r = adm.post(f"/financeiro/contratos/{cid}/assinar-empresa", data={"csrf": tok, "nome": "Vinicius Representante",
+                                                                       "hash_visto": h, "imagem": ""})
+    assert "contrato assinado" in r.text.lower()
+    with SessionLocal() as db:
+        assert db.get(Contrato, cid).doc_status == "assinado"
+    pdf = adm.get(f"/financeiro/contratos/{cid}/documento.pdf").content
+    assert pdf[:4] == b"%PDF"
+    import shutil
+    import subprocess
+    if shutil.which("pdftotext"):
+        txt = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
+        assert "Registro de assinaturas" in txt and "200.1.2.3" in txt and h[:20] in txt and "***.982.247-**" in txt
+    v = pub.get(f"/verificar/{codigo}")
+    assert v.status_code == 200 and "Assinado" in v.text and "52998224725" not in v.text
+    assert pub.get(f"/assinar/{token}/pdf").content[:4] == b"%PDF"
+    assert adm.get("/financeiro/contratos/modelos").status_code == 200

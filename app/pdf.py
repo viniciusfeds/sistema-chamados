@@ -29,6 +29,7 @@ CINZA = colors.HexColor("#555555")
 LINHA = colors.HexColor("#DDDDDD")
 CAIXA = {  # fundo, borda, cor do título
     "concluido": ("#E6F4EA", "#CFE5D5", "#2E7D4F"),
+    "validacao": ("#E3F4F5", "#BFE3E6", "#0E7C86"),
     "andamento": ("#FFF6DD", "#F1DFA6", "#9A6B00"),
     "aberto": ("#E8F0FB", "#C9D9F2", "#1F5FA8"),
     "pendente": ("#FDECEC", "#F3C9C9", "#B3261E"),

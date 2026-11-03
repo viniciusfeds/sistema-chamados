@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, selo_titulo, copiar with context %}
+{% block titulo %}{{ c.descricao }}{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('contratos') }}
+{% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}
+<a href="/financeiro/contratos" class="muted">← Contratos</a>
+<div class="cab">
+  <div><h1>{{ c.descricao }} <span class="selo" style="background:{{ sd[1] }}">{{ sd[0] }}</span></h1>
+    <div class="muted">{{ c.cliente_fiscal.razao_social }} · {{ c.valor|brl }}/mês · vence dia {{ c.dia_vencimento }} ·
+      {{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}{% if not c.ativo %} · <b>encerrado</b>{% endif %}</div></div>
+  <div class="acoes-orc"><a class="btn sec" href="/financeiro/contratos?editar={{ c.id }}#form">Editar dados</a>
+    {% if c.doc_texto %}<a class="btn sec" href="/financeiro/contratos/{{ c.id }}/documento.pdf" target="_blank">📄 PDF</a>{% endif %}</div>
+</div>
+
+<div class="card" id="documento">
+  <h2>Documento do contrato</h2>
+  {% if editavel %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/documento" class="acoes-orc" style="margin-bottom:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="acao" value="gerar">
+    <select name="modelo_id" style="max-width:360px">{% for m in modelos %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}</select>
+    <button class="btn {{ 'sec' if c.doc_texto }}" {% if c.doc_texto %}onclick="return confirm('Substituir o texto atual pelo modelo?')"{% endif %}>{{ 'Gerar de novo pelo modelo' if c.doc_texto else 'Gerar texto pelo modelo' }}</button>
+    <a class="dica" href="/financeiro/contratos/modelos">editar modelos</a>
+  </form>
+  {% if c.doc_texto %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/documento">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <textarea name="texto" rows="22" class="doc-texto">{{ c.doc_texto }}</textarea>
+    <p class="dica">Use <b>**negrito**</b> para destacar. Linha em branco separa os parágrafos.</p>
+    <button class="btn sec" name="acao" value="salvar">Salvar texto</button>
+  </form>
+  {% endif %}
+  {% else %}
+  <div class="doc-leitura">{{ c.doc_texto|fmt }}</div>
+  <p class="dica">Código <b class="mono">{{ c.doc_codigo }}</b> · SHA-256 <span class="mono" style="font-size:.75rem">{{ c.doc_hash }}</span>
+    · <a href="/verificar/{{ c.doc_codigo }}" target="_blank">página de verificação</a></p>
+  {% endif %}
+</div>
+
+<div class="card" id="assinaturas">
+  <h2>Assinaturas</h2>
+  {% if c.assinaturas %}
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th>Signatário</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
+    <tbody>{% for a in c.assinaturas %}
+    <tr><td data-l="Signatário"><b>{{ a.nome }}</b>{% if a.email or a.telefone %}<div class="muted">{{ a.email or '' }} {{ a.telefone or '' }}</div>{% endif %}
+        {% if a.cpf %}<div class="muted">CPF {{ a.cpf_fmt }}</div>{% endif %}</td>
+      <td data-l="Papel">{{ PAPEIS_ASSINATURA[a.papel] }}</td>
+      <td data-l="Situação">{% if a.status == 'assinado' %}<span class="selo" style="background:#2E7D4F">Assinou</span> <span class="muted">{{ a.assinado_em|local }} · IP {{ a.ip }}</span>
+        {% elif a.status == 'recusado' %}<span class="selo" style="background:#B3261E">Recusou</span> <span class="muted">{{ a.motivo or '' }}</span>
+        {% elif c.doc_status == 'aguardando' %}<span class="selo" style="background:#B07000">Pendente</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if c.doc_status == 'aguardando' and a.status == 'pendente' and a.papel != 'contratada' %}
+          <div class="acoes-orc">{{ copiar(base ~ '/assinar/' ~ a.token, 'Copiar link') }}
+            {% if zap.get(a.id) %}<a class="btn peq" href="{{ zap[a.id] }}" target="_blank">WhatsApp</a>{% endif %}
+            {% if a.email %}<form method="post" action="/financeiro/contratos/{{ c.id }}/convite/{{ a.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">E-mail</button></form>{% endif %}</div>
+        {% elif editavel and a.papel != 'contratada' %}
+          <form method="post" action="/financeiro/contratos/{{ c.id }}/signatarios"><input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="sid" value="{{ a.id }}"><button class="btn peq perigo" name="acao" value="remover">Remover</button></form>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum signatário ainda. Inclua quem assina pelo cliente (ex.: síndico, sócio).</p>{% endif %}
+
+  {% if editavel %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/signatarios" class="sub-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h3>+ Signatário</h3>
+    <div class="grid3">
+      <div class="campo"><label>Nome completo</label><input name="nome" required value="{{ sugestao.nome if sugestao else '' }}"></div>
+      <div class="campo"><label>E-mail</label><input name="email" type="email" value="{{ sugestao.email if sugestao else '' }}"></div>
+      <div class="campo"><label>WhatsApp</label><input name="telefone" inputmode="tel" value="{{ sugestao.telefone if sugestao else '' }}"></div>
+    </div>
+    <div class="acoes-orc"><select name="papel" style="max-width:220px"><option value="contratante">Contratante (cliente)</option><option value="testemunha">Testemunha</option></select>
+      <button class="btn sec">Incluir</button></div>
+  </form>
+  {% if c.doc_texto %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/documento" style="margin-top:14px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn" name="acao" value="enviar" {{ 'disabled' if not c.assinaturas }}>Enviar para assinatura</button>
+    <span class="dica">O texto fica travado. Cada signatário recebe um link próprio{{ ' (por e-mail, se tiver)' if config.SMTP_HOST }}; você também pode mandar pelo WhatsApp.</span>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  {% set emp = c.assinaturas|selectattr('papel', 'equalto', 'contratada')|first %}
+  {% if c.doc_status == 'aguardando' and emp and emp.status == 'pendente' %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/assinar-empresa" class="sub-form assina-form" id="f-empresa">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="hash_visto" value="{{ c.doc_hash }}">
+    <input type="hidden" name="imagem" class="rubrica-dado">
+    <h3>Assinar pela {{ config.EMPRESA_NOME }}</h3>
+    <div class="grid2">
+      <div class="campo"><label>Representante (nome completo)</label><input name="nome" required value="{{ u.nome }}"></div>
+      <div class="campo"><label>CPF do representante <span class="muted">(opcional)</span></label><input name="cpf" inputmode="numeric"></div>
+    </div>
+    <label>Rubrica <span class="muted">(opcional)</span></label>
+    <canvas class="rubrica" width="600" height="160"></canvas>
+    <div class="acoes-orc"><button type="button" class="btn peq sec limpar-rubrica">Limpar</button><button class="btn">Assinar pela empresa</button></div>
+  </form>
+  {% endif %}
+  {% if c.doc_status == 'aguardando' %}
+  <form method="post" action="/financeiro/contratos/{{ c.id }}/documento" style="margin-top:12px" onsubmit="return confirm('Cancelar o envio? Os links de assinatura param de funcionar.')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq perigo" name="acao" value="cancelar">Cancelar envio para editar</button></form>
+  {% elif c.doc_status == 'assinado' %}
+  <div class="flash ok" style="margin-top:12px">✔ Contrato assinado por todas as partes em {{ c.doc_concluido_em|local }}.
+    <a href="/financeiro/contratos/{{ c.id }}/documento.pdf" target="_blank">Baixar o PDF assinado</a></div>
+  {% endif %}
+  <p class="dica">Assinatura eletrônica com registro de data/hora, IP, navegador e hash do documento (Lei 14.063/2020 e MP 2.200-2/2001, art. 10, § 2º).
+    Não substitui o certificado ICP-Brasil quando ele for exigido por lei.</p>
+</div>
+
+{% if titulos %}
+<div class="card">
+  <h2>Cobranças deste contrato</h2>
+  <table class="resp"><thead><tr><th>Competência</th><th>Vencimento</th><th class="valor">Valor</th><th>Situação</th></tr></thead><tbody>
+  {% for t in titulos %}<tr><td data-l="Competência">{{ t.competencia or '—' }}</td><td data-l="Vencimento">{{ t.vencimento|data }}</td>
+    <td data-l="Valor" class="valor">{{ t.valor|brl }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+{% include "_rubrica.html" %}
+{% endblock %}

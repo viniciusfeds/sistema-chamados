@@ -1,0 +1,17 @@
+{% extends "publico_base.html" %}
+{% block titulo %}Verificação de documento{% endblock %}
+{% block cabecalho %}Verificação de documento{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h1 style="margin-bottom:4px">{{ c.descricao }}</h1>
+  <p class="muted">Emitido por {{ config.EMPRESA_RAZAO }} · código <b class="mono">{{ c.doc_codigo }}</b></p>
+  <p>Situação: <b>{{ STATUS_DOC.get(c.doc_status, STATUS_DOC[None])[0] }}</b>{% if c.doc_concluido_em %} em {{ c.doc_concluido_em|local }}{% endif %}</p>
+  <p class="dica">Hash SHA-256 do texto: <span class="mono" style="word-break:break-all">{{ c.doc_hash }}</span><br>
+    Confira se é o mesmo impresso no topo das páginas do PDF que você recebeu.</p>
+  <h2>Assinaturas</h2>
+  {% for a in c.assinaturas %}
+  <div class="linha-lista"><span><b>{{ a.nome }}</b> · {{ PAPEIS_ASSINATURA[a.papel] }}{% if a.cpf %} · CPF {{ a.cpf_mascarado }}{% endif %}</span>
+    <span>{% if a.status == 'assinado' %}✔ {{ a.assinado_em|local }}{% elif a.status == 'recusado' %}Recusou{% else %}Pendente{% endif %}</span></div>
+  {% endfor %}
+</div>
+{% endblock %}

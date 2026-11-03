@@ -30,6 +30,22 @@
   <p>{{ ch.problema|fmt }}</p>
 </div>
 
+{% if sit == 'validacao' %}
+<form class="card validar" method="post" action="/acompanhar/{{ ch.token_publico }}/validar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>O atendimento resolveu o problema?</h2>
+  <p class="muted" style="margin-top:0">A equipe concluiu o atendimento e aguarda sua confirmação.{% if config.CHAMADO_VALIDACAO_DIAS %}
+    Sem resposta em {{ config.CHAMADO_VALIDACAO_DIAS }} dia(s), o chamado é concluído automaticamente.{% endif %}</p>
+  <div class="campo"><label>Seu nome</label><input name="nome" value="{{ ch.solicitante_nome or '' }}" maxlength="120"></div>
+  <div class="campo"><label>Comentário <span class="muted">(obrigatório se ainda houver problema)</span></label>
+    <textarea name="obs" rows="2" placeholder="Ex.: a câmera da garagem voltou, mas a do portão continua sem imagem"></textarea></div>
+  <div class="acoes-orc">
+    <button class="btn" name="resolvido" value="sim">✔ Sim, está resolvido</button>
+    <button class="btn perigo" name="resolvido" value="nao">Não, o problema continua</button>
+  </div>
+</form>
+{% endif %}
+
 <div class="card">
   <h2>Andamento</h2>
   {{ tabela_acoes(ch) }}

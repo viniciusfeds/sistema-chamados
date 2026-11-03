@@ -10,19 +10,21 @@ STATUS_GERAL = {
     "pendente": ("Pendente", "#B3261E"),
     "aberto": ("Aberto", "#1F5FA8"),
     "agendado": ("Agendado", "#5B3A9E"),
+    "validacao": ("Aguardando validação", "#0E7C86"),
     "concluido": ("Concluído", "#2E7D4F"),
     "cancelado": ("Cancelado", "#7A7A7A"),
 }
-ORDEM_STATUS = ["andamento", "pendente", "aberto", "agendado", "concluido"]
+ORDEM_STATUS = ["andamento", "pendente", "aberto", "agendado", "validacao", "concluido"]
 
 COR_ACAO = {"Concluído": "#2E7D4F", "Em andamento": "#B07A00", "Pendente": "#B3261E",
-            "Agendado": "#5B3A9E", "Aguardando": "#777777"}
+            "Agendado": "#5B3A9E", "Aguardando": "#777777", "Aguardando validação": "#0E7C86"}
 
 TEXTO_PADRAO = {
     "andamento": "Atendimento em andamento. Avisaremos a cada etapa concluída.",
     "pendente": "Chamado pendente. Aguardando item necessário para dar continuidade ao atendimento.",
     "aberto": "Chamado registrado. Informaremos a data do atendimento técnico.",
     "agendado": "Atendimento agendado. Informaremos a conclusão por aqui.",
+    "validacao": "Atendimento realizado. Aguardando o solicitante confirmar que está tudo funcionando.",
     "concluido": "Atendimento concluído. Equipamento operando normalmente.",
     "cancelado": "Chamado cancelado.",
 }
@@ -31,7 +33,8 @@ TEXTO_PADRAO = {
 def status_geral(chamado) -> str:
     """Deriva o status geral a partir das ações:
     alguma em andamento -> andamento; alguma pendente -> pendente;
-    alguma agendada -> agendado; alguma aguardando -> aberto; todas concluídas -> concluido."""
+    alguma agendada -> agendado; alguma aguardando validação -> validacao; alguma aguardando -> aberto;
+    todas concluídas -> concluido."""
     if getattr(chamado, "cancelado", False):
         return "cancelado"
     sts = [a.status for a in chamado.acoes]
@@ -43,6 +46,8 @@ def status_geral(chamado) -> str:
         return "pendente"
     if "Agendado" in sts:
         return "agendado"
+    if "Aguardando validação" in sts:
+        return "validacao"
     if "Aguardando" in sts:
         return "aberto"
     return "concluido"

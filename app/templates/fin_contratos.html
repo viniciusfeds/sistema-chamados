@@ -4,6 +4,7 @@
 {% block conteudo %}
 {{ abas_financeiro('contratos') }}
 <div class="cab">
+  <a class="btn sec" href="/financeiro/contratos/modelos" style="order:2">Modelos de contrato</a>
   <div><h1>Contratos recorrentes</h1><div class="muted">Manutenção mensal e outras cobranças fixas · {{ lista|selectattr('ativo')|list|length }} ativo(s) · {{ mensal|brl }} por mês</div></div>
 </div>
 
@@ -25,12 +26,14 @@
   <thead><tr><th>Contrato</th><th>Cliente</th><th class="valor">Valor/mês</th><th>Vence dia</th><th>Vigência</th><th></th></tr></thead>
   <tbody>{% for c in lista %}
   <tr class="{{ 'inativo' if not c.ativo }}">
-    <td data-l="Contrato"><b>{{ c.descricao }}</b>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
+    <td data-l="Contrato"><a href="/financeiro/contratos/{{ c.id }}"><b>{{ c.descricao }}</b></a>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}
+      {% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}{% if c.doc_status %}<span class="selo" style="background:{{ sd[1] }};font-size:.68rem">{{ sd[0] }}</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
     <td data-l="Cliente">{{ c.cliente_fiscal.nome }}</td>
     <td data-l="Valor/mês" class="valor"><b>{{ c.valor|brl }}</b></td>
     <td data-l="Vence dia">{{ c.dia_vencimento }}</td>
     <td data-l="Vigência">{{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}</td>
-    <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ c.id }}#form">Editar</a>
+    <td><div class="acoes-orc"><a class="btn peq" href="/financeiro/contratos/{{ c.id }}#documento">{{ 'Documento' if c.doc_status else 'Gerar contrato' }}</a>
+      <a class="btn peq sec" href="?editar={{ c.id }}#form">Editar</a>
       <form method="post" action="/financeiro/contratos/{{ c.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">{{ 'Encerrar' if c.ativo else 'Reativar' }}</button></form></div></td>
   </tr>{% endfor %}</tbody>
 </table>

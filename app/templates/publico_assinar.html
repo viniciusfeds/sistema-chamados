@@ -1,0 +1,43 @@
+{% extends "publico_base.html" %}
+{% block titulo %}Assinatura de contrato{% endblock %}
+{% block cabecalho %}Assinatura eletrônica{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <div class="muted">{{ config.EMPRESA_RAZAO }} · documento <b class="mono">{{ c.doc_codigo }}</b></div>
+  <h1 style="margin:4px 0">{{ c.descricao }}</h1>
+  <div class="muted">Para: <b>{{ a.nome }}</b> · {{ PAPEIS_ASSINATURA[a.papel] }}</div>
+  <a class="btn sec peq" href="/assinar/{{ token }}/pdf" target="_blank" style="margin-top:8px">📄 Baixar PDF</a>
+</div>
+
+<div class="card"><div class="doc-leitura">{{ c.doc_texto|fmt }}</div></div>
+
+{% if a.status == 'assinado' %}
+<div class="flash ok">✔ Você assinou em {{ a.assinado_em|local }}.{% if c.doc_status == 'assinado' %} O contrato está assinado por todas as partes — <a href="/assinar/{{ token }}/pdf" target="_blank">baixe a via assinada</a>.{% else %} Aguardando as demais assinaturas.{% endif %}</div>
+{% elif a.status == 'recusado' or c.doc_status == 'recusado' %}
+<div class="flash erro">Este documento foi recusado. Fale com a {{ config.EMPRESA_NOME }} pelo WhatsApp {{ config.EMPRESA_WHATSAPP }}.</div>
+{% elif c.doc_status == 'aguardando' %}
+<form class="card assina-form" method="post" action="/assinar/{{ token }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="hash_visto" value="{{ c.doc_hash }}">
+  <input type="hidden" name="imagem" class="rubrica-dado">
+  <h2>Assinar</h2>
+  <div class="campo"><label>Nome completo</label><input name="nome" value="{{ a.nome }}" required autocomplete="name"></div>
+  <div class="grid2">
+    <div class="campo"><label>CPF</label><input name="cpf" required inputmode="numeric" placeholder="000.000.000-00" value="{{ a.cpf_fmt }}"></div>
+    <div class="campo"><label>E-mail <span class="muted">(para receber a via assinada)</span></label><input name="email" type="email" value="{{ a.email or '' }}"></div>
+  </div>
+  <label>Desenhe sua rubrica com o dedo ou o mouse</label>
+  <canvas class="rubrica" width="600" height="180"></canvas>
+  <button type="button" class="btn peq sec limpar-rubrica" style="margin-top:6px">Limpar</button>
+  <label class="check" style="margin-top:12px"><input type="checkbox" name="aceite" value="1"><span>Li o documento acima e concordo com seus termos. Reconheço esta assinatura eletrônica como válida (Lei 14.063/2020 e MP 2.200-2/2001, art. 10, § 2º).</span></label>
+  <button class="btn" style="width:100%;justify-content:center">✍ Assinar o contrato</button>
+  <p class="dica">Serão registrados data e hora, seu IP ({{ request.headers.get('cf-connecting-ip') or (request.client.host if request.client else '') }}) e o navegador, junto com o código de integridade do documento.</p>
+</form>
+<details class="card"><summary>Não concorda? Recusar o documento</summary>
+  <form method="post" action="/assinar/{{ token }}/recusar" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>Motivo</label><textarea name="motivo" rows="2"></textarea></div>
+    <button class="btn perigo" onclick="return confirm('Recusar o documento?')">Recusar</button></form></details>
+{% else %}
+<div class="flash aviso">Este link não está mais ativo.</div>
+{% endif %}
+{% include "_rubrica.html" %}
+{% endblock %}
