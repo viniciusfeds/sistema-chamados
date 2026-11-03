@@ -5,7 +5,7 @@
 {{ abas_financeiro('receber') }}
 <div class="cab">
   <div><h1>Contas a receber</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|brl }}{% if tot.aberto %} · em aberto {{ tot.aberto|brl }}{% endif %}{% if tot.pago %} · recebido {{ tot.pago|brl }}{% endif %}</div></div>
-  <div class="acoes-orc">{% if inter_configurado() %}<form method="post" action="/financeiro/inter/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" title="Consultar no Inter os boletos em aberto">↻ Conferir pagamentos</button></form>{% endif %}
+  <div class="acoes-orc">{% if inter_configurado() %}<form method="post" action="/admin/integracao-bancaria/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" title="Consultar no Inter os boletos em aberto">↻ Conferir pagamentos</button></form>{% endif %}
     <a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
     <a class="btn" href="#novo" onclick="document.getElementById('novo').open=true">+ Nova conta</a></div>
 </div>

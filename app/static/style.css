@@ -367,3 +367,11 @@ body.menu-recolhido .lat-nav{padding-top:10px}
 @media (max-width:900px){.abas.ancoras{top:45px}}
 @media print{.lateral,.barra-mobile,.veu{display:none!important}body.com-menu{padding-left:0}}
 @media (min-width:901px){.abas-fin{display:none}}
+.banco-topo{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.banco-logo{width:64px;height:64px;border-radius:14px;background:#FF7A00;color:#fff;font-weight:800;font-size:1.25rem;
+  display:flex;align-items:center;justify-content:center;letter-spacing:-.02em}
+.banco-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.passos-banco{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.passos-banco span{font-size:.82rem;font-weight:700;padding:4px 10px;border-radius:999px;background:#F0F0EE;color:var(--cinza)}
+.passos-banco span.ok{background:#E6F4EA;color:#2E7D4F}
+.passos-banco span.ok::before{content:"✔ "}

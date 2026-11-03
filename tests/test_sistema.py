@@ -1519,3 +1519,25 @@ def test_inter_boleto_pix_webhook_e_baixa():
         srv.shutdown()
         inter.URL_BASE_TESTE = None
         config.INTER_ATIVO = False
+
+
+def test_integracao_bancaria_na_administracao():
+    from app import config
+    adm = entrar("admin@t.com")
+    assert adm.get("/financeiro/inter", follow_redirects=False).headers["location"] == "/admin/integracao-bancaria"
+    pag = adm.get("/admin/integracao-bancaria")
+    assert pag.status_code == 200 and "Integração bancária" in pag.text and "INTER_CLIENT_ID" in pag.text
+    r = adm.post("/admin/integracao-bancaria/credenciais", data={"csrf": _csrf(pag.text), "INTER_CLIENT_ID": "abc-123",
+                                                                 "INTER_CLIENT_SECRET": "s3cr3t", "INTER_AMBIENTE": "sandbox",
+                                                                 "INTER_DIAS_AGENDA": "15", "INTER_CONTA": ""})
+    assert "Credenciais do Inter salvas" in r.text and "s3cr3t" not in r.text
+    assert config.INTER_CLIENT_ID == "abc-123" and config.INTER_CLIENT_SECRET == "s3cr3t" and config.INTER_DIAS_AGENDA == 15
+    # a tela geral de Configurações não mostra nem apaga as credenciais do Inter
+    cfg = adm.get("/admin/configuracoes")
+    assert "INTER_CLIENT_ID" not in cfg.text
+    form = {"csrf": _csrf(cfg.text)}
+    form.update({k: v for k, v in re.findall(r'name="([A-Z_]+)" value="([^"]*)"', cfg.text)})
+    adm.post("/admin/configuracoes", data=form)
+    assert config.INTER_CLIENT_ID == "abc-123" and config.INTER_CLIENT_SECRET == "s3cr3t"
+    assert "Integração bancária" in adm.get("/admin").text
+    assert entrar("tec@t.com").get("/admin/integracao-bancaria", follow_redirects=False).status_code == 403

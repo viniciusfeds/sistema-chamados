@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "_macros.html" import copiar %}
+{% block titulo %}Integração bancária{% endblock %}
+{% block conteudo %}
+<a href="/admin" class="muted">← Administração</a>
+<div class="cab">
+  <div><h1>Integração bancária</h1>
+    <div class="muted">Emissão de boleto com PIX e baixa automática dos pagamentos nas Contas a receber</div></div>
+</div>
+
+<div class="banco-card card">
+  <div class="banco-topo">
+    <div class="banco-logo">inter</div>
+    <div style="flex:1">
+      <h2 style="margin:0">Banco Inter <span class="muted" style="font-weight:400;font-size:.9rem">· Boleto com PIX (API Cobrança v3)</span></h2>
+      <div class="banco-status">
+        {% if inter_configurado() %}<span class="selo" style="background:#2E7D4F">Ligado</span>
+          <span class="muted">{{ 'Sandbox (testes)' if config.INTER_AMBIENTE == 'sandbox' else 'Produção' }} · {{ com_boleto }} boleto(s) em aberto</span>
+        {% else %}<span class="selo" style="background:#8A94A3">Desligado</span>
+          <span class="muted">Faltam:
+            {% set faltam = [] %}
+            {% if not config.INTER_CLIENT_ID or not secret_salvo %}{% set _ = faltam.append('credenciais') %}{% endif %}
+            {% if not cert_ok %}{% set _ = faltam.append('certificado') %}{% endif %}
+            {% if not config.INTER_ATIVO %}{% set _ = faltam.append('ligar a emissão') %}{% endif %}
+            {{ faltam|join(', ') }}</span>{% endif %}
+      </div>
+    </div>
+    {% if inter_configurado() %}
+    <div class="acoes-orc">
+      <form method="post" action="/admin/integracao-bancaria/testar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Testar conexão</button></form>
+      <form method="post" action="/admin/integracao-bancaria/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Conferir pagamentos</button></form>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="passos-banco">
+    <span class="{{ 'ok' if config.INTER_CLIENT_ID and secret_salvo }}">1 Credenciais</span>
+    <span class="{{ 'ok' if cert_ok }}">2 Certificado</span>
+    <span class="{{ 'ok' if config.INTER_ATIVO }}">3 Ligar</span>
+    <span class="{{ 'ok' if webhook }}">4 Aviso de pagamento</span>
+  </div>
+</div>
+
+<details class="card" {{ 'open' if not (config.INTER_CLIENT_ID and cert_ok) }}>
+  <summary><h2 style="display:inline">Como criar a integração no Inter</h2></summary>
+  <ol class="passos" style="margin-top:10px">
+    <li>No <b>Internet Banking PJ</b> do Inter: <b>Soluções para sua empresa → Nova Integração</b> (ou “Integrações / API”).</li>
+    <li>Dê um nome (ex.: Nexus Desk) e marque as permissões de <b>Boleto com Pix / Cobrança</b> — <i>emitir</i> e <i>consultar</i>.</li>
+    <li>Baixe o <b>certificado (.crt)</b> e a <b>chave (.key)</b> e copie o <b>Client ID</b> e o <b>Client Secret</b>.</li>
+    <li>Preencha os passos abaixo. Para testar sem movimentar dinheiro, use o ambiente <b>Sandbox</b> com uma integração de testes.</li>
+  </ol>
+</details>
+
+<form class="card" method="post" action="/admin/integracao-bancaria/credenciais" id="credenciais">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>1. Credenciais e opções</h2>
+  {% for c in campos if c.tipo == 'bool' %}
+  <label class="check"><input type="checkbox" name="{{ c.chave }}" value="1" {{ 'checked' if valores[c.chave] == '1' }}> <span><b>{{ c.rotulo }}</b></span></label>
+  {% endfor %}
+  <div class="grid3">
+    {% for c in campos if c.tipo != 'bool' %}
+    <div class="campo"><label for="{{ c.chave }}">{{ c.rotulo }}</label>
+      {% if c.tipo == 'senha' %}
+        <input id="{{ c.chave }}" name="{{ c.chave }}" type="password" autocomplete="new-password" placeholder="{{ '•••••••• (salvo — deixe vazio para manter)' if secret_salvo else '' }}">
+      {% elif c.tipo == 'escolha' %}
+        <select id="{{ c.chave }}" name="{{ c.chave }}">{% for k, v in c.opcoes.items() %}<option value="{{ k }}" {{ 'selected' if valores[c.chave] == k }}>{{ v }}</option>{% endfor %}</select>
+      {% else %}
+        <input id="{{ c.chave }}" name="{{ c.chave }}" value="{{ valores[c.chave] }}" {{ 'inputmode=numeric' if c.tipo == 'int' }} autocomplete="off">
+      {% endif %}
+      {% if c.ajuda %}<div class="dica">{{ c.ajuda }}</div>{% endif %}</div>
+    {% endfor %}
+  </div>
+  <p class="dica">Multa e juros dos boletos: {{ config.FIN_MULTA_PCT|qtd }}% e {{ config.FIN_JUROS_MES_PCT|qtd }}% ao mês — ajuste em
+    <a href="/admin/configuracoes#orcamentos">Configurações → Orçamentos e cobrança</a>. Também dá para preencher pelo <span class="mono">.env</span> (INTER_…).</p>
+  <button class="btn">Salvar</button>
+</form>
+
+<form class="card" method="post" action="/admin/integracao-bancaria/certificado" enctype="multipart/form-data" id="certificado">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>2. Certificado da integração</h2>
+  {% if cert_ok %}<p>✔ Certificado {{ cert.origem or 'salvo' }}{% if cert.validade %} · válido até <b>{{ cert.validade|data }}</b>{% endif %}<br>
+    <span class="muted mono" style="font-size:.8rem">{{ cert.sujeito }}</span></p>{% endif %}
+  {% if cert_env %}
+  <p class="dica">Usando os arquivos indicados no <span class="mono">.env</span> (pasta <span class="mono">certificados</span>). Para trocar, substitua os arquivos e rode <span class="mono">docker compose up -d</span>.</p>
+  {% else %}
+  <div class="grid2">
+    <div class="campo"><label>Certificado (.crt)</label><input type="file" name="crt" accept=".crt,.pem,.cer" required></div>
+    <div class="campo"><label>Chave privada (.key)</label><input type="file" name="key" accept=".key,.pem" required></div>
+  </div>
+  <p class="dica">A chave fica guardada criptografada no servidor. Quando o Inter renovar o certificado, envie os arquivos novos aqui.
+    Alternativa: coloque-os na pasta <span class="mono">certificados</span> e informe <span class="mono">INTER_CERT_ARQUIVO</span> / <span class="mono">INTER_CHAVE_ARQUIVO</span> no <span class="mono">.env</span>.</p>
+  <button class="btn">{{ 'Trocar certificado' if cert_ok else 'Enviar certificado' }}</button>
+  {% endif %}
+</form>
+
+<div class="card" id="webhook">
+  <h2>3. Aviso automático de pagamento</h2>
+  {% if webhook %}
+  <p class="dica" style="margin-top:0">O Inter chama este endereço quando um boleto ou PIX é pago; o sistema confere a cobrança no Inter antes de dar baixa.</p>
+  {{ copiar(webhook, 'Copiar') }}
+  <form method="post" action="/admin/integracao-bancaria/webhook" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sec" {{ 'disabled' if not inter_configurado() }}>Cadastrar webhook no Inter</button></form>
+  {% else %}
+  <p class="flash aviso">Para o aviso automático, informe o <b>Endereço público com https://</b> em
+    <a href="/admin/configuracoes#empresa">Configurações → Empresa e sistema</a> (ex.: https://app.tecnosit.com.br).</p>
+  {% endif %}
+  <p class="dica">Mesmo sem o webhook, o sistema confere os boletos em aberto no Inter a cada 30 minutos e dá baixa sozinho.</p>
+</div>
+
+<div class="card">
+  <h2>Como usar no dia a dia</h2>
+  <ul>
+    <li><a href="/financeiro/receber">Contas a receber</a> → <b>Gerar boleto</b> em cada conta (o cliente precisa ter CNPJ/CPF e endereço na ficha).</li>
+    <li>Ao <b>faturar um orçamento</b>, lançar uma conta ou gerar as mensalidades dos <b>contratos</b>, os boletos saem juntos.</li>
+    <li>A cobrança pelo WhatsApp e o e-mail levam o <b>link do boleto</b> (PIX com QR Code, copia e cola e PDF).</li>
+    <li>Dar baixa à mão, editar ou cancelar a conta <b>cancela o boleto no Inter</b> automaticamente.</li>
+  </ul>
+</div>
+{% endblock %}

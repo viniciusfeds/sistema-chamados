@@ -1243,7 +1243,8 @@ def admin_configuracoes(request: Request, u: Usuario = Depends(so_admin), db: Se
     valores = {k: ajustes.para_texto(c, ajustes._ler_config(k)) for k, c in ajustes.CAMPOS.items() if c.tipo != "senha"}
     senhas = {k: bool(ajustes._ler_config(k)) for k, c in ajustes.CAMPOS.items() if c.tipo == "senha"}
     padroes = {k: ajustes.para_texto(c, ajustes.PADROES[k]) for k, c in ajustes.CAMPOS.items() if c.tipo != "senha"}
-    return render(request, "admin_config.html", u=u, secoes=ajustes.SECOES, valores=valores, senhas=senhas,
+    secoes = [s for s in ajustes.SECOES if s[0] not in ajustes.SECOES_PROPRIAS]
+    return render(request, "admin_config.html", u=u, secoes=secoes, valores=valores, senhas=senhas,
                   padroes=padroes, no_sistema=linhas, v=None)
 
 
@@ -1251,7 +1252,8 @@ def admin_configuracoes(request: Request, u: Usuario = Depends(so_admin), db: Se
 async def admin_configuracoes_salvar(request: Request, u: Usuario = Depends(so_admin),
                                      db: Session = Depends(get_db)):
     form = dict((await request.form()).items())
-    erros = ajustes.salvar(db, form)
+    proprias = {c.chave for s, _, _, cs in ajustes.SECOES if s in ajustes.SECOES_PROPRIAS for c in cs}
+    erros = ajustes.salvar(db, form, chaves=set(ajustes.CAMPOS) - proprias)   # não apaga o que é de outra tela
     if erros:
         flash(request, "Nada foi salvo. " + " ".join(erros), "erro")
     else:

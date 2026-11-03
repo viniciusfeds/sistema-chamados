@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.11.0 — 2026-11-03
+- **Administração → Integração bancária**: o Banco Inter saiu do Financeiro e ganhou tela própria, com tudo junto:
+  status e passos (credenciais, certificado, ligar, aviso de pagamento), **credenciais editáveis na própria tela**,
+  certificado, teste de conexão, conferência de pagamentos e webhook
+- As credenciais do Inter saíram da tela geral de Configurações (salvar lá não mexe mais nelas)
+- Endereço antigo (/financeiro/inter) redireciona para a tela nova
+
 ## 1.10.1 — 2026-11-03
 - Corrige ícones do menu aparecendo gigantes quando o navegador ainda usava o estilo antigo em cache:
   o arquivo de estilo agora leva a versão no endereço (cada atualização força o navegador a baixar o novo)

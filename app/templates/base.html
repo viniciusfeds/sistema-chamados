@@ -53,7 +53,6 @@
       <a href="/financeiro/receber" class="{{ 'ativo' if p.startswith('/financeiro/receber') }}"><span>Contas a receber</span></a>
       <a href="/financeiro/contratos" class="{{ 'ativo' if p.startswith('/financeiro/contratos') }}"><span>Contratos</span></a>
       <a href="/financeiro/catalogo" class="{{ 'ativo' if p.startswith('/financeiro/catalogo') }}"><span>Produtos e serviços</span></a>
-      <a href="/financeiro/inter" class="{{ 'ativo' if p.startswith('/financeiro/inter') }}"><span>Banco Inter</span></a>
     </div>
     <div class="lat-grupo">Sistema</div>
     <a href="/admin" class="{{ 'ativo' if p.startswith('/admin') }}" title="Administração">{{ ico('admin') }}<span>Administração</span></a>
@@ -61,6 +60,7 @@
       <a href="/admin#usuarios" class="{{ 'ativo' if p == '/admin' }}"><span>Usuários e tipos</span></a>
       <a href="/admin/configuracoes" class="{{ 'ativo' if p.startswith('/admin/configuracoes') }}"><span>Configurações</span></a>
       <a href="/admin/whatsapp" class="{{ 'ativo' if p.startswith('/admin/whatsapp') }}"><span>WhatsApp automático</span></a>
+      <a href="/admin/integracao-bancaria" class="{{ 'ativo' if p.startswith('/admin/integracao-bancaria') }}"><span>Integração bancária</span></a>
       <a href="/admin/agentes" class="{{ 'ativo' if p.startswith('/admin/agentes') }}"><span>Agente local</span></a>
     </div>
     {% endif %}

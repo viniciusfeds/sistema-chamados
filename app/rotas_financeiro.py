@@ -319,7 +319,7 @@ def orc_faturar(request: Request, numero: int, parcelas: int = Form(1), primeiro
 
 def _boletos_em_lote(request, db, titulos):
     if not inter.configurado():
-        return "Boletos não gerados: configure o Banco Inter em Financeiro → Banco Inter."
+        return "Boletos não gerados: configure o Banco Inter em Administração → Integração bancária."
     ok, erros = 0, []
     for t in titulos:
         sucesso, msg = _boleto(request, db, t, "")
@@ -792,16 +792,40 @@ def link_boleto(request, t):
     return f"{base_url(request)}/boleto/{t.token_publico}" if t.token_publico else ""
 
 
-@app.get("/financeiro/inter", response_class=HTMLResponse)
+@app.get("/admin/integracao-bancaria", response_class=HTMLResponse)
 def inter_pagina(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     url = config.URL_PUBLICA or ""
-    return render(request, "fin_inter.html", u=u, cert=inter.info_certificado(), cert_ok=inter.certificado_salvo(),
+    from . import ajustes
+    campos = [ajustes.CAMPOS[k] for k in ajustes.CAMPOS_INTER]
+    valores = {c.chave: ajustes.para_texto(c, ajustes._ler_config(c.chave)) for c in campos if c.tipo != "senha"}
+    return render(request, "admin_banco.html", u=u, campos=campos, valores=valores,
+                  secret_salvo=bool(config.INTER_CLIENT_SECRET), cert=inter.info_certificado(),
+                  cert_ok=inter.certificado_salvo(), cert_env=bool(inter.cert_env()),
                   webhook=(f"{url}/webhook/inter/{inter.webhook_token()}" if url.startswith("https://") else ""),
                   com_boleto=db.scalar(select(func.count(Titulo.id)).where(Titulo.inter_codigo.is_not(None),
                                                                           Titulo.status == "aberto")) or 0)
 
 
-@app.post("/financeiro/inter/certificado", dependencies=[Depends(checar_csrf)])
+@app.get("/financeiro/inter")
+def inter_antigo():
+    return voltar("/admin/integracao-bancaria")
+
+
+@app.post("/admin/integracao-bancaria/credenciais", dependencies=[Depends(checar_csrf)])
+async def inter_credenciais(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    from . import ajustes
+    form = dict((await request.form()).items())
+    erros = ajustes.salvar(db, form, chaves=set(ajustes.CAMPOS_INTER))
+    if erros:
+        flash(request, "Nada foi salvo. " + " ".join(erros), "erro")
+    else:
+        inter._token.update(valor=None, expira=0)
+        flash(request, "Credenciais do Inter salvas." + ("" if config.INTER_ATIVO else
+                                                         " A emissão de boletos está desligada — marque “ligada” para usar."))
+    return voltar("/admin/integracao-bancaria")
+
+
+@app.post("/admin/integracao-bancaria/certificado", dependencies=[Depends(checar_csrf)])
 async def inter_certificado(request: Request, crt: UploadFile = File(...), key: UploadFile = File(...),
                             u: Usuario = Depends(so_admin)):
     try:
@@ -810,10 +834,10 @@ async def inter_certificado(request: Request, crt: UploadFile = File(...), key: 
         flash(request, "Certificado do Inter salvo.")
     except inter.ErroInter as e:
         flash(request, str(e), "erro")
-    return voltar("/financeiro/inter")
+    return voltar("/admin/integracao-bancaria")
 
 
-@app.post("/financeiro/inter/testar", dependencies=[Depends(checar_csrf)])
+@app.post("/admin/integracao-bancaria/testar", dependencies=[Depends(checar_csrf)])
 def inter_testar(request: Request, u: Usuario = Depends(so_admin)):
     try:
         inter.token(renovar=True)
@@ -822,24 +846,24 @@ def inter_testar(request: Request, u: Usuario = Depends(so_admin)):
         flash(request, f"Conexão com o Inter OK ({'sandbox' if config.INTER_AMBIENTE == 'sandbox' else 'produção'}).")
     except inter.ErroInter as e:
         flash(request, str(e), "erro")
-    return voltar("/financeiro/inter")
+    return voltar("/admin/integracao-bancaria")
 
 
-@app.post("/financeiro/inter/webhook", dependencies=[Depends(checar_csrf)])
+@app.post("/admin/integracao-bancaria/webhook", dependencies=[Depends(checar_csrf)])
 def inter_webhook_registrar(request: Request, u: Usuario = Depends(so_admin)):
     url = config.URL_PUBLICA or ""
     if not url.startswith("https://"):
         flash(request, "Configure o Endereço público com https:// (Configurações → Empresa e sistema).", "erro")
-        return voltar("/financeiro/inter")
+        return voltar("/admin/integracao-bancaria")
     try:
         inter.registrar_webhook(f"{url}/webhook/inter/{inter.webhook_token()}")
         flash(request, "Webhook cadastrado no Inter: os pagamentos vão dar baixa sozinhos.")
     except inter.ErroInter as e:
         flash(request, str(e), "erro")
-    return voltar("/financeiro/inter")
+    return voltar("/admin/integracao-bancaria")
 
 
-@app.post("/financeiro/inter/sincronizar", dependencies=[Depends(checar_csrf)])
+@app.post("/admin/integracao-bancaria/sincronizar", dependencies=[Depends(checar_csrf)])
 def inter_sincronizar(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     try:
         n = inter.sincronizar(db, limite=200)

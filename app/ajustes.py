@@ -110,7 +110,7 @@ SECOES = [
         Campo("FIN_JUROS_MES_PCT", "Juros por mês de atraso (%)", "num", minimo=0, maximo=10),
     ]),
     ("inter", "Banco Inter — boleto com PIX",
-     "Credenciais da integração criada no Internet Banking PJ. O certificado é enviado em Financeiro → Banco Inter.", [
+     "Credenciais da integração criada no Internet Banking PJ. O certificado é enviado em Administração → Integração bancária.", [
         Campo("INTER_ATIVO", "Emissão de boleto pelo Inter ligada", "bool"),
         Campo("INTER_AMBIENTE", "Ambiente", "escolha", opcoes={"producao": "Produção", "sandbox": "Sandbox (testes)"}),
         Campo("INTER_CLIENT_ID", "Client ID"),
@@ -142,6 +142,9 @@ SECOES = [
     ]),
 ]
 CAMPOS = {c.chave: c for _, _, _, cs in SECOES for c in cs}
+# seções editadas em tela própria (não aparecem em Administração → Configurações)
+SECOES_PROPRIAS = {"inter": "/admin/integracao-bancaria"}
+CAMPOS_INTER = [c.chave for s, _, _, cs in SECOES if s == "inter" for c in cs]
 _ALERTA = {"ALERTA_HORAS_URGENTE": "urgente", "ALERTA_HORAS_ALTA": "alta", "ALERTA_HORAS_NORMAL": "normal",
            "ALERTA_HORAS_BAIXA": "baixa"}
 _CIFRADO = "enc:"
@@ -268,11 +271,14 @@ def origem(chave, linhas) -> str:
     return "sistema" if chave in linhas else "padrao"
 
 
-def salvar(db, form: dict) -> list[str]:
-    """Valida e grava o formulário inteiro. Retorna lista de erros (nada é gravado se houver erro)."""
+def salvar(db, form: dict, chaves=None) -> list[str]:
+    """Valida e grava o formulário (inteiro, ou só as `chaves` de uma tela própria). Retorna lista de erros
+    (nada é gravado se houver erro)."""
     from . import inventario
     erros, novos, apagar = [], {}, set()
     for chave, campo in CAMPOS.items():
+        if chaves is not None and chave not in chaves:
+            continue
         if campo.tipo == "senha":
             if form.get(f"{chave}__limpar"):
                 apagar.add(chave)

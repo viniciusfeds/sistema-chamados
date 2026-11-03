@@ -106,7 +106,7 @@ FIN_DADOS_BANCARIOS = os.environ.get("FIN_DADOS_BANCARIOS", "")
 FIN_MULTA_PCT = float(os.environ.get("FIN_MULTA_PCT", "2"))
 FIN_JUROS_MES_PCT = float(os.environ.get("FIN_JUROS_MES_PCT", "1"))
 
-# Banco Inter (boleto com PIX) — ajustável em Financeiro → Banco Inter
+# Banco Inter (boleto com PIX) — ajustável em Administração → Integração bancária
 INTER_ATIVO = os.environ.get("INTER_ATIVO", "0") == "1"
 INTER_AMBIENTE = os.environ.get("INTER_AMBIENTE", "producao")          # producao / sandbox
 INTER_CLIENT_ID = os.environ.get("INTER_CLIENT_ID", "")

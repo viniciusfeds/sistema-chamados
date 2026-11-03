@@ -1,7 +1,7 @@
 """Integração com o Banco Inter (API Cobrança v3 — boleto com PIX).
 
 Credenciais (Client ID/Secret) em Administração → Configurações → Banco Inter; certificado (.crt + .key)
-enviado em Financeiro → Banco Inter. Toda chamada usa o certificado (mTLS), exigência do Inter.
+enviado em Administração → Integração bancária. Toda chamada usa o certificado (mTLS), exigência do Inter.
 
 Fluxo: emitir() envia a cobrança e guarda o codigoSolicitacao; o Inter processa em segundos e atualizar()
 busca linha digitável, código de barras e PIX copia-e-cola. Pagamento chega pelo webhook (o sistema
@@ -114,7 +114,7 @@ def _contexto():
         return _ctx["ctx"]
     c, k = cert_paths()
     if not certificado_salvo():
-        raise ErroInter("Envie o certificado do Inter (.crt e .key) em Financeiro → Banco Inter, "
+        raise ErroInter("Envie o certificado do Inter (.crt e .key) em Administração → Integração bancária, "
                         "ou aponte os arquivos no .env (INTER_CERT_ARQUIVO / INTER_CHAVE_ARQUIVO).")
     chave = (c.stat().st_mtime, k.stat().st_mtime)
     if _ctx["chave"] != chave:
@@ -170,7 +170,7 @@ def token(renovar=False) -> str:
         if not renovar and _token["valor"] and _token["chave"] == chave and _token["expira"] > time.time() + 60:
             return _token["valor"]
         if not (config.INTER_CLIENT_ID and config.INTER_CLIENT_SECRET):
-            raise ErroInter("Informe Client ID e Client Secret em Configurações → Banco Inter.")
+            raise ErroInter("Informe Client ID e Client Secret em Administração → Integração bancária.")
         corpo = urllib.parse.urlencode({"client_id": config.INTER_CLIENT_ID,
                                         "client_secret": config.INTER_CLIENT_SECRET,
                                         "grant_type": "client_credentials", "scope": ESCOPOS}).encode()
