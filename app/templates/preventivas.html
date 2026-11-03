@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Manutenção preventiva{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Manutenção preventiva</h1>
+    <div class="muted">Planos recorrentes: o chamado abre sozinho, já agendado, alguns dias antes de cada visita</div></div>
+  <div class="acoes-orc"><a class="btn sec" href="/agenda">📅 Agenda</a>{% if u.papel == 'admin' %}<a class="btn" href="#form">+ Novo plano</a>{% endif %}</div>
+</div>
+<div class="card"><form method="get" class="acoes-orc">
+  <select name="cliente" onchange="this.form.submit()" style="max-width:320px"><option value="">Todos os clientes</option>
+    {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select></form></div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Plano</th><th>Unidade</th><th>Frequência</th><th>Próxima visita</th><th>Técnico</th><th>Último chamado</th><th></th></tr></thead>
+  <tbody>{% for p in lista %}{% set abre = p.proxima_data - timedelta(days=p.antecedencia_dias) %}
+  <tr class="{{ 'inativo' if not p.ativo }}">
+    <td data-l="Plano"><b>{{ p.titulo }}</b>{% if not p.ativo %} <span class="tag cinza">pausado</span>{% endif %}
+      {% if p.itens_checklist %}<div class="muted">{{ p.itens_checklist|length }} item(ns) no checklist</div>{% endif %}</td>
+    <td data-l="Unidade">{{ p.unidade.nome }}<div class="muted">{{ p.unidade.cliente.nome }}</div></td>
+    <td data-l="Frequência">{{ p.frequencia_rotulo }}</td>
+    <td data-l="Próxima visita"><b>{{ p.proxima_data|data }}</b>{% if p.hora %} · {{ p.hora.strftime('%H:%M') }}{% endif %}
+      <div class="muted">chamado abre {{ 'hoje' if abre <= hoje else abre|data }}</div></td>
+    <td data-l="Técnico">{{ p.tecnico.nome if p.tecnico else '—' }}</td>
+    <td data-l="Último chamado">{% if p.ultimo_chamado %}<a href="/chamados/{{ p.ultimo_chamado.numero }}">{{ p.ultimo_chamado.numero_fmt }}</a> <span class="muted">({{ p.ultima_geracao|data }})</span>{% else %}—{% endif %}</td>
+    <td>{% if u.papel == 'admin' %}<div class="acoes-orc">
+      <a class="btn peq sec" href="?editar={{ p.id }}#form">Editar</a>
+      <form method="post" action="/preventivas/{{ p.id }}/acao"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn peq sec" name="acao" value="abrir_agora" onclick="return confirm('Abrir agora o chamado da visita de {{ p.proxima_data|data }}?')" {{ 'disabled' if not p.ativo }}>Abrir agora</button>
+        <button class="btn peq sec" name="acao" value="alternar">{{ 'Pausar' if p.ativo else 'Reativar' }}</button></form></div>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum plano de preventiva.{% if u.papel == 'admin' %} Cadastre o primeiro abaixo.{% endif %}</p>{% endif %}
+</div>
+
+{% if u.papel == 'admin' %}{% set e = ed %}
+<form class="card" method="post" action="/preventivas/salvar" id="form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if e and e.id %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <h2>{{ 'Editar plano' if e and e.id else '+ Novo plano de preventiva' }}</h2>
+  <div class="grid2">
+    <div class="campo"><label>Unidade</label><select name="unidade_id" required><option value="">Selecione…</option>
+      {% for un in unidades %}<option value="{{ un.id }}" {{ 'selected' if e and e.unidade_id == un.id }}>{{ un.cliente.nome }} · {{ un.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Título</label><input name="titulo" required value="{{ e.titulo if e else '' }}" placeholder="Ex.: Preventiva CFTV e controle de acesso"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Frequência</label><select name="frequencia">{% for k, v in FREQUENCIAS.items() %}<option value="{{ k }}" {{ 'selected' if (e.frequencia if e else 'mensal') == k }}>{{ v[0] }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Próxima visita</label><input type="date" name="proxima_data" required value="{{ (e.proxima_data if e and e.proxima_data else hoje + timedelta(days=7)).isoformat() }}"></div>
+    <div class="campo"><label>Horário <span class="muted">(opcional)</span></label><input type="time" name="hora" value="{{ e.hora.strftime('%H:%M') if e and e.hora else '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Abrir o chamado quantos dias antes</label><input name="antecedencia_dias" inputmode="numeric" value="{{ e.antecedencia_dias if e else 3 }}">
+      <div class="dica">O chamado já nasce como <b>Agendado</b> na data da visita.</div></div>
+    <div class="campo"><label>Técnico</label><select name="tecnico_id"><option value="">—</option>{% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if e and e.tecnico_id == t.id }}>{{ t.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Prioridade</label><select name="prioridade">{% for k, v in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if (e.prioridade if e else 'normal') == k }}>{{ v[0] }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="grid2">
+    <div class="campo"><label>Checklist <span class="muted">(um item por linha — vira a tabela de verificação do chamado)</span></label>
+      <textarea name="checklist" rows="8" placeholder="Limpeza das lentes das câmeras&#10;Teste de gravação e HD do DVR&#10;Conferência de fontes e nobreak&#10;Teste do acesso remoto">{{ e.checklist or '' if e else '' }}</textarea></div>
+    <div class="campo"><label>Observações para o técnico</label><textarea name="observacoes" rows="8">{{ e.observacoes or '' if e else '' }}</textarea></div>
+  </div>
+  <div class="grid2">
+    <div class="campo"><label>Contrato <span class="muted">(opcional)</span></label><select name="contrato_id"><option value="">—</option>
+      {% for c in contratos %}<option value="{{ c.id }}" {{ 'selected' if e and e.contrato_id == c.id }}>{{ c.descricao }} · {{ c.cliente_fiscal.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>&nbsp;</label>
+      <label class="check"><input type="checkbox" name="avisar_cliente" value="1" {{ 'checked' if not e or e.avisar_cliente }}> <span>Avisar o cliente no WhatsApp quando o chamado abrir</span></label>
+      {% if e and e.id %}<label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if e.ativo }}> <span>Plano ativo</span></label>{% endif %}</div>
+  </div>
+  <div class="acoes-orc"><button class="btn">Salvar plano</button>{% if e and e.id %}<a class="btn sec" href="/preventivas">Cancelar</a>{% endif %}</div>
+</form>
+{% if ed and ed.id %}
+<form method="post" action="/preventivas/{{ ed.id }}/acao" style="text-align:right" onsubmit="return confirm('Excluir o plano? Os chamados já abertos continuam.')">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq perigo" name="acao" value="excluir">Excluir plano</button></form>
+{% endif %}
+{% endif %}
+{% endblock %}

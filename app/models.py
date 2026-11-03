@@ -869,3 +869,44 @@ class Assinatura(Base):
     def cpf_mascarado(self):
         d = self.cpf or ""
         return f"***.{d[3:6]}.{d[6:9]}-**" if len(d) == 11 else ""
+
+
+FREQUENCIAS = {  # chave -> (rótulo, meses, dias)
+    "semanal": ("Semanal", 0, 7), "quinzenal": ("Quinzenal", 0, 14), "mensal": ("Mensal", 1, 0),
+    "bimestral": ("Bimestral", 2, 0), "trimestral": ("Trimestral", 3, 0), "quadrimestral": ("Quadrimestral", 4, 0),
+    "semestral": ("Semestral", 6, 0), "anual": ("Anual", 12, 0),
+}
+
+
+class PlanoPreventiva(Base):
+    """Manutenção preventiva recorrente de uma unidade: abre o chamado agendado sozinho."""
+    __tablename__ = "planos_preventiva"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    unidade_id: Mapped[int] = mapped_column(ForeignKey("unidades.id"), index=True)
+    contrato_id: Mapped[int | None] = mapped_column(ForeignKey("contratos.id", ondelete="SET NULL"), nullable=True)
+    titulo: Mapped[str] = mapped_column(String(160))
+    checklist: Mapped[str | None] = mapped_column(Text, nullable=True)      # um item por linha
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    frequencia: Mapped[str] = mapped_column(String(15), default="mensal")
+    proxima_data: Mapped[date] = mapped_column(Date)
+    hora: Mapped[time | None] = mapped_column(Time, nullable=True)
+    antecedencia_dias: Mapped[int] = mapped_column(Integer, default=3)       # abre o chamado X dias antes
+    tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    prioridade: Mapped[str] = mapped_column(String(10), default="normal")
+    avisar_cliente: Mapped[bool] = mapped_column(Boolean, default=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ultimo_chamado_id: Mapped[int | None] = mapped_column(ForeignKey("chamados.id", ondelete="SET NULL"), nullable=True)
+    ultima_geracao: Mapped[date | None] = mapped_column(Date, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    unidade = relationship("Unidade")
+    tecnico = relationship("Usuario")
+    contrato = relationship("Contrato")
+    ultimo_chamado = relationship("Chamado")
+
+    @property
+    def frequencia_rotulo(self):
+        return FREQUENCIAS.get(self.frequencia, (self.frequencia,))[0]
+
+    @property
+    def itens_checklist(self):
+        return [x.strip(" -•☐\t") for x in (self.checklist or "").splitlines() if x.strip(" -•☐\t")]

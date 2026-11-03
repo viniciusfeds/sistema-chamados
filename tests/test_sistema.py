@@ -1745,3 +1745,43 @@ def test_contrato_assinatura_eletronica():
     assert v.status_code == 200 and "Assinado" in v.text and "52998224725" not in v.text
     assert pub.get(f"/assinar/{token}/pdf").content[:4] == b"%PDF"
     assert adm.get("/financeiro/contratos/modelos").status_code == 200
+
+
+def test_manutencao_preventiva_abre_chamado_agendado():
+    from datetime import timedelta
+    from app import preventiva, regras
+    from app.models import PlanoPreventiva
+    adm = entrar("admin@t.com")
+    pag = adm.get(f"/preventivas?unidade={IDS['torre']}")
+    assert pag.status_code == 200 and "Novo plano de preventiva" in pag.text
+    hoje = date.today()
+    visita = hoje + timedelta(days=2)
+    with SessionLocal() as db:
+        tec = db.scalar(select(Usuario).where(Usuario.email == "tec@t.com"))
+    r = adm.post("/preventivas/salvar", data={"csrf": _csrf(pag.text), "unidade_id": str(IDS["torre"]),
+                                              "titulo": "Preventiva CFTV", "frequencia": "mensal",
+                                              "proxima_data": visita.isoformat(), "hora": "09:30", "antecedencia_dias": "3",
+                                              "tecnico_id": str(tec.id), "prioridade": "normal",
+                                              "checklist": "Limpeza das lentes\nTeste de gravação\n\nNobreak", "avisar_cliente": ""})
+    assert "Plano salvo" in r.text
+    with SessionLocal() as db:
+        n = len(preventiva.processar(db, hoje, avisar=False))
+        assert n == 1
+        assert preventiva.processar(db, hoje, avisar=False) == []          # não duplica
+        p = db.scalar(select(PlanoPreventiva).where(PlanoPreventiva.titulo == "Preventiva CFTV"))
+        ch = db.get(Chamado, p.ultimo_chamado_id)
+        assert regras.status_geral(ch) == "agendado" and ch.tecnico_id == tec.id and ch.origem == "preventiva"
+        assert any(a.status == "Agendado" and a.data == visita and a.hora.strftime("%H:%M") == "09:30" for a in ch.acoes)
+        assert ch.diagnostico[0] == ["Item verificado", "Situação", "Observação"] and len(ch.diagnostico) == 4
+        assert [t.nome for t in ch.tipos] == ["Manutenção preventiva"]
+        assert p.proxima_data == preventiva.proxima(visita, "mensal")
+        # sistema parado 3 meses: abre só a mais recente
+        p.proxima_data = hoje - timedelta(days=95); p.ultima_geracao = None; db.commit()
+        antes = db.scalar(select(func.count(Chamado.id)))
+        preventiva.processar(db, hoje, avisar=False)
+        assert db.scalar(select(func.count(Chamado.id))) == antes + 1 and p.proxima_data > hoje - timedelta(days=3)
+    ag = adm.get(f"/agenda?mes={visita:%Y-%m}")
+    assert ag.status_code == 200 and "Preventiva CFTV" in ag.text and "ev-preventiva" in ag.text
+    tec_c = entrar("tec@t.com")
+    assert tec_c.get("/agenda").status_code == 200 and tec_c.get("/preventivas").status_code == 200
+    assert entrar("carrao@t.com").get("/agenda", follow_redirects=False).status_code == 403

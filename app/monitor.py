@@ -125,6 +125,12 @@ def _laco(parar: threading.Event):
         try:
             ajustes.atualizar_se_mudou(0)   # pega mudanças feitas na tela de Configurações
             n = verificar_todos() if config.MONITOR_ATIVO else 0
+            try:                                # manutenção preventiva: abre os chamados devidos
+                from . import preventiva
+                with SessionLocal() as db:
+                    preventiva.processar(db)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Falha na manutenção preventiva: %s", e)
             try:                                # chamados em validação sem resposta do solicitante
                 from . import validacao
                 with SessionLocal() as db:

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Agenda{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Agenda de atendimentos</h1><div class="muted">Visitas agendadas nos chamados e preventivas previstas</div></div>
+  <a class="btn sec" href="/preventivas">Planos de preventiva</a>
+</div>
+<div class="card"><form method="get" class="acoes-orc">
+  <input type="hidden" name="mes" value="{{ f.mes }}">
+  <select name="tecnico" onchange="this.form.submit()" style="max-width:240px"><option value="">Todos os técnicos</option>
+    {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if f.tecnico == t.id }}>{{ t.nome }}</option>{% endfor %}</select>
+  <select name="cliente" onchange="this.form.submit()" style="max-width:280px"><option value="">Todos os clientes</option>
+    {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select>
+  <span class="leg-agenda"><i class="ev-chamado"></i>chamado agendado <i class="ev-preventiva"></i>preventiva agendada <i class="ev-prevista"></i>preventiva prevista</span>
+</form></div>
+{% set qs = ('&tecnico=' ~ f.tecnico if f.tecnico else '') ~ ('&cliente=' ~ f.cliente if f.cliente else '') %}
+<div class="cab" style="align-items:center">
+  <a class="btn sec" href="?mes={{ ant }}{{ qs }}">‹</a>
+  <h2 style="margin:0">{{ titulo_mes[:1]|upper }}{{ titulo_mes[1:] }}</h2>
+  <div class="acoes-orc"><a class="btn sec" href="?mes={{ hoje.strftime('%Y-%m') }}{{ qs }}">Hoje</a><a class="btn sec" href="?mes={{ prox }}{{ qs }}">›</a></div>
+</div>
+<div class="calendario card">
+  {% for d in ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] %}<div class="cal-dia-sem">{{ d }}</div>{% endfor %}
+  {% for semana in semanas %}{% for d in semana %}
+  <div class="cal-dia {{ 'fora' if d.month != ini.month }} {{ 'hoje' if d == hoje }}">
+    <div class="cal-num">{{ d.day }}</div>
+    {% for e in eventos.get(d, []) %}
+    <a class="ev ev-{{ e.tipo }}" href="{{ e.link }}" title="{{ e.detalhe }}{{ ' · ' ~ e.tecnico if e.tecnico }}">{% if e.hora %}<b>{{ e.hora.strftime('%H:%M') }}</b> {% endif %}{{ e.titulo }}</a>
+    {% endfor %}
+  </div>
+  {% endfor %}{% endfor %}
+</div>
+<div class="card agenda-lista">
+  <h2>Lista do mês</h2>
+  {% for d, e in lista %}
+  <a class="linha-lista" href="{{ e.link }}"><span><b>{{ d|data }}{% if e.hora %} · {{ e.hora.strftime('%H:%M') }}{% endif %}</b> — {{ e.titulo }}<br>
+    <span class="muted">{{ e.detalhe }}{{ ' · ' ~ e.tecnico if e.tecnico }}</span></span><i class="pin ev-{{ e.tipo }}"></i></a>
+  {% else %}<p class="muted">Nada agendado neste mês.</p>{% endfor %}
+</div>
+{% endblock %}

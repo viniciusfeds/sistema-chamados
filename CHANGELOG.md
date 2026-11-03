@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 1.14.0 — 2026-11-03
+- **Manutenção preventiva** (menu Chamados → Preventivas): planos por unidade com frequência (semanal a anual),
+  data e horário da visita, técnico, prioridade, checklist e contrato
+  - o **chamado abre sozinho** X dias antes (padrão 3), já com a visita como ação **Agendado**, o técnico, a tag
+    “Manutenção preventiva” e o **checklist como tabela de verificação** (sai no PDF)
+  - a data avança pela frequência; se o sistema ficar parado, abre só a visita mais recente (não acumula)
+  - aviso ao cliente no WhatsApp na abertura (opcional por plano); botão *Abrir agora*; pausar/reativar
+- **Agenda de atendimentos** (menu Chamados → Agenda): calendário do mês com as visitas agendadas nos chamados e as
+  preventivas previstas, filtros por técnico e cliente; no celular vira lista
+
 ## 1.13.0 — 2026-11-03
 - **Assinatura eletrônica de contratos** (sem sistema externo), em Financeiro → Contratos → contrato:
   - texto gerado por **modelo** com os dados do cliente e do contrato (modelo padrão de manutenção incluído,
