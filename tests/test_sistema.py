@@ -13,7 +13,7 @@ os.environ["MONITOR_ATIVO"] = "0"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import func, select  # noqa: E402
 
 from app.auth import hash_senha  # noqa: E402
 from app.db import SessionLocal, criar_tabelas  # noqa: E402
@@ -1598,3 +1598,32 @@ def test_imposto_sobre_produtos_e_servicos():
     so_prod = Orcamento(numero=2, titulo="y", emissao=date.today(), imposto_produtos_pct=8, imposto_servicos_pct=0,
                         desconto=0, itens=[ItemOrcamento(tipo="produto", descricao="a", quantidade=1, valor_unitario=50000)])
     assert so_prod.impostos == 4000 and so_prod.total == 54000
+
+
+def test_proximo_numero_de_orcamento_nas_configuracoes():
+    from app import config, financeiro
+    from app.models import Orcamento
+    adm = entrar("admin@t.com")
+    cfg = adm.get("/admin/configuracoes")
+    assert "Próximo número de orçamento" in cfg.text and "será <b>" in cfg.text
+    with SessionLocal() as db:
+        ultimo = db.scalar(select(func.max(Orcamento.numero))) or 0
+    form = {"csrf": _csrf(cfg.text)}
+    form.update({k: v for k, v in re.findall(r'name="([A-Z_]+)" value="([^"]*)"', cfg.text)})
+    for nome, bloco in re.findall(r'<select id="[A-Z_]+" name="([A-Z_]+)">(.*?)</select>', cfg.text, re.S):
+        sel = re.search(r'<option value="([^"]*)" selected', bloco) or re.search(r'<option value="([^"]*)"', bloco)
+        form[nome] = sel.group(1)
+    for nome in re.findall(r'name="([A-Z_]+)" value="1"[^>]*checked', cfg.text):
+        form[nome] = "1"
+    form["ORC_NUMERO_INICIAL"] = str(ultimo + 50)
+    r = adm.post("/admin/configuracoes", data=form)
+    assert "Nada foi salvo" not in r.text, re.search(r'class="flash[^"]*">([^<]*)', r.text).group(1)
+    assert "Configurações salvas" in r.text and f"{ultimo + 50:04d}" in r.text
+    with SessionLocal() as db:
+        assert financeiro.proximo_numero_orcamento(db) == ultimo + 50
+    assert f"{ultimo + 50:04d}" in adm.get("/financeiro/orcamentos").text
+    if ultimo:
+        form["ORC_NUMERO_INICIAL"] = "1"                 # número já usado: avisa e segue a sequência
+        r = adm.post("/admin/configuracoes", data=form)
+        assert "já foi usado" in r.text
+    config.ORC_NUMERO_INICIAL = 1

@@ -118,6 +118,7 @@ def orc_lista(request: Request, status: str = "", cliente: str = "", q: str = ""
             st = select(Orcamento).options(selectinload(Orcamento.itens)).where(Orcamento.numero == int(q))
     lista = db.scalars(st.limit(300)).all()
     return render(request, "fin_orcamentos.html", u=u, lista=lista, hoje=hoje(), clientes=_clientes_fiscais(db),
+                  proximo=financeiro.proximo_numero_orcamento(db),
                   f={"status": status, "cliente": _int(cliente), "q": q})
 
 

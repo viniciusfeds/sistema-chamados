@@ -4,7 +4,8 @@
 {% block conteudo %}
 {{ abas_financeiro('orcamentos') }}
 <div class="cab">
-  <div><h1>Orçamentos</h1><div class="muted">{{ lista|length }} orçamento(s)</div></div>
+  <div><h1>Orçamentos</h1><div class="muted">{{ lista|length }} orçamento(s) · próximo número: <b>{{ '%04d'|format(proximo) }}</b>
+    <a href="/admin/configuracoes#orcamentos">alterar</a></div></div>
   <a class="btn" href="/financeiro/orcamentos/novo">+ Novo orçamento</a>
 </div>
 <div class="card">

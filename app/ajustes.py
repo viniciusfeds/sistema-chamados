@@ -96,8 +96,9 @@ SECOES = [
         Campo("EMPRESA_SITE", "Site"),
     ]),
     ("orcamentos", "Orçamentos e cobrança", "Valores padrão de cada orçamento novo (podem ser mudados em cada um).", [
-        Campo("ORC_NUMERO_INICIAL", "Numeração começa em", "int",
-              "Para continuar a sequência das propostas antigas (ex.: 900).", minimo=1, maximo=10_000_000),
+        Campo("ORC_NUMERO_INICIAL", "Próximo número de orçamento", "int",
+              "Número do próximo orçamento criado (ex.: 900 para continuar as propostas antigas). "
+              "Não pode repetir um número já usado.", minimo=1, maximo=10_000_000),
         Campo("ORC_VALIDADE_DIAS", "Validade padrão (dias)", "int", minimo=1, maximo=365),
         Campo("ORC_IMPOSTO_PRODUTOS_PCT", "Impostos sobre produtos (%)", "num",
               "Padrão de cada orçamento novo: acrescenta impostos sobre o total de produtos (0 = não cobra).",

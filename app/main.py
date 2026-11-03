@@ -1244,8 +1244,14 @@ def admin_configuracoes(request: Request, u: Usuario = Depends(so_admin), db: Se
     senhas = {k: bool(ajustes._ler_config(k)) for k, c in ajustes.CAMPOS.items() if c.tipo == "senha"}
     padroes = {k: ajustes.para_texto(c, ajustes.PADROES[k]) for k, c in ajustes.CAMPOS.items() if c.tipo != "senha"}
     secoes = [s for s in ajustes.SECOES if s[0] not in ajustes.SECOES_PROPRIAS]
+    from . import financeiro
+    from .models import Orcamento
+    ultimo = db.scalar(select(func.max(Orcamento.numero))) or 0
+    extras = {"ORC_NUMERO_INICIAL": f"Último orçamento usado: {ultimo:04d} · o próximo será "
+                                    f"<b>{financeiro.proximo_numero_orcamento(db):04d}</b>." if ultimo else
+                                    f"Nenhum orçamento ainda · o primeiro será <b>{financeiro.proximo_numero_orcamento(db):04d}</b>."}
     return render(request, "admin_config.html", u=u, secoes=secoes, valores=valores, senhas=senhas,
-                  padroes=padroes, no_sistema=linhas, v=None)
+                  padroes=padroes, no_sistema=linhas, v=None, extras=extras)
 
 
 @app.post("/admin/configuracoes", dependencies=[Depends(checar_csrf)])
@@ -1257,7 +1263,13 @@ async def admin_configuracoes_salvar(request: Request, u: Usuario = Depends(so_a
     if erros:
         flash(request, "Nada foi salvo. " + " ".join(erros), "erro")
     else:
-        flash(request, "Configurações salvas. Já estão valendo, sem reiniciar.")
+        from .models import Orcamento
+        ultimo = db.scalar(select(func.max(Orcamento.numero))) or 0
+        if ultimo and config.ORC_NUMERO_INICIAL <= ultimo:
+            flash(request, f"Configurações salvas. Atenção: o número {config.ORC_NUMERO_INICIAL:04d} já foi usado "
+                           f"(último orçamento é {ultimo:04d}); o próximo será {ultimo + 1:04d}.", "aviso")
+        else:
+            flash(request, "Configurações salvas. Já estão valendo, sem reiniciar.")
     return voltar("/admin/configuracoes")
 
 

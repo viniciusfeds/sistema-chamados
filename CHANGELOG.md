@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.12.2 — 2026-11-03
+- Configurações → Orçamentos e cobrança: campo **Próximo número de orçamento** (antes “Numeração começa em”),
+  mostrando o último usado e qual será o próximo; aviso se o número escolhido já foi usado
+- Lista de orçamentos mostra o próximo número, com atalho para alterar
+
 ## 1.12.1 — 2026-11-03
 - Orçamento: **imposto sobre produtos** além do imposto sobre serviços (antes só serviços tinham imposto, e um
   orçamento só de produtos ficava sem). Cada um com padrão em Configurações → Orçamentos e cobrança, linhas separadas

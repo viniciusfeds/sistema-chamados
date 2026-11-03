@@ -23,6 +23,7 @@
   {% endif %}
   {% endif %}
   {% if c.ajuda %}<div class="dica">{{ c.ajuda }}</div>{% endif %}
+  {% if extras and extras.get(c.chave) %}<div class="dica" style="color:var(--texto)">{{ extras[c.chave]|safe }}</div>{% endif %}
   {% if alterado and c.tipo not in ('senha',) and padroes[c.chave] != valores[c.chave] %}<div class="dica">Padrão: {{ ({'1': 'ligado', '0': 'desligado'}[padroes[c.chave]] if c.tipo == 'bool' else (c.opcoes.get(padroes[c.chave], padroes[c.chave]) if c.tipo == 'escolha' else (padroes[c.chave] or 'vazio'))) }}</div>{% endif %}
 </div>
 {%- endmacro %}
