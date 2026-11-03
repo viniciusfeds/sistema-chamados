@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes{% endblock %}
+{% block conteudo %}
+<div class="cab">
+  <div><h1>Clientes</h1><div class="muted">{{ lista|length }} cliente(s) · cadastro, unidades, faturamento, link de chamado e agente num só lugar</div></div>
+  <a class="btn" href="/clientes/novo">+ Novo cliente</a>
+</div>
+<div class="card"><form method="get" class="acoes-orc">
+  <input name="q" value="{{ f.q }}" placeholder="Nome, unidade, razão social ou CNPJ/CPF" style="flex:1;min-width:240px">
+  <label class="check" style="margin:0"><input type="checkbox" name="inativos" value="1" {{ 'checked' if f.inativos }}> Mostrar inativos</label>
+  <button class="btn">Buscar</button></form></div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Cliente</th><th>CNPJ/CPF</th><th>Cidade</th><th>Unidades</th><th>Chamados</th><th class="valor">Vencido</th></tr></thead>
+  <tbody>{% for c in lista %}{% set cf = fiscal.get(c.id) %}
+  <tr class="link {{ 'inativo' if not c.ativo }}" onclick="location.href='/clientes/{{ c.id }}'">
+    <td data-l="Cliente"><a href="/clientes/{{ c.id }}"><b>{{ c.nome }}</b></a>
+      {% if cf and cf.razao_social != c.nome %}<div class="muted">{{ cf.razao_social }}</div>{% endif %}
+      {% if not c.ativo %}<span class="tag cinza">inativo</span>{% endif %}
+      {% if not cf or not cf.documento %}<span class="tag cinza" title="Necessário para orçamento, cobrança e nota">sem dados de faturamento</span>
+      {% elif not cf.endereco_completo %}<span class="tag alerta">endereço incompleto</span>{% endif %}</td>
+    <td data-l="CNPJ/CPF" class="mono">{{ cf.documento_fmt if cf and cf.documento else '—' }}</td>
+    <td data-l="Cidade">{{ (cf.municipio ~ '/' ~ cf.uf) if cf and cf.municipio else '—' }}</td>
+    <td data-l="Unidades">{{ c.unidades|selectattr('ativa')|list|length }}</td>
+    <td data-l="Chamados">{{ chamados.get(c.id, 0) }}</td>
+    <td data-l="Vencido" class="valor">{% if vencido.get(c.id) %}<b style="color:#B3261E">{{ vencido[c.id]|brl }}</b>{% else %}—{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum cliente encontrado.</p>{% endif %}
+</div>
+{% endblock %}

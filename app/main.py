@@ -104,6 +104,12 @@ def voltar(url):
     return RedirectResponse(url, 303)
 
 
+def _destino(v, padrao):
+    """voltar_para vindo do formulário: só caminho interno (evita redirecionar para outro site)."""
+    v = (v or "").strip()
+    return v if v.startswith("/") and not v.startswith("//") else padrao
+
+
 def _data(s, padrao=None):
     try:
         return date.fromisoformat(s) if s else padrao
@@ -1148,19 +1154,21 @@ def admin(request: Request, u: Usuario = Depends(so_admin), db: Session = Depend
 @app.post("/admin/clientes", dependencies=[Depends(checar_csrf)])
 def admin_cliente(request: Request, nome: str = Form(...), nome_curto: str = Form(""),
                   u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    """Mantido para compatibilidade; o cadastro novo é /clientes/novo."""
     nome = nome.strip()
     if len(nome) < 2:
-        flash(request, "Informe o nome do cliente.", "erro"); return voltar("/admin#clientes")
+        flash(request, "Informe o nome do cliente.", "erro"); return voltar("/clientes")
     if db.scalar(select(Cliente).where(func.lower(Cliente.nome) == nome.lower())):
-        flash(request, "Esse cliente já existe.", "erro"); return voltar("/admin#clientes")
+        flash(request, "Esse cliente já existe.", "erro"); return voltar("/clientes")
     db.add(Cliente(nome=nome, nome_curto=nome_curto.strip() or None)); db.commit()
     flash(request, f"Cliente {nome} cadastrado. Agora cadastre as unidades dele.")
-    return voltar("/admin#clientes")
+    return voltar("/clientes")
 
 
 @app.post("/admin/clientes/{cid}", dependencies=[Depends(checar_csrf)])
 def admin_cliente_op(request: Request, cid: int, operacao: str = Form(...), nome: str = Form(""),
-                     nome_curto: str = Form(""), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+                     nome_curto: str = Form(""), voltar_para: str = Form(""), u: Usuario = Depends(so_admin),
+                     db: Session = Depends(get_db)):
     cli = db.get(Cliente, cid)
     if not cli:
         raise HTTPException(404)
@@ -1178,10 +1186,14 @@ def admin_cliente_op(request: Request, cid: int, operacao: str = Form(...), nome
         cli.ativo = not cli.ativo
         flash(request, f"Cliente {cli.nome} {'ativado' if cli.ativo else 'desativado'}.")
     elif operacao == "salvar" and nome.strip():
+        outro = db.scalar(select(Cliente).where(func.lower(Cliente.nome) == nome.strip().lower(), Cliente.id != cli.id))
+        if outro:
+            flash(request, "Já existe outro cliente com esse nome.", "erro")
+            return voltar(_destino(voltar_para, f"/clientes/{cli.id}"))
         cli.nome, cli.nome_curto = nome.strip(), nome_curto.strip() or None
         flash(request, "Cliente atualizado.")
     db.commit()
-    return voltar("/admin#clientes")
+    return voltar(_destino(voltar_para, f"/clientes/{cli.id}"))
 
 
 def _cor(v):
@@ -1248,12 +1260,13 @@ async def admin_configuracoes_salvar(request: Request, u: Usuario = Depends(so_a
 
 
 @app.post("/admin/unidades", dependencies=[Depends(checar_csrf)])
-def admin_unidade(request: Request, nome: str = Form(...), cliente_id: int = Form(...),
+def admin_unidade(request: Request, nome: str = Form(...), cliente_id: int = Form(...), voltar_para: str = Form(""),
                   u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     cli = db.get(Cliente, cliente_id)
     nome = nome.strip()
+    destino = _destino(voltar_para, f"/clientes/{cliente_id}#unidades")
     if not cli or not nome:
-        flash(request, "Informe o cliente e o nome da unidade.", "erro"); return voltar("/admin#unidades")
+        flash(request, "Informe o cliente e o nome da unidade.", "erro"); return voltar(destino)
     pref = (cli.nome_curto or "").strip()
     if pref and not nome.lower().startswith(pref.lower()):
         nome = f"{pref} {nome}"
@@ -1267,16 +1280,27 @@ def admin_unidade(request: Request, nome: str = Form(...), cliente_id: int = For
         except IntegrityError:
             db.rollback()
             flash(request, "Já existe uma unidade com esse nome.", "erro")
-    return voltar("/admin#unidades")
+    return voltar(destino)
 
 
 @app.post("/admin/unidades/{uid}/alternar", dependencies=[Depends(checar_csrf)])
-def admin_unidade_alt(request: Request, uid: int, u: Usuario = Depends(so_admin),
-                      db: Session = Depends(get_db)):
+def admin_unidade_alt(request: Request, uid: int, nome: str = Form(""), voltar_para: str = Form(""),
+                      u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     un = db.get(Unidade, uid)
-    if un:
-        un.ativa = not un.ativa; db.commit()
-    return voltar("/admin#unidades")
+    if not un:
+        raise HTTPException(404)
+    if nome.strip():                       # renomear
+        novo = nome.strip()[:120]
+        if db.scalar(select(Unidade).where(Unidade.cliente_id == un.cliente_id, func.lower(Unidade.nome) == novo.lower(),
+                                           Unidade.id != un.id)):
+            flash(request, "Já existe uma unidade com esse nome.", "erro")
+        else:
+            un.nome = novo; flash(request, "Unidade renomeada.")
+    else:
+        un.ativa = not un.ativa
+        flash(request, f"Unidade {un.nome} {'ativada' if un.ativa else 'desativada'}.")
+    db.commit()
+    return voltar(_destino(voltar_para, f"/clientes/{un.cliente_id}#unidades"))
 
 
 @app.post("/admin/usuarios", dependencies=[Depends(checar_csrf)])
@@ -1346,7 +1370,7 @@ def admin_whatsapp(request: Request, u: Usuario = Depends(so_admin), db: Session
 @app.post("/admin/whatsapp/contatos", dependencies=[Depends(checar_csrf)])
 def admin_contato(request: Request, cliente_id: int = Form(...), unidade_id: str = Form(""),
                   nome: str = Form(...), telefone: str = Form(...), eventos: list[str] = Form(default=[]),
-                  u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+                  voltar_para: str = Form(""), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     cli = db.get(Cliente, cliente_id)
     un = db.get(Unidade, _int(unidade_id)) if _int(unidade_id) else None
     tel = whatsapp.normalizar_telefone(telefone)
@@ -1362,12 +1386,12 @@ def admin_contato(request: Request, cliente_id: int = Form(...), unidade_id: str
                             telefone=tel, eventos=evs))
         db.commit()
         flash(request, f"Contato {nome.strip()} cadastrado.")
-    return voltar("/admin/whatsapp#contatos")
+    return voltar(_destino(voltar_para, "/admin/whatsapp#contatos"))
 
 
 @app.post("/admin/whatsapp/contatos/{cid}", dependencies=[Depends(checar_csrf)])
-def admin_contato_op(request: Request, cid: int, operacao: str = Form(...), u: Usuario = Depends(so_admin),
-                     db: Session = Depends(get_db)):
+def admin_contato_op(request: Request, cid: int, operacao: str = Form(...), voltar_para: str = Form(""),
+                     u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     c = db.get(ContatoAviso, cid)
     if not c:
         raise HTTPException(404)
@@ -1376,7 +1400,7 @@ def admin_contato_op(request: Request, cid: int, operacao: str = Form(...), u: U
     else:
         c.ativo = not c.ativo; flash(request, f"Contato {'ativado' if c.ativo else 'pausado'}.")
     db.commit()
-    return voltar("/admin/whatsapp#contatos")
+    return voltar(_destino(voltar_para, "/admin/whatsapp#contatos"))
 
 
 @app.post("/admin/whatsapp/teste", dependencies=[Depends(checar_csrf)])
@@ -1578,4 +1602,4 @@ async def _erro(request: Request, exc: StarletteHTTPException):
 
 
 # Faturamento (orçamentos, contas a receber, contratos) — rotas em módulo próprio
-from . import rotas_financeiro  # noqa: E402,F401
+from . import rotas_clientes, rotas_financeiro  # noqa: E402,F401

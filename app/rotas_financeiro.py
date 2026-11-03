@@ -568,26 +568,28 @@ def contratos_gerar(request: Request, mes: str = Form(...), u: Usuario = Depends
 
 
 # ================================================================== clientes (dados fiscais)
-@app.get("/financeiro/clientes", response_class=HTMLResponse)
-def fin_clientes(request: Request, q: str = "", u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
-    st = select(ClienteFiscal).order_by(ClienteFiscal.ativo.desc(), ClienteFiscal.razao_social)
-    if q.strip():
-        termo = f"%{q.strip()}%"
-        dig = financeiro.so_digitos(q)
-        st = st.where(or_(ClienteFiscal.razao_social.ilike(termo), ClienteFiscal.nome_fantasia.ilike(termo),
-                          *( [ClienteFiscal.documento.like(f"%{dig}%")] if dig else [])))
-    return render(request, "fin_clientes.html", u=u, lista=db.scalars(st).all(), q=q)
+@app.get("/financeiro/clientes")
+def fin_clientes():
+    return voltar("/clientes")         # os clientes agora ficam no menu principal (ficha única)
 
 
 def _form_cliente(request, u, db, cf):
-    clientes = db.scalars(select(Cliente).where(Cliente.ativo).order_by(Cliente.nome)).all()
-    unidades = db.scalars(select(Unidade).join(Cliente).where(Unidade.ativa).order_by(Cliente.nome, Unidade.nome)).all()
-    return render(request, "fin_cliente.html", u=u, cf=cf, clientes=clientes, unidades=unidades)
+    return render(request, "fin_cliente.html", u=u, cf=cf)
 
 
 @app.get("/financeiro/clientes/novo", response_class=HTMLResponse)
-def fin_cliente_novo(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
-    return _form_cliente(request, u, db, ClienteFiscal(documento="", razao_social="", ativo=True))
+def fin_cliente_novo(request: Request, cliente: str = "", unidade: str = "", u: Usuario = Depends(so_admin),
+                     db: Session = Depends(get_db)):
+    """Dados de faturamento extras: CNPJ próprio de uma unidade."""
+    un = db.get(Unidade, _int(unidade)) if _int(unidade) else None
+    cid = un.cliente_id if un else _int(cliente)
+    if not cid:
+        return voltar("/clientes/novo")
+    cli = db.get(Cliente, cid)
+    cf = ClienteFiscal(documento="", razao_social=un.nome if un else (cli.nome if cli else ""), ativo=True,
+                       cliente_id=cid, unidade_id=un.id if un else None)
+    cf.cliente, cf.unidade = cli, un
+    return _form_cliente(request, u, db, cf)
 
 
 @app.get("/financeiro/clientes/{cid}", response_class=HTMLResponse)
@@ -602,13 +604,28 @@ CAMPOS_CLIENTE = ("razao_social", "nome_fantasia", "ie", "im", "email", "telefon
                   "complemento", "bairro", "municipio")
 
 
+def preencher_fiscal(cf: ClienteFiscal, f):
+    """Copia os campos do formulário de dados de faturamento (já validado) para o cadastro."""
+    cf.documento = financeiro.so_digitos(f.get("documento"))
+    for k in CAMPOS_CLIENTE:
+        setattr(cf, k, _opt(f.get(k)))
+    cf.razao_social = (cf.razao_social or "")[:160]
+    cf.cep = financeiro.so_digitos(f.get("cep"))[:8] or None
+    cf.uf = (_opt(f.get("uf")) or "").upper()[:2] or None
+    cf.ibge = financeiro.so_digitos(f.get("ibge"))[:7] or None
+    cf.telefone = (financeiro.so_digitos(cf.telefone)[:13] or None) if cf.telefone else None
+    cf.ie = (cf.ie or "").upper().replace(".", "").replace("-", "").replace("/", "") or None
+
+
 @app.post("/financeiro/clientes/salvar", dependencies=[Depends(checar_csrf)])
 async def fin_cliente_salvar(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     f = await request.form()
     cid = _int(f.get("id"))
-    cf = db.get(ClienteFiscal, cid) if cid else ClienteFiscal()
+    cf = db.get(ClienteFiscal, cid) if cid else ClienteFiscal(ativo=True)
     doc = financeiro.so_digitos(f.get("documento"))
-    destino = f"/financeiro/clientes/{cid}" if cid else "/financeiro/clientes/novo"
+    pedido = f.get("voltar_para") or ""
+    pedido = pedido if pedido.startswith("/") and not pedido.startswith("//") else ""
+    destino = pedido or (f"/financeiro/clientes/{cid}" if cid else "/clientes")
     if doc and not financeiro.documento_valido(doc):
         flash(request, "CNPJ/CPF inválido — confira os números.", "erro")
         return voltar(destino)
@@ -620,26 +637,18 @@ async def fin_cliente_salvar(request: Request, u: Usuario = Depends(so_admin), d
     if not (f.get("razao_social") or "").strip():
         flash(request, "Informe a razão social / nome.", "erro")
         return voltar(destino)
-    cf.documento = doc
-    for k in CAMPOS_CLIENTE:
-        setattr(cf, k, _opt(f.get(k)))
-    cf.razao_social = cf.razao_social[:160]
-    cf.cep = financeiro.so_digitos(f.get("cep"))[:8] or None
-    cf.uf = (_opt(f.get("uf")) or "").upper()[:2] or None
-    cf.ibge = financeiro.so_digitos(f.get("ibge"))[:7] or None
-    cf.telefone = financeiro.so_digitos(cf.telefone)[:13] or None if cf.telefone else None
-    cf.ie = (cf.ie or "").upper().replace(".", "").replace("-", "") or None
-    cf.cliente_id, cf.unidade_id = _int(f.get("cliente_id")), _int(f.get("unidade_id"))
-    if cf.unidade_id and not cf.cliente_id:
-        cf.cliente_id = db.get(Unidade, cf.unidade_id).cliente_id
-    cf.ativo = bool(f.get("ativo")) or not cid
+    preencher_fiscal(cf, f)
+    if not cid:
+        cf.cliente_id, cf.unidade_id = _int(f.get("cliente_id")), _int(f.get("unidade_id"))
+        if cf.unidade_id and not cf.cliente_id:
+            cf.cliente_id = db.get(Unidade, cf.unidade_id).cliente_id
+    if "ativo_campo" in f:
+        cf.ativo = bool(f.get("ativo"))
     db.add(cf)
     db.commit()
-    flash(request, "Cadastro salvo." + ("" if cf.endereco_completo or not cf.documento else
-                                        " Atenção: endereço incompleto (necessário para emitir nota)."))
-    if f.get("voltar_para", "").startswith("/financeiro/orcamentos"):
-        return voltar(f.get("voltar_para") + (f"?cliente={cf.id}" if "novo" in f.get("voltar_para") else ""))
-    return voltar(f"/financeiro/clientes/{cf.id}")
+    flash(request, "Dados de faturamento salvos." + ("" if cf.endereco_completo or not cf.documento else
+                                                     " Atenção: endereço incompleto (necessário para emitir nota)."))
+    return voltar(pedido or (f"/clientes/{cf.cliente_id}#faturamento" if cf.cliente_id else f"/financeiro/clientes/{cf.id}"))
 
 
 @app.get("/financeiro/consulta/cnpj/{cnpj}")

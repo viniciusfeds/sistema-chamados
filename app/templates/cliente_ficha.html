@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% from "_macros.html" import copiar, selo_orc with context %}
+{% block titulo %}{{ cli.nome }}{% endblock %}
+{% block conteudo %}
+{% set aqui = '/clientes/' ~ cli.id %}
+<a href="/clientes" class="muted">← Clientes</a>
+<div class="cab">
+  <div><h1>{{ cli.nome }} {% if not cli.ativo %}<span class="selo" style="background:#8A94A3">Inativo</span>{% endif %}</h1>
+    <div class="muted">{% if cf.id %}{{ cf.razao_social }} · {{ cf.documento_fmt or 'sem CNPJ/CPF' }}{% else %}Sem dados de faturamento{% endif %}</div></div>
+  <div class="acoes-orc">
+    <a class="btn sec" href="/?cliente={{ cli.id }}">Chamados</a>
+    {% if cf.id %}<a class="btn" href="/financeiro/orcamentos/novo?cliente={{ cf.id }}">+ Orçamento</a>{% endif %}
+  </div>
+</div>
+
+<nav class="abas ancoras">
+  <a href="#faturamento">Faturamento</a><a href="#unidades">Unidades</a><a href="#chamados">Link de chamado e agente</a>
+  <a href="#contatos">Avisos no WhatsApp</a><a href="#usuarios">Usuários</a><a href="#geral">Dados gerais</a>
+</nav>
+
+<div class="cards fin">
+  <a href="/?cliente={{ cli.id }}" style="--c:#1F5FA8"><b>{{ resumo.abertos }}</b><span>Chamados em aberto</span></a>
+  <a href="/financeiro/orcamentos{{ '?cliente=' ~ cf.id if cf.id }}" style="--c:#5B3A9E"><b>{{ resumo.orc_abertos }}</b><span>Orçamentos em andamento</span></a>
+  <a href="/financeiro/receber{{ '?cliente=' ~ cf.id if cf.id }}" style="--c:#B07000"><b>{{ resumo.a_receber|brl }}</b><span>A receber</span></a>
+  <a href="/financeiro/receber?situacao=vencido{{ '&cliente=' ~ cf.id if cf.id }}" style="--c:#B3261E" class="{{ 'ativo' if resumo.vencido }}"><b>{{ resumo.vencido|brl }}</b><span>Vencido</span></a>
+</div>
+
+<form class="card" method="post" action="/financeiro/clientes/salvar" id="faturamento">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if cf.id %}<input type="hidden" name="id" value="{{ cf.id }}">{% endif %}
+  <input type="hidden" name="cliente_id" value="{{ cli.id }}"><input type="hidden" name="voltar_para" value="{{ aqui }}#faturamento">
+  <div class="cab" style="margin-bottom:0"><h2 style="margin:0">Dados de faturamento</h2>
+    <span class="muted">Usados nos orçamentos, cobranças e notas fiscais</span></div>
+{% include "_form_fiscal.html" %}
+  <button class="btn">Salvar dados de faturamento</button>
+</form>
+
+<div class="card" id="unidades">
+  <h2>Unidades</h2>
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th>Unidade</th><th>Chamados</th><th>Faturamento</th><th></th></tr></thead>
+    <tbody>{% for un in cli.unidades %}{% set fu = por_unidade.get(un.id) %}
+    <tr class="{{ 'inativo' if not un.ativa }}">
+      <td data-l="Unidade"><b>{{ un.nome }}</b>{% if not un.ativa %} <span class="tag cinza">inativa</span>{% endif %}</td>
+      <td data-l="Chamados">{{ tot_un.get(un.id, 0) }}{% if por_un_abertos.get(un.id) %} <span class="muted">· {{ por_un_abertos[un.id] }} em aberto</span>{% endif %}</td>
+      <td data-l="Faturamento">{% if fu %}<a href="/financeiro/clientes/{{ fu.id }}">CNPJ próprio · {{ fu.documento_fmt }}</a>
+        {% else %}<span class="muted">o do cliente</span> · <a class="dica" href="/financeiro/clientes/novo?unidade={{ un.id }}">usar CNPJ próprio</a>{% endif %}</td>
+      <td><div class="acoes-orc">
+        <details><summary class="btn peq sec">Renomear</summary>
+          <form method="post" action="/admin/unidades/{{ un.id }}/alternar" class="baixa"><input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="voltar_para" value="{{ aqui }}#unidades"><input name="nome" value="{{ un.nome }}" required>
+            <button class="btn peq">Salvar</button></form></details>
+        <form method="post" action="/admin/unidades/{{ un.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="voltar_para" value="{{ aqui }}#unidades"><button class="btn peq sec">{{ 'Desativar' if un.ativa else 'Ativar' }}</button></form>
+      </div></td></tr>{% endfor %}</tbody>
+  </table>
+  <form method="post" action="/admin/unidades" class="acoes-orc">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="cliente_id" value="{{ cli.id }}">
+    <input type="hidden" name="voltar_para" value="{{ aqui }}#unidades">
+    <input name="nome" required placeholder="Nova unidade{{ ', ex.: Bonsucesso' if not cli.nome_curto else ' (o prefixo “' ~ cli.nome_curto ~ '” entra sozinho)' }}">
+    <button class="btn">+ Adicionar unidade</button>
+  </form>
+</div>
+
+<div class="card" id="chamados">
+  <h2>Link de abertura de chamado</h2>
+  <p class="dica" style="margin-top:0">Página sem login para o cliente abrir chamado: quem abre escolhe a unidade, informa nome e WhatsApp e descreve o problema.</p>
+  {% if cli.abertura_publica and cli.ativo %}
+    {{ copiar(base ~ '/abrir/' ~ cli.slug_publico) }}
+    <a class="dica" href="/abrir/{{ cli.slug_publico }}" target="_blank">Abrir página ↗</a>
+  {% else %}<p class="muted" style="margin:4px 0">Link público desativado.</p>{% endif %}
+  <form method="post" action="/admin/clientes/{{ cli.id }}" class="acoes-orc" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ aqui }}#chamados">
+    <button class="btn peq sec" name="operacao" value="link">{{ 'Desativar link' if cli.abertura_publica else 'Ativar link' }}</button>
+    <button class="btn peq sec" name="operacao" value="novo_link" onclick="return confirm('Gerar um novo link? O link atual vai parar de funcionar.')">Gerar novo link</button>
+  </form>
+  <h2 style="margin-top:18px">Agente local (monitoramento)</h2>
+  <div class="chave-agente">
+    <span class="muted">Chave de ativação:</span> {{ copiar(cli.chave_agente or '', 'Copiar chave') }}
+    <form method="post" action="/admin/clientes/{{ cli.id }}" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="voltar_para" value="{{ aqui }}#chamados">
+      <button class="btn peq sec" name="operacao" value="nova_chave" onclick="return confirm('Gerar uma nova chave? A atual deixa de ativar novos agentes (os já instalados continuam funcionando).')">Gerar nova chave</button></form>
+    <a class="dica" href="/admin/agentes">Baixar o agente ↗</a>
+  </div>
+</div>
+
+<div class="card" id="contatos">
+  <h2>Quem recebe aviso no WhatsApp</h2>
+  <p class="dica" style="margin-top:0">Avisos automáticos dos chamados (abertura, atualização, conclusão). Sem unidade = recebe de todas as unidades.</p>
+  {% if contatos %}
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th>Nome</th><th>WhatsApp</th><th>Unidade</th><th>Recebe</th><th></th></tr></thead>
+    <tbody>{% for c in contatos %}
+    <tr class="{{ 'inativo' if not c.ativo }}">
+      <td data-l="Nome"><b>{{ c.nome }}</b>{% if not c.ativo %} <span class="tag cinza">pausado</span>{% endif %}</td>
+      <td data-l="WhatsApp">+{{ c.telefone }}</td>
+      <td data-l="Unidade">{{ c.unidade.nome_curto if c.unidade else 'todas' }}</td>
+      <td data-l="Recebe">{% for e in (c.eventos or EVENTOS_AVISO.keys()) %}<span class="tag cinza">{{ EVENTOS_AVISO[e] }}</span> {% endfor %}</td>
+      <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="voltar_para" value="{{ aqui }}#contatos">
+        <button class="btn peq sec" name="operacao" value="alternar">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
+        <button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Remover {{ c.nome }}?')">Remover</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">Ninguém recebe aviso deste cliente ainda.</p>{% endif %}
+  <details {{ 'open' if not contatos }}><summary>+ Novo contato</summary>
+  <form method="post" action="/admin/whatsapp/contatos" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="cliente_id" value="{{ cli.id }}">
+    <input type="hidden" name="voltar_para" value="{{ aqui }}#contatos">
+    <div class="grid3">
+      <div class="campo"><label>Nome</label><input name="nome" required placeholder="Ex.: Alessandra (gerente)"></div>
+      <div class="campo"><label>WhatsApp</label><input name="telefone" required inputmode="tel" placeholder="11 91234-5678"></div>
+      <div class="campo"><label>Unidade</label><select name="unidade_id"><option value="">Todas as unidades</option>
+        {% for un in cli.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="ev-checks">{% for k, r in EVENTOS_AVISO.items() %}<label class="check" style="margin:0"><input type="checkbox" name="eventos" value="{{ k }}" checked> {{ r }}</label>{% endfor %}</div>
+    <button class="btn">Cadastrar contato</button>
+  </form></details>
+</div>
+
+<div class="card" id="usuarios">
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Usuários do cliente</h2><a class="btn peq sec" href="/admin#usuarios">Gerenciar usuários</a></div>
+  {% for us in usuarios %}
+  <div class="linha-lista"><span><b>{{ us.nome }}</b> <span class="muted">· {{ us.email }}</span>{% if not us.ativo %} <span class="tag cinza">inativo</span>{% endif %}</span>
+    <span class="muted">{{ PAPEIS[us.papel] }}{% if us.unidade %} · {{ us.unidade.nome }}{% endif %}</span></div>
+  {% else %}<p class="muted">Nenhum usuário de acesso para este cliente (gestor ou unidade).</p>{% endfor %}
+</div>
+
+{% if orcs %}
+<div class="card">
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Últimos orçamentos</h2></div>
+  {% for o in orcs %}
+  <a class="linha-lista" href="/financeiro/orcamentos/{{ o.numero }}"><span><b>{{ o.numero_fmt }}</b> · {{ o.titulo }}<br><span class="muted">{{ o.emissao|data }}</span></span>
+    <span style="text-align:right">{{ o.total|brl }}<br>{{ selo_orc(o, hoje) }}</span></a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form class="card" method="post" action="/admin/clientes/{{ cli.id }}" id="geral">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ aqui }}#geral">
+  <h2>Dados gerais</h2>
+  <div class="grid3">
+    <div class="campo"><label>Nome no sistema</label><input name="nome" value="{{ cli.nome }}" required></div>
+    <div class="campo"><label>Prefixo das unidades</label><input name="nome_curto" value="{{ cli.nome_curto or '' }}" placeholder="Ex.: SkyFit"></div>
+    <div class="campo"><label>&nbsp;</label><div class="acoes-orc"><button class="btn" name="operacao" value="salvar">Salvar</button>
+      <button class="btn {{ 'perigo' if cli.ativo else 'sec' }}" name="operacao" value="ativo" formnovalidate
+        onclick="return confirm('{{ 'Desativar' if cli.ativo else 'Ativar' }} o cliente {{ cli.nome }}?')">{{ 'Desativar cliente' if cli.ativo else 'Ativar cliente' }}</button></div></div>
+  </div>
+</form>
+{% endblock %}

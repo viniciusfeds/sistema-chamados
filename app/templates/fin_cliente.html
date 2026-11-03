@@ -1,75 +1,15 @@
 {% extends "base.html" %}
-{% from "_macros.html" import abas_financeiro with context %}
-{% block titulo %}{{ cf.razao_social or 'Novo cliente' }}{% endblock %}
+{% block titulo %}{{ cf.razao_social or 'Dados de faturamento' }}{% endblock %}
 {% block conteudo %}
-{{ abas_financeiro('clientes') }}
-<a href="/financeiro/clientes" class="muted">← Clientes</a>
-<h1>{{ cf.razao_social or 'Novo cliente' }}</h1>
-<form class="card" method="post" action="/financeiro/clientes/salvar" id="f-cli">
+{% if cf.cliente_id %}<a href="/clientes/{{ cf.cliente_id }}#unidades" class="muted">← {{ cf.cliente.nome if cf.cliente else 'Cliente' }}</a>{% else %}<a href="/clientes" class="muted">← Clientes</a>{% endif %}
+<h1>{{ cf.razao_social or 'Dados de faturamento' }}</h1>
+{% if cf.unidade %}<p class="muted" style="margin-top:-6px">CNPJ próprio da unidade <b>{{ cf.unidade.nome }}</b> — usado nos orçamentos e notas desta unidade.</p>{% endif %}
+<form class="card" method="post" action="/financeiro/clientes/salvar">
   <input type="hidden" name="csrf" value="{{ csrf }}">{% if cf.id %}<input type="hidden" name="id" value="{{ cf.id }}">{% endif %}
-  <h2>Identificação</h2>
-  <div class="grid3">
-    <div class="campo"><label>CNPJ ou CPF</label>
-      <div class="link-copiar"><input name="documento" id="doc" value="{{ cf.documento_fmt }}" inputmode="numeric" placeholder="Só números">
-        <button type="button" class="btn sec" id="buscar-cnpj" title="Preenche com os dados da Receita">Buscar CNPJ</button></div>
-      <div class="dica" id="doc-info"></div></div>
-    <div class="campo"><label>Razão social / nome</label><input name="razao_social" id="razao_social" value="{{ cf.razao_social }}" required></div>
-    <div class="campo"><label>Nome fantasia</label><input name="nome_fantasia" id="nome_fantasia" value="{{ cf.nome_fantasia or '' }}"></div>
-  </div>
-  <div class="grid3">
-    <div class="campo"><label>Inscrição estadual</label><input name="ie" value="{{ cf.ie or '' }}" placeholder="Vazio = não contribuinte / isento">
-      <div class="dica">Condomínios e prestadores de serviço normalmente não têm.</div></div>
-    <div class="campo"><label>Inscrição municipal</label><input name="im" value="{{ cf.im or '' }}"></div>
-    <div class="campo"><label>Vincular ao cliente / unidade do Nexus</label>
-      <select name="unidade_id"><option value="">— só o cliente (abaixo) —</option>
-      {% for un in unidades %}<option value="{{ un.id }}" {{ 'selected' if cf.unidade_id == un.id }}>{{ un.cliente.nome }} · {{ un.nome }}</option>{% endfor %}</select>
-      <select name="cliente_id" style="margin-top:6px"><option value="">— nenhum —</option>
-      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if cf.cliente_id == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
-  </div>
-  <h2>Contato</h2>
-  <div class="grid3">
-    <div class="campo"><label>Responsável</label><input name="contato" value="{{ cf.contato or '' }}" placeholder="Ex.: síndico, gerente"></div>
-    <div class="campo"><label>E-mail(s)</label><input name="email" id="email" value="{{ cf.email or '' }}" placeholder="financeiro@cliente.com.br"></div>
-    <div class="campo"><label>WhatsApp / telefone</label><input name="telefone" id="telefone" value="{{ cf.telefone_fmt }}" inputmode="tel"></div>
-  </div>
-  <h2>Endereço <span class="muted" style="font-weight:400;font-size:.85rem">(obrigatório para emitir nota)</span></h2>
-  <div class="grid3">
-    <div class="campo"><label>CEP</label><div class="link-copiar"><input name="cep" id="cep" value="{{ cf.cep or '' }}" inputmode="numeric"><button type="button" class="btn sec" id="buscar-cep">Buscar</button></div></div>
-    <div class="campo"><label>Rua</label><input name="logradouro" id="logradouro" value="{{ cf.logradouro or '' }}"></div>
-    <div class="campo"><label>Número</label><input name="numero" id="numero" value="{{ cf.numero or '' }}"></div>
-  </div>
-  <div class="grid3">
-    <div class="campo"><label>Complemento</label><input name="complemento" id="complemento" value="{{ cf.complemento or '' }}"></div>
-    <div class="campo"><label>Bairro</label><input name="bairro" id="bairro" value="{{ cf.bairro or '' }}"></div>
-    <div class="campo"><label>Município</label><input name="municipio" id="municipio" value="{{ cf.municipio or '' }}"></div>
-  </div>
-  <div class="grid3">
-    <div class="campo"><label>UF</label><input name="uf" id="uf" value="{{ cf.uf or '' }}" maxlength="2"></div>
-    <div class="campo"><label>Código IBGE do município</label><input name="ibge" id="ibge" value="{{ cf.ibge or '' }}" inputmode="numeric">
-      <div class="dica">Preenchido pela busca de CEP/CNPJ.</div></div>
-    <div></div>
-  </div>
-  {% if cf.id %}<label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if cf.ativo }} style="width:auto"> Ativo</label>{% endif %}
+  <input type="hidden" name="cliente_id" value="{{ cf.cliente_id or '' }}"><input type="hidden" name="unidade_id" value="{{ cf.unidade_id or '' }}">
+  <input type="hidden" name="voltar_para" value="{{ ('/clientes/' ~ cf.cliente_id ~ '#unidades') if cf.cliente_id else '' }}">
+{% include "_form_fiscal.html" %}
+  {% if cf.id %}<input type="hidden" name="ativo_campo" value="1"><label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if cf.ativo }}> Ativo</label>{% endif %}
   <button class="btn">Salvar</button>
 </form>
-<script>
-(function () {
-  function pre(d) { Object.keys(d).forEach(function (k) { var el = document.getElementById(k); if (el && d[k] && !el.dataset.manual) el.value = d[k]; }); }
-  function buscar(url, info) {
-    info.textContent = 'Buscando…';
-    fetch(url, {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
-      if (d.erro) { info.textContent = d.erro; return; }
-      pre(d); info.textContent = d.situacao ? 'Situação na Receita: ' + d.situacao : 'Endereço preenchido.';
-    }).catch(function () { info.textContent = 'Falha na consulta.'; });
-  }
-  document.getElementById('buscar-cnpj').onclick = function () {
-    var d = document.getElementById('doc').value.replace(/\D/g, '');
-    if (d.length !== 14) { document.getElementById('doc-info').textContent = 'A busca automática é só para CNPJ (14 dígitos).'; return; }
-    buscar('/financeiro/consulta/cnpj/' + d, document.getElementById('doc-info'));
-  };
-  document.getElementById('buscar-cep').onclick = function () {
-    buscar('/financeiro/consulta/cep/' + document.getElementById('cep').value.replace(/\D/g, ''), document.getElementById('doc-info'));
-  };
-})();
-</script>
 {% endblock %}

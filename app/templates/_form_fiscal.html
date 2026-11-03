@@ -1,0 +1,60 @@
+{# Campos dos dados de faturamento (CNPJ/CPF, inscrições, contato, endereço) + busca CNPJ/CEP.
+   Quem inclui fornece o <form>, o csrf, cliente_id/unidade_id e voltar_para. Precisa de `cf`. #}
+  <h2>Identificação</h2>
+  <div class="grid3">
+    <div class="campo"><label>CNPJ ou CPF</label>
+      <div class="link-copiar"><input name="documento" id="doc" value="{{ cf.documento_fmt }}" inputmode="numeric" placeholder="Só números">
+        <button type="button" class="btn sec" id="buscar-cnpj" title="Preenche com os dados da Receita">Buscar CNPJ</button></div>
+      <div class="dica" id="doc-info"></div></div>
+    <div class="campo"><label>Razão social / nome</label><input name="razao_social" id="razao_social" value="{{ cf.razao_social }}" required></div>
+    <div class="campo"><label>Nome fantasia</label><input name="nome_fantasia" id="nome_fantasia" value="{{ cf.nome_fantasia or '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Inscrição estadual</label><input name="ie" value="{{ cf.ie or '' }}" placeholder="Vazio = não contribuinte / isento">
+      <div class="dica">Condomínios e prestadores de serviço normalmente não têm.</div></div>
+    <div class="campo"><label>Inscrição municipal</label><input name="im" value="{{ cf.im or '' }}"></div>
+    <div></div>
+  </div>
+  <h2>Contato</h2>
+  <div class="grid3">
+    <div class="campo"><label>Responsável</label><input name="contato" value="{{ cf.contato or '' }}" placeholder="Ex.: síndico, gerente"></div>
+    <div class="campo"><label>E-mail(s)</label><input name="email" id="email" value="{{ cf.email or '' }}" placeholder="financeiro@cliente.com.br"></div>
+    <div class="campo"><label>WhatsApp / telefone</label><input name="telefone" id="telefone" value="{{ cf.telefone_fmt }}" inputmode="tel"></div>
+  </div>
+  <h2>Endereço <span class="muted" style="font-weight:400;font-size:.85rem">(obrigatório para emitir nota)</span></h2>
+  <div class="grid3">
+    <div class="campo"><label>CEP</label><div class="link-copiar"><input name="cep" id="cep" value="{{ cf.cep or '' }}" inputmode="numeric"><button type="button" class="btn sec" id="buscar-cep">Buscar</button></div></div>
+    <div class="campo"><label>Rua</label><input name="logradouro" id="logradouro" value="{{ cf.logradouro or '' }}"></div>
+    <div class="campo"><label>Número</label><input name="numero" id="numero" value="{{ cf.numero or '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Complemento</label><input name="complemento" id="complemento" value="{{ cf.complemento or '' }}"></div>
+    <div class="campo"><label>Bairro</label><input name="bairro" id="bairro" value="{{ cf.bairro or '' }}"></div>
+    <div class="campo"><label>Município</label><input name="municipio" id="municipio" value="{{ cf.municipio or '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>UF</label><input name="uf" id="uf" value="{{ cf.uf or '' }}" maxlength="2"></div>
+    <div class="campo"><label>Código IBGE do município</label><input name="ibge" id="ibge" value="{{ cf.ibge or '' }}" inputmode="numeric">
+      <div class="dica">Preenchido pela busca de CEP/CNPJ.</div></div>
+    <div></div>
+  </div>
+<script>
+(function () {
+  function pre(d) { Object.keys(d).forEach(function (k) { var el = document.getElementById(k); if (el && d[k] && !el.dataset.manual) el.value = d[k]; }); }
+  function buscar(url, info) {
+    info.textContent = 'Buscando…';
+    fetch(url, {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.erro) { info.textContent = d.erro; return; }
+      pre(d); info.textContent = d.situacao ? 'Situação na Receita: ' + d.situacao : 'Endereço preenchido.';
+    }).catch(function () { info.textContent = 'Falha na consulta.'; });
+  }
+  document.getElementById('buscar-cnpj').onclick = function () {
+    var d = document.getElementById('doc').value.replace(/\D/g, '');
+    if (d.length !== 14) { document.getElementById('doc-info').textContent = 'A busca automática é só para CNPJ (14 dígitos).'; return; }
+    buscar('/financeiro/consulta/cnpj/' + d, document.getElementById('doc-info'));
+  };
+  document.getElementById('buscar-cep').onclick = function () {
+    buscar('/financeiro/consulta/cep/' + document.getElementById('cep').value.replace(/\D/g, ''), document.getElementById('doc-info'));
+  };
+})();
+</script>

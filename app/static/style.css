@@ -298,3 +298,8 @@ form.baixa label{font-size:.78rem;font-weight:700;color:var(--cinza);margin:0}
 details>summary.btn{list-style:none}details>summary.btn::-webkit-details-marker{display:none}
 details.card>summary{cursor:pointer;list-style:none}
 tr.inativo td{opacity:.55}
+.abas.ancoras{position:sticky;top:59px;background:var(--fundo);z-index:3}
+@media (max-width:820px){.abas.ancoras{position:static}}
+.ev-checks{display:flex;flex-wrap:wrap;gap:4px 18px;margin:6px 0 12px}
+:target{scroll-margin-top:120px}
+.acoes-orc input[type=checkbox]{flex:0 0 auto;min-width:0}

@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 1.8.1 — 2026-11-03
+- **Menu Clientes** (principal): lista com busca por nome, unidade, razão social ou CNPJ/CPF e **ficha única do cliente**:
+  dados de faturamento (com busca do CNPJ e do CEP), unidades (adicionar, renomear, desativar, CNPJ próprio por
+  unidade), link público de abertura de chamado, chave do agente local, contatos que recebem aviso no WhatsApp,
+  usuários do cliente e resumo de chamados, orçamentos, a receber e vencido
+- Novo cliente já com unidades e dados de faturamento numa tela só
+- Clientes e unidades saíram da Administração e o item Clientes saiu do Financeiro (tudo aponta para a ficha)
+- Cadastros de faturamento antigos sem cliente viram cliente sozinhos ao atualizar
+
 ## 1.8.0 — 2026-11-03
 - **Financeiro** (novo menu, só administradores) — primeira etapa do faturamento:
   - **Orçamentos**: itens de produto e serviço (do catálogo ou digitados), impostos sobre serviços, desconto, validade,

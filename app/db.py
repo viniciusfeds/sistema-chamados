@@ -78,6 +78,17 @@ def _completar_dados():
             cli.chave_agente = nova_chave_agente()
         for ch in db.scalars(select(Chamado).where(Chamado.origem.is_(None))).all():
             ch.origem = "sistema"
+        # 1.8.1: todo cadastro de faturamento pertence a um cliente (ficha única em Clientes)
+        from .models import ClienteFiscal
+        for cf in db.scalars(select(ClienteFiscal).where(ClienteFiscal.cliente_id.is_(None))).all():
+            base = (cf.nome_fantasia or cf.razao_social or "Cliente").strip()[:110]
+            nome, n = base, 2
+            while db.scalar(select(Cliente.id).where(Cliente.nome == nome)):
+                nome, n = f"{base} ({n})", n + 1
+            cli = Cliente(nome=nome, abertura_publica=False)
+            db.add(cli); db.flush()
+            db.add(Unidade(nome=nome, cliente_id=cli.id)); db.flush()
+            cf.cliente_id = cli.id
         if not db.scalar(select(TipoChamado.id).limit(1)):
             for i, (nome, cor) in enumerate(TIPOS_CHAMADO_PADRAO):
                 db.add(TipoChamado(nome=nome, cor=cor, ordem=i))

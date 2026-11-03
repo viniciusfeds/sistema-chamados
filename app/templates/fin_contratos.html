@@ -39,7 +39,7 @@
 <form class="card" method="post" action="/financeiro/contratos/salvar" id="form">
   <input type="hidden" name="csrf" value="{{ csrf }}">{% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
   <h2>{{ 'Editar contrato' if ed else '+ Novo contrato' }}</h2>
-  {% if not clientes %}<p class="flash aviso">Cadastre primeiro o cliente em <a href="/financeiro/clientes/novo">Clientes</a>.</p>{% endif %}
+  {% if not clientes %}<p class="flash aviso">Cadastre primeiro o cliente em <a href="/clientes/novo">Clientes</a>.</p>{% endif %}
   <div class="grid2">
     <div class="campo"><label>Cliente</label><select name="cliente_fiscal_id" required><option value="">—</option>
       {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if ed and ed.cliente_fiscal_id == c.id }}>{{ c.razao_social }} · {{ c.documento_fmt }}</option>{% endfor %}</select></div>

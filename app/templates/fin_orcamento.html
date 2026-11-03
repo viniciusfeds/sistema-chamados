@@ -88,7 +88,7 @@
   {% if o.chamado %}<p class="dica" style="margin-top:0">Referente ao <a href="/chamados/{{ o.chamado.numero }}">chamado {{ o.chamado.numero_fmt }}</a> — {{ o.chamado.titulo }}</p>{% endif %}
   <div class="campo"><label>Título</label><input name="titulo" value="{{ o.titulo }}" required placeholder="Ex.: Instalação de 8 câmeras e gravador"></div>
   <div class="grid2">
-    <div class="campo"><label>Cliente (dados de faturamento) <a href="/financeiro/clientes/novo" target="_blank" class="muted">+ cadastrar</a></label>
+    <div class="campo"><label>Cliente (dados de faturamento) <a href="/clientes/novo" target="_blank" class="muted">+ cadastrar</a></label>
       <select name="cliente_fiscal_id"><option value="">— escolha —</option>
       {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if o.cliente_fiscal_id == c.id }}>{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %} · {{ c.documento_fmt }}</option>{% endfor %}</select></div>
     <div class="campo"><label>Unidade <span class="muted">(opcional)</span></label>

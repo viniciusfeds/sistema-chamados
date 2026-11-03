@@ -271,8 +271,9 @@ def test_admin_restrito_cria_cliente_unidade_usuario():
         nova = db.scalar(select(Cliente).where(Cliente.nome == "Academia Nova"))
     c.post("/admin/unidades", data={"nome": "Centro", "cliente_id": str(nova.id), "csrf": tok})
     c.post("/admin/unidades", data={"nome": "Bonsucesso", "cliente_id": str(IDS["sky"]), "csrf": tok})
-    pag = c.get("/admin").text
-    assert "Nova Centro" in pag and "SkyFit Bonsucesso" in pag and f"/abrir/{nova.slug_publico}" in pag
+    pag = c.get(f"/clientes/{nova.id}").text
+    assert "Nova Centro" in pag and f"/abrir/{nova.slug_publico}" in pag
+    assert "SkyFit Bonsucesso" in c.get(f"/clientes/{IDS['sky']}").text
     c.post("/admin/usuarios", data={"nome": "Rec Bon", "email": "bon@t.com", "senha": "curta",
                                     "papel": "unidade", "unidade_id": "1", "csrf": tok})
     assert "bon@t.com" not in c.get("/admin").text  # senha curta recusada
@@ -1231,7 +1232,7 @@ def _cliente_fiscal(c):
         "csrf": tok, "documento": "11.222.333/0001-81", "razao_social": "Condomínio Top Ltda", "nome_fantasia": "Cond. Top",
         "email": "fin@top.com", "telefone": "11 91234-5678", "cep": "07010-000", "logradouro": "Rua A", "numero": "10",
         "bairro": "Centro", "municipio": "Guarulhos", "uf": "sp", "ibge": "3518800", "unidade_id": str(IDS["torre"])})
-    assert r.status_code == 200 and "Cadastro salvo" in r.text
+    assert r.status_code == 200 and "Dados de faturamento salvos" in r.text
     from app.models import ClienteFiscal
     with SessionLocal() as db:
         cf = db.scalar(select(ClienteFiscal).where(ClienteFiscal.documento == "11222333000181"))
@@ -1344,3 +1345,53 @@ def test_catalogo_e_chamado_vira_orcamento():
     if ch:
         r = adm.get(f"/financeiro/orcamentos/novo?chamado={ch.numero}")
         assert f"chamado {ch.numero_fmt}" in r.text
+
+
+# ------------------------------------------------------------------ menu Clientes (ficha única)
+def test_clientes_novo_e_ficha():
+    from app.models import ClienteFiscal
+    adm = entrar("admin@t.com")
+    assert 'href="/clientes"' in adm.get("/").text
+    assert "Abrir Clientes" in adm.get("/admin").text
+    r = adm.get("/clientes/novo")
+    r = adm.post("/clientes/novo", data={"csrf": _csrf(r.text), "nome": "Residencial Veneza", "nome_curto": "Veneza",
+                                         "unidades": "Torre 1\nTorre 2", "documento": "", "razao_social": ""})
+    assert r.status_code == 200 and "Residencial Veneza" in r.text and "Veneza Torre 1" in r.text
+    with SessionLocal() as db:
+        cli = db.scalar(select(Cliente).where(Cliente.nome == "Residencial Veneza"))
+        assert len(cli.unidades) == 2
+        assert not db.scalar(select(ClienteFiscal).where(ClienteFiscal.cliente_id == cli.id))
+        cid = cli.id
+    # dados de faturamento salvos pela própria ficha
+    ficha = adm.get(f"/clientes/{cid}")
+    r = adm.post("/financeiro/clientes/salvar", data={"csrf": _csrf(ficha.text), "cliente_id": str(cid),
+                                                      "voltar_para": f"/clientes/{cid}#faturamento",
+                                                      "documento": "52998224725", "razao_social": "João da Silva"})
+    assert "Dados de faturamento salvos" in r.text and "529.982.247-25" in r.text
+    # salvar de novo não desativa o cadastro (a ficha não tem o campo "ativo")
+    with SessionLocal() as db:
+        cf = db.scalar(select(ClienteFiscal).where(ClienteFiscal.cliente_id == cid))
+        fid = cf.id
+    adm.post("/financeiro/clientes/salvar", data={"csrf": _csrf(ficha.text), "id": str(fid), "cliente_id": str(cid),
+                                                  "voltar_para": f"/clientes/{cid}", "documento": "52998224725",
+                                                  "razao_social": "João da Silva", "bairro": "Centro"})
+    with SessionLocal() as db:
+        assert db.get(ClienteFiscal, fid).ativo and db.get(ClienteFiscal, fid).bairro == "Centro"
+    # unidade nova, renomear, contato e link voltam para a ficha
+    r = adm.post("/admin/unidades", data={"csrf": _csrf(ficha.text), "cliente_id": str(cid), "nome": "Torre 3",
+                                          "voltar_para": f"/clientes/{cid}#unidades"})
+    assert r.url.path == f"/clientes/{cid}" and "Veneza Torre 3" in r.text
+    r = adm.post("/admin/whatsapp/contatos", data={"csrf": _csrf(ficha.text), "cliente_id": str(cid), "nome": "Síndico",
+                                                   "telefone": "11 98888-7777", "voltar_para": f"/clientes/{cid}#contatos"})
+    assert r.url.path == f"/clientes/{cid}" and "+5511988887777" in r.text
+    # CNPJ repetido no cadastro novo é barrado; busca por documento acha o cliente
+    r = adm.post("/clientes/novo", data={"csrf": _csrf(ficha.text), "nome": "Outro", "documento": "529.982.247-25",
+                                         "razao_social": "X"})
+    assert "já está cadastrado" in r.text
+    assert "Residencial Veneza" in adm.get("/clientes?q=52998224725").text
+    # redirecionamento externo não é aceito
+    r = adm.post(f"/admin/clientes/{cid}", data={"csrf": _csrf(ficha.text), "operacao": "link",
+                                                 "voltar_para": "//evil.com"}, follow_redirects=False)
+    assert r.headers["location"] == f"/clientes/{cid}"
+    assert adm.get("/financeiro/clientes", follow_redirects=False).headers["location"] == "/clientes"
+    assert entrar("tec@t.com").get("/clientes", follow_redirects=False).status_code == 403

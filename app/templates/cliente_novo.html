@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Novo cliente{% endblock %}
+{% block conteudo %}
+<a href="/clientes" class="muted">← Clientes</a>
+<h1>Novo cliente</h1>
+<form class="card" method="post" action="/clientes/novo">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Cliente</h2>
+  <div class="grid3">
+    <div class="campo"><label>Nome do cliente</label><input name="nome" id="nome-cli" placeholder="Ex.: Condomínio Top Guarulhos">
+      <div class="dica">Como aparece no sistema. Se ficar vazio, usa o nome fantasia.</div></div>
+    <div class="campo"><label>Prefixo das unidades <span class="muted">(opcional)</span></label><input name="nome_curto" placeholder="Ex.: Top">
+      <div class="dica">Vai na frente do nome das unidades (“SkyFit” + “Cisper” = “SkyFit Cisper”).</div></div>
+    <div class="campo"><label>Unidades <span class="muted">(uma por linha)</span></label><textarea name="unidades" rows="3" placeholder="Torre A&#10;Torre B"></textarea>
+      <div class="dica">Vazio = uma unidade com o nome do cliente.</div></div>
+  </div>
+{% include "_form_fiscal.html" %}
+  <p class="dica">Os dados de faturamento são opcionais aqui — podem ser preenchidos depois na ficha do cliente.</p>
+  <button class="btn">Cadastrar cliente</button>
+</form>
+{% endblock %}

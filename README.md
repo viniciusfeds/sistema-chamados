@@ -58,8 +58,8 @@ Nos textos, `**assim**` fica em **negrito** no sistema e no PDF.
 ### Financeiro (orçamentos e contas a receber)
 Menu **Financeiro** (administradores):
 1. Confira em *Administração → Configurações* os **Dados da empresa** e **Orçamentos e cobrança** (numeração inicial, PIX…).
-2. Cadastre os **Clientes** (dados de faturamento; o botão *Buscar CNPJ* preenche pela Receita) e o catálogo de
-   **Produtos e serviços**.
+2. No menu **Clientes**, preencha os dados de faturamento na ficha de cada cliente (o botão *Buscar CNPJ* preenche
+   pela Receita) e cadastre o catálogo de **Produtos e serviços** no Financeiro.
 3. **Orçamento** → salvar → *Enviar ao cliente* (WhatsApp ou e-mail com PDF). O cliente aprova pelo link.
 4. Orçamento aprovado → **Faturar** → as parcelas vão para **Contas a receber**, onde se dá baixa e se cobra pelo WhatsApp.
 5. Mensalidades: cadastre em **Contratos** e, todo mês, clique em *Gerar cobranças*.
