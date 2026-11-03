@@ -55,6 +55,15 @@ Nos textos, `**assim**` fica em **negrito** no sistema e no PDF.
 
 > **Atualizando da versão anterior:** basta subir a versão nova. O banco é atualizado sozinho: as unidades existentes vão para o cliente "SkyFit Academia" (configurável em `CLIENTE_PADRAO`) e nenhum chamado é perdido.
 
+### Financeiro (orçamentos e contas a receber)
+Menu **Financeiro** (administradores):
+1. Confira em *Administração → Configurações* os **Dados da empresa** e **Orçamentos e cobrança** (numeração inicial, PIX…).
+2. Cadastre os **Clientes** (dados de faturamento; o botão *Buscar CNPJ* preenche pela Receita) e o catálogo de
+   **Produtos e serviços**.
+3. **Orçamento** → salvar → *Enviar ao cliente* (WhatsApp ou e-mail com PDF). O cliente aprova pelo link.
+4. Orçamento aprovado → **Faturar** → as parcelas vão para **Contas a receber**, onde se dá baixa e se cobra pelo WhatsApp.
+5. Mensalidades: cadastre em **Contratos** e, todo mês, clique em *Gerar cobranças*.
+
 ## Rodar com Docker (recomendado)
 
 O sistema já vem pronto para Docker: imagem Python 3.12, usuário sem privilégios de root, *healthcheck* em `/saude`, reinício automático e dados num volume.

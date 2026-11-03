@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, selo_titulo with context %}
+{% block titulo %}Contas a receber{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('receber') }}
+<div class="cab">
+  <div><h1>Contas a receber</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|brl }}{% if tot.aberto %} · em aberto {{ tot.aberto|brl }}{% endif %}{% if tot.pago %} · recebido {{ tot.pago|brl }}{% endif %}</div></div>
+  <div class="acoes-orc"><a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
+    <a class="btn" href="#novo" onclick="document.getElementById('novo').open=true">+ Nova conta</a></div>
+</div>
+<div class="card">
+  <form class="filtros" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Descrição"></div>
+    <div><label for="situacao">Situação</label><select id="situacao" name="situacao">
+      {% for k, v in (('abertos', 'A receber (todas)'), ('vencido', 'Vencidas'), ('aberto', 'A vencer'), ('pago', 'Pagas'), ('cancelado', 'Canceladas'), ('todos', 'Todas')) %}
+      <option value="{{ k }}" {{ 'selected' if f.situacao == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div><label for="cliente">Cliente</label><select id="cliente" name="cliente"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label for="de">{{ 'Pago de' if f.situacao == 'pago' else 'Vence de' }}</label><input type="date" id="de" name="de" value="{{ f.de }}"></div>
+    <div><label for="ate">até</label><input type="date" id="ate" name="ate" value="{{ f.ate }}"></div>
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/financeiro/receber">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Vencimento</th><th>Cliente</th><th>Descrição</th><th class="valor">Valor</th><th>Situação</th><th></th></tr></thead>
+  <tbody>{% for t in lista %}{% set sit = t.situacao(hoje) %}
+  <tr class="{{ 'parado' if sit == 'vencido' }} {{ 'inativo' if sit == 'cancelado' }}">
+    <td data-l="Vencimento"><b>{{ t.vencimento|data }}</b>{% if sit == 'vencido' %}<div style="color:#B3261E;font-size:.85rem;font-weight:700">{{ t.dias_atraso(hoje) }} dia(s) de atraso</div>{% endif %}</td>
+    <td data-l="Cliente">{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}{% if t.cliente_fiscal %}<div class="muted">{{ t.cliente_fiscal.documento_fmt }}</div>{% endif %}</td>
+    <td data-l="Descrição">{% if t.orcamento %}<a href="/financeiro/orcamentos/{{ t.orcamento.numero }}">{{ t.descricao }}</a>{% else %}{{ t.descricao }}{% endif %}
+      <div class="muted">Parcela {{ t.parcela_fmt }}{% if t.contrato %} · contrato{% endif %}</div></td>
+    <td data-l="Valor" class="valor"><b>{{ t.valor|brl }}</b>
+      {% if sit == 'vencido' %}{% set m, j = encargos(t, hoje) %}{% if m or j %}<div class="muted" title="Multa {{ m|brl }} + juros {{ j|brl }}">c/ encargos {{ (t.valor + m + j)|brl }}</div>{% endif %}{% endif %}
+      {% if t.status == 'pago' %}<div class="muted">pago {{ t.valor_pago|brl }}</div>{% endif %}</td>
+    <td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.status == 'pago' %}<div class="muted">{{ t.pago_em|data }} · {{ FORMAS_PAGAMENTO.get(t.forma or '', '') }}</div>{% endif %}</td>
+    <td>
+      {% if t.status == 'aberto' %}
+      <details><summary class="btn peq">Receber</summary>
+        <form method="post" action="/financeiro/receber/{{ t.id }}/baixar" class="baixa">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+          <label>Data</label><input type="date" name="pago_em" value="{{ hoje.isoformat() }}">
+          <label>Valor recebido</label><input name="valor_pago" value="{{ t.valor|brl_num }}" inputmode="decimal">
+          <label>Forma</label><select name="forma">{% for k, v in FORMAS_PAGAMENTO.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+          <label>Observação</label><input name="observacao">
+          <button class="btn peq">Confirmar recebimento</button></form>
+      </details>
+      <div class="acoes-orc" style="margin-top:4px">
+        {% if zap.get(t.id) %}<a class="btn peq sec" href="{{ zap[t.id] }}" target="_blank" title="Mensagem de cobrança pelo WhatsApp">WhatsApp</a>{% endif %}
+        <details><summary class="btn peq sec">Editar</summary>
+          <form method="post" action="/financeiro/receber/{{ t.id }}/operacao" class="baixa">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+            <label>Descrição</label><input name="descricao" value="{{ t.descricao }}">
+            <label>Valor</label><input name="valor" value="{{ t.valor|brl_num }}" inputmode="decimal">
+            <label>Vencimento</label><input type="date" name="vencimento" value="{{ t.vencimento.isoformat() }}">
+            <div class="acoes-orc"><button class="btn peq" name="operacao" value="editar">Salvar</button>
+              <button class="btn peq perigo" name="operacao" value="cancelar" onclick="return confirm('Cancelar esta conta?')">Cancelar conta</button></div></form>
+        </details>
+      </div>
+      {% elif t.status == 'pago' %}
+      <form method="post" action="/financeiro/receber/{{ t.id }}/operacao" onsubmit="return confirm('Estornar o recebimento? A conta volta a ficar em aberto.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+        <button class="btn peq sec" name="operacao" value="estornar">Estornar</button></form>
+      {% else %}
+      <form method="post" action="/financeiro/receber/{{ t.id }}/operacao"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}"><button class="btn peq sec" name="operacao" value="reativar">Reativar</button></form>
+      {% endif %}
+      {% if t.observacao %}<div class="muted" style="white-space:pre-line;font-size:.8rem;margin-top:4px">{{ t.observacao }}</div>{% endif %}
+    </td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhuma conta encontrada.</p>{% endif %}
+</div>
+
+<details class="card" id="novo">
+  <summary><h2 style="display:inline">+ Nova conta a receber</h2> <span class="muted">(avulsa — sem orçamento)</span></summary>
+  <form method="post" action="/financeiro/receber/novo" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid2">
+      <div class="campo"><label>Cliente</label><select name="cliente_fiscal_id"><option value="">—</option>
+        {% for c in clientes %}<option value="{{ c.id }}">{{ c.razao_social }} · {{ c.documento_fmt }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Descrição</label><input name="descricao" required placeholder="Ex.: Visita técnica avulsa"></div>
+    </div>
+    <div class="grid3">
+      <div class="campo"><label>Valor total</label><input name="valor" required inputmode="decimal" placeholder="0,00"></div>
+      <div class="campo"><label>1º vencimento</label><input type="date" name="vencimento" value="{{ hoje.isoformat() }}" required></div>
+      <div class="campo"><label>Parcelas</label><input type="number" name="parcelas" value="1" min="1" max="48"></div>
+    </div>
+    <input type="hidden" name="intervalo" value="30">
+    <button class="btn">Lançar</button>
+  </form>
+</details>
+{% endblock %}

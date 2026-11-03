@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## 1.8.0 — 2026-11-03
+- **Financeiro** (novo menu, só administradores) — primeira etapa do faturamento:
+  - **Orçamentos**: itens de produto e serviço (do catálogo ou digitados), impostos sobre serviços, desconto, validade,
+    prazo, condições e garantia; **PDF no layout TecnosIT**; numeração que continua a das propostas antigas
+  - **Aprovação online**: link para o cliente ver, baixar o PDF e **aprovar ou recusar** (registra nome, data e IP);
+    envio pelo WhatsApp ou por e-mail com o PDF anexo; a equipe recebe e-mail quando o cliente responde
+  - **Criar orçamento a partir do chamado** (botão no chamado), já com unidade e cliente
+  - **Faturar** o orçamento aprovado: parcelas com ou sem entrada, mensal ou por dias
+  - **Contas a receber**: vencidas, a vencer e pagas; baixa (data, valor, forma), estorno, edição, cancelamento;
+    multa e juros calculados; **mensagem de cobrança pronta no WhatsApp**; exportação CSV
+  - **Contratos recorrentes** (manutenção mensal): gera a cobrança do mês para todos com um clique, sem duplicar
+  - **Clientes (dados de faturamento)**: CNPJ/CPF validado, **busca automática do CNPJ na Receita** e do CEP,
+    endereço com código IBGE, inscrições — já no formato que as notas fiscais vão exigir
+  - **Produtos e serviços**: catálogo com preço e dados fiscais (NCM, CFOP, CSOSN, origem; código de tributação
+    nacional e ISS para serviços)
+  - Visão geral: a receber, vencido, recebido no mês, previsto × recebido (6 meses), aprovação de orçamentos
+- Configurações → **Dados da empresa** (razão social, CNPJ, inscrições, endereço) e **Orçamentos e cobrança**
+  (numeração inicial, validade, impostos, textos padrão, PIX, multa e juros)
+- Próximas etapas: NF-e com DANFE, NFS-e (Emissor Nacional) e boleto/PIX do Banco Inter
+
 ## 1.7.0 — 2026-10-28
 - **Agente local** (*Administração → ⬇ Agente local*): programa instalado num computador da unidade que testa os equipamentos **pela rede interna** (ping ou porta) e envia resultados e logs ao Nexus. Só faz conexão de saída: **não precisa liberar portas nem redirecionar nada no roteador**
 - Downloads para **Windows** (Instalar.bat: pede permissão de administrador, a chave e a unidade; roda como tarefa do sistema, iniciando com o Windows, sem ninguém logado) e **Linux** (serviço systemd, Python 3 sem dependências)

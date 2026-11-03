@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Contratos{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('contratos') }}
+<div class="cab">
+  <div><h1>Contratos recorrentes</h1><div class="muted">Manutenção mensal e outras cobranças fixas · {{ lista|selectattr('ativo')|list|length }} ativo(s) · {{ mensal|brl }} por mês</div></div>
+</div>
+
+<div class="card">
+  <h2>Gerar cobranças do mês</h2>
+  <p class="dica" style="margin-top:0">Lança em Contas a receber uma cobrança para cada contrato ativo que ainda não tem a do mês (não duplica).</p>
+  <div class="acoes-orc">
+    {% for mes, pend in ((mes_atual, pendentes), (mes_prox, pendentes_prox)) %}
+    <form method="post" action="/financeiro/contratos/gerar"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="mes" value="{{ mes }}">
+      <button class="btn {{ '' if pend else 'sec' }}" {{ 'disabled' if not pend }}>{{ mes[5:] }}/{{ mes[:4] }}: {{ pend|length }} pendente(s){% if pend %} · {{ pend|sum(attribute='valor')|brl }}{% endif %}</button></form>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Contrato</th><th>Cliente</th><th class="valor">Valor/mês</th><th>Vence dia</th><th>Vigência</th><th></th></tr></thead>
+  <tbody>{% for c in lista %}
+  <tr class="{{ 'inativo' if not c.ativo }}">
+    <td data-l="Contrato"><b>{{ c.descricao }}</b>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
+    <td data-l="Cliente">{{ c.cliente_fiscal.nome }}</td>
+    <td data-l="Valor/mês" class="valor"><b>{{ c.valor|brl }}</b></td>
+    <td data-l="Vence dia">{{ c.dia_vencimento }}</td>
+    <td data-l="Vigência">{{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}</td>
+    <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ c.id }}#form">Editar</a>
+      <form method="post" action="/financeiro/contratos/{{ c.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">{{ 'Encerrar' if c.ativo else 'Reativar' }}</button></form></div></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum contrato. Cadastre abaixo os clientes com mensalidade.</p>{% endif %}
+</div>
+
+<form class="card" method="post" action="/financeiro/contratos/salvar" id="form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if ed %}<input type="hidden" name="id" value="{{ ed.id }}">{% endif %}
+  <h2>{{ 'Editar contrato' if ed else '+ Novo contrato' }}</h2>
+  {% if not clientes %}<p class="flash aviso">Cadastre primeiro o cliente em <a href="/financeiro/clientes/novo">Clientes</a>.</p>{% endif %}
+  <div class="grid2">
+    <div class="campo"><label>Cliente</label><select name="cliente_fiscal_id" required><option value="">—</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if ed and ed.cliente_fiscal_id == c.id }}>{{ c.razao_social }} · {{ c.documento_fmt }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ ed.descricao if ed else '' }}" placeholder="Ex.: Manutenção preventiva CFTV e controle de acesso"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Valor por mês</label><input name="valor" required inputmode="decimal" value="{{ ed.valor|brl_num if ed else '' }}"></div>
+    <div class="campo"><label>Dia do vencimento</label><input type="number" name="dia_vencimento" min="1" max="31" value="{{ ed.dia_vencimento if ed else 10 }}"></div>
+    <div class="campo"><label>Serviço (para a nota fiscal)</label><select name="catalogo_id"><option value="">—</option>
+      {% for s in servicos %}<option value="{{ s.id }}" {{ 'selected' if ed and ed.catalogo_id == s.id }}>{{ s.descricao }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Início</label><input type="date" name="inicio" value="{{ (ed.inicio if ed else hoje).isoformat() }}"></div>
+    <div class="campo"><label>Fim <span class="muted">(opcional)</span></label><input type="date" name="fim" value="{{ ed.fim.isoformat() if ed and ed.fim else '' }}"></div>
+    <div class="campo"><label>Observações</label><input name="observacoes" value="{{ ed.observacoes or '' if ed else '' }}"></div>
+  </div>
+  {% if ed %}<label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if ed.ativo }} style="width:auto"> Ativo</label>{% endif %}
+  <button class="btn">Salvar contrato</button>{% if ed %} <a class="btn sec" href="/financeiro/contratos">Cancelar</a>{% endif %}
+</form>
+{% endblock %}

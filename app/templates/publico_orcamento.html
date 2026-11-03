@@ -1,0 +1,51 @@
+{% extends "publico_base.html" %}
+{% block titulo %}Orçamento {{ o.numero_fmt }}{% endblock %}
+{% block cabecalho %}Orçamento Nº {{ o.numero_fmt }}{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <div class="cab" style="margin-bottom:6px">
+    <div><h1 style="margin-bottom:2px">{{ o.titulo }}</h1>
+      <div class="muted">{{ o.cliente_fiscal.razao_social if o.cliente_fiscal else (o.cliente.nome if o.cliente else '') }}
+        · emitido em {{ o.emissao|data }} · válido até {{ o.valido_ate|data }}</div></div>
+    <a class="btn sec" href="/orcamento/{{ token }}/pdf" target="_blank">📄 Baixar PDF</a>
+  </div>
+  {% for tipo, titulo in (('produto', 'Equipamentos e materiais'), ('servico', 'Serviços')) %}
+  {% set its = o.itens|selectattr('tipo', 'equalto', tipo)|list %}
+  {% if its %}
+  <h2 style="margin-top:14px">{{ titulo }}</h2>
+  <table class="resp">
+    <thead><tr><th>Descrição</th><th class="valor">Qtd.</th><th class="valor">Valor unit.</th><th class="valor">Total</th></tr></thead>
+    <tbody>{% for i in its %}<tr><td data-l="Descrição">{{ i.descricao }}</td><td data-l="Qtd." class="valor">{{ i.quantidade|qtd }} {{ i.unidade }}</td>
+      <td data-l="Valor unit." class="valor">{{ i.valor_unitario|brl }}</td><td data-l="Total" class="valor"><b>{{ i.total|brl }}</b></td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}{% endfor %}
+  <div class="totais" style="margin-top:12px">
+    {% if o.total_produtos and o.total_servicos %}<div><span>Produtos</span><span>{{ o.total_produtos|brl }}</span></div><div><span>Serviços</span><span>{{ o.total_servicos|brl }}</span></div>{% endif %}
+    {% if o.impostos %}<div><span>Impostos sobre serviços ({{ o.imposto_servicos_pct|qtd }}%)</span><span>{{ o.impostos|brl }}</span></div>{% endif %}
+    {% if o.desconto %}<div><span>Desconto</span><span>– {{ o.desconto|brl }}</span></div>{% endif %}
+    <div class="total"><span>Total</span><span>{{ o.total|brl }}</span></div>
+  </div>
+  {% for rot, txt in (('Prazo de execução', o.prazo_execucao), ('Condições de pagamento', o.condicoes), ('Garantia', o.garantia), ('Observações', o.observacoes)) %}
+  {% if txt %}<h2 style="margin-top:14px">{{ rot }}</h2><p style="white-space:pre-line;margin:0">{{ txt }}</p>{% endif %}{% endfor %}
+</div>
+
+{% if o.status == 'enviado' and not o.expirado(hoje) %}
+<form class="card" method="post" action="/orcamento/{{ token }}/responder">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Sua resposta</h2>
+  <div class="campo"><label>Seu nome</label><input name="nome" required maxlength="120" autocomplete="name"></div>
+  <div class="campo"><label>Observação <span class="muted">(opcional)</span></label><textarea name="obs" rows="2" placeholder="Ex.: melhor dia para a instalação"></textarea></div>
+  <label class="check"><input type="checkbox" name="aceite" value="1"><span>Li e aprovo este orçamento no valor de <b>{{ o.total|brl }}</b>.</span></label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    <button class="btn" name="acao" value="aprovar">✔ Aprovar orçamento</button>
+    <button class="btn perigo" name="acao" value="recusar" formnovalidate onclick="this.form.aceite.checked=false">Recusar</button>
+  </div>
+</form>
+{% elif o.status == 'enviado' %}
+<div class="flash aviso">A validade deste orçamento terminou em {{ o.valido_ate|data }}. Fale com a {{ config.EMPRESA_NOME }} para atualizar os valores.</div>
+{% elif o.status in ('aprovado', 'faturado') %}
+<div class="flash ok">✔ Orçamento aprovado por <b>{{ o.respondido_por }}</b> em {{ o.respondido_em|local }}. Obrigado!</div>
+{% elif o.status == 'recusado' %}
+<div class="flash erro">Orçamento recusado em {{ o.respondido_em|local }}. Se mudar de ideia, fale com a gente.</div>
+{% endif %}
+{% endblock %}

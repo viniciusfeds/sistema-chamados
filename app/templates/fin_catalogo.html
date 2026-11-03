@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Produtos e serviços{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('catalogo') }}
+<div class="cab">
+  <div><h1>Produtos e serviços</h1><div class="muted">Catálogo usado nos orçamentos, com os dados fiscais das notas</div></div>
+  <a class="btn" href="#form">+ Novo item</a>
+</div>
+<div class="card"><form method="get" class="acoes-orc">
+  <input name="q" value="{{ f.q }}" placeholder="Descrição ou código" style="flex:1;min-width:200px">
+  <select name="tipo" style="max-width:180px"><option value="">Todos</option>{% for k, v in TIPOS_ITEM.items() %}<option value="{{ k }}" {{ 'selected' if f.tipo == k }}>{{ v }}s</option>{% endfor %}</select>
+  <button class="btn">Filtrar</button></form></div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Item</th><th>Tipo</th><th class="valor">Preço</th><th>Fiscal</th><th></th></tr></thead>
+  <tbody>{% for i in lista %}
+  <tr class="{{ 'inativo' if not i.ativo }}">
+    <td data-l="Item"><b>{{ i.descricao }}</b>{% if i.codigo %}<div class="muted">Cód. {{ i.codigo }}</div>{% endif %}</td>
+    <td data-l="Tipo">{{ TIPOS_ITEM[i.tipo] }} · {{ i.unidade }}</td>
+    <td data-l="Preço" class="valor">{{ i.preco|brl }}</td>
+    <td data-l="Fiscal" class="muted">{% if i.tipo == 'produto' %}NCM {{ i.ncm or '—' }} · CFOP {{ i.cfop or '—' }} · CSOSN {{ i.csosn or '—' }}
+      {% else %}Cód. tributação {{ i.ctribnac or '—' }}{% if i.aliquota_iss is not none %} · ISS {{ i.aliquota_iss|qtd }}%{% endif %}{% endif %}
+      {% if (i.tipo == 'produto' and not i.ncm) or (i.tipo == 'servico' and not i.ctribnac) %}<span class="tag alerta">falta dado fiscal</span>{% endif %}</td>
+    <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ i.id }}#form">Editar</a>
+      <form method="post" action="/financeiro/catalogo/{{ i.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">{{ 'Desativar' if i.ativo else 'Ativar' }}</button></form></div></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Catálogo vazio.</p>{% endif %}
+</div>
+
+{% set e = ed %}
+<form class="card" method="post" action="/financeiro/catalogo/salvar" id="form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if e %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <h2>{{ 'Editar item' if e else '+ Novo item' }}</h2>
+  <div class="grid3">
+    <div class="campo"><label>Tipo</label><select name="tipo" id="cat-tipo">{% for k, v in TIPOS_ITEM.items() %}<option value="{{ k }}" {{ 'selected' if e and e.tipo == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Código <span class="muted">(opcional)</span></label><input name="codigo" value="{{ e.codigo or '' if e else '' }}"></div>
+    <div class="campo"><label>Unidade</label><input name="unidade" value="{{ e.unidade if e else 'UN' }}" placeholder="UN, SV, H, M, CX"></div>
+  </div>
+  <div class="grid2">
+    <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ e.descricao if e else '' }}" placeholder="Ex.: Câmera bullet 2MP Intelbras VHD 3230 B"></div>
+    <div class="campo"><label>Preço de venda</label><input name="preco" inputmode="decimal" value="{{ e.preco|brl_num if e else '' }}"></div>
+  </div>
+  <div data-tipo="produto">
+    <h3>Dados fiscais do produto (NF-e)</h3>
+    <div class="grid3">
+      <div class="campo"><label>NCM (8 dígitos)</label><input name="ncm" value="{{ e.ncm or '' if e else '' }}" inputmode="numeric" placeholder="Ex.: 85258929"></div>
+      <div class="campo"><label>CFOP de venda</label><input name="cfop" value="{{ e.cfop or '' if e else '5102' }}" inputmode="numeric">
+        <div class="dica">5102 = revenda dentro de SP. Para outro estado, a nota troca para 6102 sozinha.</div></div>
+      <div class="campo"><label>CSOSN (Simples Nacional)</label><input name="csosn" value="{{ e.csosn or '' if e else '102' }}" inputmode="numeric">
+        <div class="dica">102 = sem crédito; 500 = ICMS já cobrado por substituição.</div></div>
+    </div>
+    <div class="grid3">
+      <div class="campo"><label>Origem</label><select name="origem">{% for k, v in (('0', '0 — Nacional'), ('1', '1 — Importado direto'), ('2', '2 — Importado no mercado interno')) %}<option value="{{ k }}" {{ 'selected' if e and e.origem == k }}>{{ v }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>CEST <span class="muted">(se houver ST)</span></label><input name="cest" value="{{ e.cest or '' if e else '' }}" inputmode="numeric"></div>
+    </div>
+  </div>
+  <div data-tipo="servico">
+    <h3>Dados fiscais do serviço (NFS-e Nacional)</h3>
+    <div class="grid3">
+      <div class="campo"><label>Código de tributação nacional (6 dígitos)</label><input name="ctribnac" value="{{ e.ctribnac or '' if e else '' }}" inputmode="numeric" placeholder="Ex.: 140101">
+        <div class="dica">Item da lista de serviços (LC 116) — confirme com a contabilidade.</div></div>
+      <div class="campo"><label>NBS <span class="muted">(opcional)</span></label><input name="nbs" value="{{ e.nbs or '' if e else '' }}" inputmode="numeric"></div>
+      <div class="campo"><label>Alíquota ISS (%)</label><input name="aliquota_iss" value="{{ e.aliquota_iss|qtd if e and e.aliquota_iss is not none else '' }}" inputmode="decimal">
+        <div class="dica">No Simples, informe só se a contabilidade orientar.</div></div>
+    </div>
+  </div>
+  <button class="btn">Salvar item</button>{% if e %} <a class="btn sec" href="/financeiro/catalogo">Cancelar</a>{% endif %}
+</form>
+<script>
+(function () { var t = document.getElementById('cat-tipo');
+  function ver() { document.querySelectorAll('[data-tipo]').forEach(function (g) { g.hidden = g.dataset.tipo !== t.value; }); }
+  t.onchange = ver; ver(); })();
+</script>
+{% endblock %}

@@ -514,3 +514,253 @@ class AgenteLog(Base):
     quando: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # hora do agente (UTC)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     agente = relationship("Agente", back_populates="logs")
+
+
+# ================================================================== faturamento
+# Valores em CENTAVOS (int) para não ter erro de arredondamento.
+TIPOS_ITEM = {"servico": "Serviço", "produto": "Produto"}
+STATUS_ORCAMENTO = {  # chave -> (rótulo, cor)
+    "rascunho": ("Rascunho", "#5F6B7A"),
+    "enviado": ("Enviado", "#1F5FA8"),
+    "aprovado": ("Aprovado", "#2E7D4F"),
+    "recusado": ("Recusado", "#B3261E"),
+    "faturado": ("Faturado", "#5B3A9E"),
+    "cancelado": ("Cancelado", "#8A94A3"),
+}
+FORMAS_PAGAMENTO = {"pix": "PIX", "boleto": "Boleto", "transferencia": "Transferência", "dinheiro": "Dinheiro",
+                    "cartao": "Cartão", "outro": "Outro"}
+
+
+class ClienteFiscal(Base):
+    """Dados de faturamento (quem recebe o orçamento, a cobrança e a nota). Um cliente pode ter vários
+    (ex.: cada unidade de uma rede com CNPJ próprio)."""
+    __tablename__ = "clientes_fiscais"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"), nullable=True, index=True)
+    unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id"), nullable=True)
+    documento: Mapped[str] = mapped_column(String(14), default="", index=True)   # CNPJ ou CPF, só dígitos
+    razao_social: Mapped[str] = mapped_column(String(160))
+    nome_fantasia: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    ie: Mapped[str | None] = mapped_column(String(20), nullable=True)            # "" = não contribuinte
+    im: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)        # vários separados por vírgula
+    telefone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    contato: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cep: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    logradouro: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    numero: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    complemento: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    bairro: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    municipio: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    uf: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    ibge: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente = relationship("Cliente")
+    unidade = relationship("Unidade")
+
+    @property
+    def pessoa_juridica(self):
+        return len(self.documento or "") == 14
+
+    @property
+    def documento_fmt(self):
+        d = self.documento or ""
+        if len(d) == 14:
+            return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+        if len(d) == 11:
+            return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+        return d
+
+    @property
+    def nome(self):
+        return self.nome_fantasia or self.razao_social
+
+    @property
+    def telefone_fmt(self):
+        d = "".join(c for c in (self.telefone or "") if c.isdigit())
+        if d.startswith("55") and len(d) in (12, 13):
+            d = d[2:]
+        if len(d) == 11:
+            return f"({d[:2]}) {d[2:7]}-{d[7:]}"
+        if len(d) == 10:
+            return f"({d[:2]}) {d[2:6]}-{d[6:]}"
+        return self.telefone or ""
+
+    @property
+    def endereco_fmt(self):
+        partes = [", ".join(x for x in (self.logradouro, self.numero) if x), self.complemento, self.bairro,
+                  " / ".join(x for x in (self.municipio, self.uf) if x)]
+        txt = " — ".join(p for p in partes if p)
+        if self.cep and len(self.cep) == 8:
+            txt += f" — CEP {self.cep[:5]}-{self.cep[5:]}"
+        return txt
+
+    @property
+    def endereco_completo(self):
+        return bool(self.logradouro and self.numero and self.bairro and self.municipio and self.uf and self.ibge
+                    and self.cep)
+
+
+class ItemCatalogo(Base):
+    """Produtos e serviços que a empresa vende, com os dados fiscais usados nas notas."""
+    __tablename__ = "catalogo"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tipo: Mapped[str] = mapped_column(String(10), default="servico")    # servico / produto
+    codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    descricao: Mapped[str] = mapped_column(String(250))
+    unidade: Mapped[str] = mapped_column(String(6), default="UN")
+    preco: Mapped[int] = mapped_column(Integer, default=0)              # centavos
+    # produto (NF-e)
+    ncm: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    cfop: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    csosn: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    origem: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    cest: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    # serviço (NFS-e Nacional)
+    ctribnac: Mapped[str | None] = mapped_column(String(6), nullable=True)   # código de tributação nacional
+    nbs: Mapped[str | None] = mapped_column(String(9), nullable=True)
+    aliquota_iss: Mapped[float | None] = mapped_column(nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Orcamento(Base):
+    __tablename__ = "orcamentos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    numero: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    cliente_fiscal_id: Mapped[int | None] = mapped_column(ForeignKey("clientes_fiscais.id"), nullable=True)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"), nullable=True, index=True)
+    unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id"), nullable=True)
+    chamado_id: Mapped[int | None] = mapped_column(ForeignKey("chamados.id"), nullable=True)
+    titulo: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(12), default="rascunho", index=True)
+    emissao: Mapped[date] = mapped_column(Date)
+    validade_dias: Mapped[int] = mapped_column(Integer, default=15)
+    prazo_execucao: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    condicoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    garantia: Mapped[str | None] = mapped_column(Text, nullable=True)
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    desconto: Mapped[int] = mapped_column(Integer, default=0)                   # centavos, sobre o total
+    imposto_servicos_pct: Mapped[float] = mapped_column(default=0)
+    token_publico: Mapped[str] = mapped_column(String(40), unique=True, default=lambda: novo_token(18))
+    enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    respondido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    respondido_por: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resposta_obs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resposta_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    cliente = relationship("Cliente")
+    unidade = relationship("Unidade")
+    chamado = relationship("Chamado")
+    criado_por = relationship("Usuario")
+    itens = relationship("ItemOrcamento", back_populates="orcamento", order_by="ItemOrcamento.ordem",
+                         cascade="all, delete-orphan")
+    titulos = relationship("Titulo", back_populates="orcamento", order_by="Titulo.vencimento")
+
+    @property
+    def numero_fmt(self):
+        return f"{self.numero:04d}"
+
+    def _soma(self, tipo=None):
+        return sum(i.total for i in self.itens if tipo is None or i.tipo == tipo)
+
+    @property
+    def total_servicos(self):
+        return self._soma("servico")
+
+    @property
+    def total_produtos(self):
+        return self._soma("produto")
+
+    @property
+    def impostos(self):
+        return round(self.total_servicos * (self.imposto_servicos_pct or 0) / 100)
+
+    @property
+    def total(self):
+        return max(0, self._soma() + self.impostos - (self.desconto or 0))
+
+    @property
+    def valido_ate(self):
+        from datetime import timedelta
+        return self.emissao + timedelta(days=self.validade_dias or 0)
+
+    def expirado(self, hoje):
+        return self.status == "enviado" and hoje > self.valido_ate
+
+
+class ItemOrcamento(Base):
+    __tablename__ = "orcamento_itens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    orcamento_id: Mapped[int] = mapped_column(ForeignKey("orcamentos.id", ondelete="CASCADE"), index=True)
+    catalogo_id: Mapped[int | None] = mapped_column(ForeignKey("catalogo.id", ondelete="SET NULL"), nullable=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    tipo: Mapped[str] = mapped_column(String(10), default="servico")
+    descricao: Mapped[str] = mapped_column(Text)
+    unidade: Mapped[str] = mapped_column(String(6), default="UN")
+    quantidade: Mapped[float] = mapped_column(default=1)
+    valor_unitario: Mapped[int] = mapped_column(Integer, default=0)   # centavos
+    orcamento = relationship("Orcamento", back_populates="itens")
+    catalogo = relationship("ItemCatalogo")
+
+    @property
+    def total(self):
+        return round((self.quantidade or 0) * (self.valor_unitario or 0))
+
+
+class Contrato(Base):
+    """Cobrança recorrente (ex.: manutenção mensal): gera uma conta a receber por mês."""
+    __tablename__ = "contratos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_fiscal_id: Mapped[int] = mapped_column(ForeignKey("clientes_fiscais.id"))
+    catalogo_id: Mapped[int | None] = mapped_column(ForeignKey("catalogo.id", ondelete="SET NULL"), nullable=True)
+    descricao: Mapped[str] = mapped_column(String(200))
+    valor: Mapped[int] = mapped_column(Integer, default=0)            # centavos por mês
+    dia_vencimento: Mapped[int] = mapped_column(Integer, default=10)
+    inicio: Mapped[date] = mapped_column(Date)
+    fim: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    catalogo = relationship("ItemCatalogo")
+    titulos = relationship("Titulo", back_populates="contrato")
+
+
+class Titulo(Base):
+    """Conta a receber (uma parcela)."""
+    __tablename__ = "titulos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_fiscal_id: Mapped[int | None] = mapped_column(ForeignKey("clientes_fiscais.id"), nullable=True, index=True)
+    orcamento_id: Mapped[int | None] = mapped_column(ForeignKey("orcamentos.id", ondelete="SET NULL"), nullable=True)
+    contrato_id: Mapped[int | None] = mapped_column(ForeignKey("contratos.id", ondelete="SET NULL"), nullable=True)
+    competencia: Mapped[str | None] = mapped_column(String(7), nullable=True)   # "2026-11" (contratos)
+    descricao: Mapped[str] = mapped_column(String(200))
+    parcela: Mapped[int] = mapped_column(Integer, default=1)
+    total_parcelas: Mapped[int] = mapped_column(Integer, default=1)
+    valor: Mapped[int] = mapped_column(Integer)                       # centavos
+    vencimento: Mapped[date] = mapped_column(Date, index=True)
+    status: Mapped[str] = mapped_column(String(10), default="aberto", index=True)   # aberto / pago / cancelado
+    pago_em: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valor_pago: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    forma: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    orcamento = relationship("Orcamento", back_populates="titulos")
+    contrato = relationship("Contrato", back_populates="titulos")
+
+    @property
+    def parcela_fmt(self):
+        return f"{self.parcela}/{self.total_parcelas}" if self.total_parcelas > 1 else "única"
+
+    def situacao(self, hoje):
+        if self.status != "aberto":
+            return self.status
+        return "vencido" if self.vencimento < hoje else "aberto"
+
+    def dias_atraso(self, hoje):
+        return max(0, (hoje - self.vencimento).days) if self.status == "aberto" else 0

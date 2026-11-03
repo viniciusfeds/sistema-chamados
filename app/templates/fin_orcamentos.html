@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, selo_orc with context %}
+{% block titulo %}Orçamentos{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('orcamentos') }}
+<div class="cab">
+  <div><h1>Orçamentos</h1><div class="muted">{{ lista|length }} orçamento(s)</div></div>
+  <a class="btn" href="/financeiro/orcamentos/novo">+ Novo orçamento</a>
+</div>
+<div class="card">
+  <form class="filtros" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Número, título ou cliente"></div>
+    <div><label for="status">Situação</label><select id="status" name="status"><option value="">Todas</option>
+      {% for k, v in STATUS_ORCAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v[0] }}</option>{% endfor %}</select></div>
+    <div><label for="cliente">Cliente</label><select id="cliente" name="cliente"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/financeiro/orcamentos">Limpar</a></div>
+  </form>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Nº</th><th>Título</th><th>Cliente</th><th>Emissão</th><th>Validade</th><th class="valor">Total</th><th>Situação</th></tr></thead>
+  <tbody>{% for o in lista %}
+  <tr class="link" onclick="location.href='/financeiro/orcamentos/{{ o.numero }}'">
+    <td data-l="Nº"><a href="/financeiro/orcamentos/{{ o.numero }}"><b>{{ o.numero_fmt }}</b></a></td>
+    <td data-l="Título">{{ o.titulo }}{% if o.chamado %}<div class="muted">Chamado {{ o.chamado.numero_fmt }}</div>{% endif %}</td>
+    <td data-l="Cliente">{{ o.cliente_fiscal.nome if o.cliente_fiscal else (o.cliente.nome if o.cliente else '—') }}</td>
+    <td data-l="Emissão">{{ o.emissao|data }}</td>
+    <td data-l="Validade">{{ o.valido_ate|data }}</td>
+    <td data-l="Total" class="valor"><b>{{ o.total|brl }}</b></td>
+    <td data-l="Situação">{{ selo_orc(o, hoje) }}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum orçamento encontrado.</p>{% endif %}
+</div>
+{% endblock %}

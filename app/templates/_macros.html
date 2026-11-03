@@ -104,3 +104,23 @@
   </div></div>
 {% endif %}
 {%- endmacro %}
+
+{% macro abas_financeiro(ativa) -%}
+<nav class="abas">
+  <a href="/financeiro" class="{{ 'ativa' if ativa == 'painel' }}">Visão geral</a>
+  <a href="/financeiro/orcamentos" class="{{ 'ativa' if ativa == 'orcamentos' }}">Orçamentos</a>
+  <a href="/financeiro/receber" class="{{ 'ativa' if ativa == 'receber' }}">Contas a receber</a>
+  <a href="/financeiro/contratos" class="{{ 'ativa' if ativa == 'contratos' }}">Contratos</a>
+  <a href="/financeiro/clientes" class="{{ 'ativa' if ativa == 'clientes' }}">Clientes</a>
+  <a href="/financeiro/catalogo" class="{{ 'ativa' if ativa == 'catalogo' }}">Produtos e serviços</a>
+</nav>
+{%- endmacro %}
+
+{% macro selo_orc(o, hoje) -%}
+{% if o.expirado(hoje) %}<span class="selo" style="background:#B07000">Expirado</span>
+{% else %}<span class="selo" style="background:{{ STATUS_ORCAMENTO[o.status][1] }}">{{ STATUS_ORCAMENTO[o.status][0] }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro selo_titulo(t, hoje) -%}
+{% set s = SITUACOES_TITULO[t.situacao(hoje)] %}<span class="selo" style="background:{{ s[1] }}">{{ s[0] }}</span>
+{%- endmacro %}

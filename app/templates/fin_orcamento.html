@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, selo_orc, selo_titulo with context %}
+{% block titulo %}{{ 'Orçamento ' ~ o.numero_fmt if o.id else 'Novo orçamento' }}{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('orcamentos') }}
+{% set travado = o.status in ('faturado', 'cancelado') %}
+<div class="cab">
+  <div>
+    <a href="/financeiro/orcamentos" class="muted">← Orçamentos</a>
+    <h1>{% if o.id %}Orçamento {{ o.numero_fmt }} {{ selo_orc(o, hoje) }}{% else %}Novo orçamento{% endif %}</h1>
+    {% if o.id %}<div class="muted">Criado em {{ o.criado_em|local }}{% if o.criado_por %} por {{ o.criado_por.nome }}{% endif %}{% if o.enviado_em %} · enviado em {{ o.enviado_em|local }}{% endif %}</div>{% endif %}
+  </div>
+  {% if o.id %}<div class="acoes-orc">
+    <a class="btn sec" href="/financeiro/orcamentos/{{ o.numero }}/pdf" target="_blank">📄 PDF</a>
+    <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/duplicar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Duplicar</button></form>
+  </div>{% endif %}
+</div>
+
+{% if o.id and o.respondido_em %}
+<div class="flash {{ 'ok' if o.status in ('aprovado', 'faturado') else 'erro' }}">
+  {{ 'Aprovado' if o.status in ('aprovado', 'faturado') else 'Recusado' }} por <b>{{ o.respondido_por }}</b> em {{ o.respondido_em|local }}{% if o.resposta_ip %} · IP {{ o.resposta_ip }}{% endif %}
+  {% if o.resposta_obs %}<div>“{{ o.resposta_obs }}”</div>{% endif %}
+</div>
+{% endif %}
+
+{% if o.id %}
+<div class="card">
+  <h2>Enviar ao cliente</h2>
+  {% if o.status == 'rascunho' %}<p class="dica" style="margin-top:0">Ao enviar, o cliente recebe um link para ver, baixar o PDF e <b>aprovar online</b>.</p>{% endif %}
+  {% if o.status not in ('rascunho', 'cancelado') %}
+  <div class="campo"><label>Link de aprovação para o cliente</label>
+    <div class="link-copiar"><input id="link-pub" value="{{ link }}" readonly onclick="this.select()"><button type="button" class="btn sec" onclick="navigator.clipboard.writeText(document.getElementById('link-pub').value);this.textContent='Copiado ✔'">Copiar</button></div></div>
+  {% endif %}
+  <div class="acoes-orc">
+    {% if o.status in ('rascunho', 'enviado') %}
+    <a class="btn" href="{{ link_zap }}" target="_blank" onclick="setTimeout(function(){document.getElementById('f-marcar').submit()},300)">WhatsApp</a>
+    <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/enviar" class="acoes-orc">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="canal" value="email">
+      <input name="para" type="email" placeholder="{{ o.cliente_fiscal.email if o.cliente_fiscal and o.cliente_fiscal.email else 'e-mail do cliente' }}" style="min-width:220px">
+      <button class="btn sec">Enviar por e-mail (com PDF)</button></form>
+    {% if o.status == 'rascunho' %}<form method="post" action="/financeiro/orcamentos/{{ o.numero }}/enviar" id="f-marcar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Só marcar como enviado</button></form>
+    {% else %}<form method="post" action="/financeiro/orcamentos/{{ o.numero }}/enviar" id="f-marcar"><input type="hidden" name="csrf" value="{{ csrf }}"></form>{% endif %}
+    {% endif %}
+  </div>
+  {% if o.status in ('rascunho', 'enviado') %}
+  <details style="margin-top:10px"><summary>O cliente respondeu por outro meio?</summary>
+    <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/status" class="acoes-orc" style="margin-top:8px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input name="obs" placeholder="Observação (opcional)" style="min-width:240px">
+      <button class="btn" name="acao" value="aprovar">Marcar aprovado</button>
+      <button class="btn perigo" name="acao" value="recusar">Marcar recusado</button></form>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if o.status == 'aprovado' %}
+<form class="card" method="post" action="/financeiro/orcamentos/{{ o.numero }}/faturar" id="faturar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Faturar</h2>
+  <p class="dica" style="margin-top:0">Lança as parcelas em <b>Contas a receber</b>. (A emissão da nota fiscal entra na próxima etapa.)</p>
+  <div class="grid3">
+    <div class="campo"><label>Parcelas</label><input name="parcelas" type="number" min="1" max="48" value="1" id="fat-n"></div>
+    <div class="campo"><label>1º vencimento</label><input name="primeiro" type="date" value="{{ hoje.isoformat() }}"></div>
+    <div class="campo"><label>Intervalo</label><select name="intervalo"><option value="30">Mensal (mesmo dia)</option><option value="15">15 dias</option><option value="7">7 dias</option><option value="28">28 dias</option></select></div>
+  </div>
+  <div class="campo" style="max-width:300px"><label>Entrada (valor da 1ª parcela, opcional)</label><input name="entrada" inputmode="decimal" placeholder="Ex.: {{ (o.total // 2)|brl_num }}"></div>
+  <button class="btn">Faturar {{ o.total|brl }}</button>
+</form>
+{% endif %}
+
+{% if o.titulos %}
+<div class="card">
+  <h2>Parcelas</h2>
+  <table class="resp"><thead><tr><th>Parcela</th><th>Vencimento</th><th class="valor">Valor</th><th>Situação</th></tr></thead><tbody>
+  {% for t in o.titulos %}<tr><td data-l="Parcela">{{ t.parcela_fmt }}</td><td data-l="Vencimento">{{ t.vencimento|data }}</td>
+    <td data-l="Valor" class="valor">{{ t.valor|brl }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.pago_em %} <span class="muted">em {{ t.pago_em|data }}</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+  <a class="btn peq sec" href="/financeiro/receber?situacao=todos&q={{ ('Orçamento ' ~ o.numero_fmt)|urlencode }}">Ver em Contas a receber</a>
+</div>
+{% endif %}
+
+<form class="card" method="post" action="/financeiro/orcamentos/salvar" id="form-orc">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if o.id %}<input type="hidden" name="id" value="{{ o.id }}">{% endif %}
+  {% if o.chamado_id %}<input type="hidden" name="chamado_id" value="{{ o.chamado_id }}">{% endif %}
+  <fieldset {{ 'disabled' if travado }} style="border:0;padding:0;margin:0">
+  <h2>Dados do orçamento</h2>
+  {% if o.chamado %}<p class="dica" style="margin-top:0">Referente ao <a href="/chamados/{{ o.chamado.numero }}">chamado {{ o.chamado.numero_fmt }}</a> — {{ o.chamado.titulo }}</p>{% endif %}
+  <div class="campo"><label>Título</label><input name="titulo" value="{{ o.titulo }}" required placeholder="Ex.: Instalação de 8 câmeras e gravador"></div>
+  <div class="grid2">
+    <div class="campo"><label>Cliente (dados de faturamento) <a href="/financeiro/clientes/novo" target="_blank" class="muted">+ cadastrar</a></label>
+      <select name="cliente_fiscal_id"><option value="">— escolha —</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if o.cliente_fiscal_id == c.id }}>{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %} · {{ c.documento_fmt }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Unidade <span class="muted">(opcional)</span></label>
+      <select name="unidade_id"><option value="">—</option>
+      {% for un in unidades %}<option value="{{ un.id }}" {{ 'selected' if o.unidade_id == un.id }}>{{ un.cliente.nome }} · {{ un.nome }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Emissão</label><input type="date" name="emissao" value="{{ o.emissao.isoformat() }}"></div>
+    <div class="campo"><label>Validade (dias)</label><input type="number" name="validade_dias" min="1" value="{{ o.validade_dias }}"></div>
+    <div class="campo"><label>Prazo de execução</label><input name="prazo_execucao" value="{{ o.prazo_execucao or '' }}" placeholder="Ex.: 5 dias úteis após a aprovação"></div>
+  </div>
+
+  <h2 style="margin-top:14px">Itens</h2>
+  <table class="itens" id="itens">
+    <thead><tr><th class="c-tipo">Tipo</th><th>Descrição</th><th class="c-qtd">Qtd.</th><th class="c-un">Un.</th><th class="c-val">Valor unit.</th><th class="c-tot valor">Total</th><th class="c-x"></th></tr></thead>
+    <tbody>
+    {% for i in o.itens %}
+    <tr><td class="c-tipo"><select name="item_tipo">{% for k, v in TIPOS_ITEM.items() %}<option value="{{ k }}" {{ 'selected' if i.tipo == k }}>{{ v }}</option>{% endfor %}</select><input type="hidden" name="item_cat" value="{{ i.catalogo_id or '' }}"></td>
+      <td class="c-desc"><textarea name="item_desc" rows="1">{{ i.descricao }}</textarea></td>
+      <td class="c-qtd"><input name="item_qtd" value="{{ i.quantidade|qtd }}" inputmode="decimal"></td>
+      <td class="c-un"><input name="item_un" value="{{ i.unidade }}"></td>
+      <td class="c-val"><input name="item_valor" value="{{ i.valor_unitario|brl_num }}" inputmode="decimal"></td>
+      <td class="c-tot valor">{{ i.total|brl }}</td>
+      <td class="c-x"><button type="button" class="btn-x" title="Remover">×</button></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if not travado %}
+  <div class="acoes-orc" style="margin:10px 0">
+    <button type="button" class="btn peq sec" id="add-servico">+ Serviço</button>
+    <button type="button" class="btn peq sec" id="add-produto">+ Produto</button>
+    {% if catalogo %}<select id="add-cat" style="max-width:340px"><option value="">+ Do catálogo…</option>
+      {% for c in catalogo %}<option value="{{ c.id }}">{{ TIPOS_ITEM[c.tipo] }} · {{ c.descricao }} · {{ c.preco|brl }}</option>{% endfor %}</select>
+    {% else %}<a class="muted" href="/financeiro/catalogo">Cadastre produtos e serviços no catálogo para incluir mais rápido</a>{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="grid2" style="align-items:start;margin-top:10px">
+    <div class="grid2">
+      <div class="campo"><label>Impostos sobre serviços (%)</label><input name="imposto_servicos_pct" id="imp" value="{{ o.imposto_servicos_pct|qtd }}" inputmode="decimal"></div>
+      <div class="campo"><label>Desconto (R$)</label><input name="desconto" id="desc" value="{{ o.desconto|brl_num if o.desconto else '' }}" inputmode="decimal"></div>
+    </div>
+    <div class="totais" id="totais"></div>
+  </div>
+
+  <div class="grid3" style="margin-top:10px">
+    <div class="campo"><label>Condições de pagamento</label><textarea name="condicoes" rows="3">{{ o.condicoes or '' }}</textarea></div>
+    <div class="campo"><label>Garantia</label><textarea name="garantia" rows="3">{{ o.garantia or '' }}</textarea></div>
+    <div class="campo"><label>Observações</label><textarea name="observacoes" rows="3">{{ o.observacoes or '' }}</textarea></div>
+  </div>
+  </fieldset>
+  {% if not travado %}
+  <div class="acoes-orc"><button class="btn">Salvar orçamento</button>
+    {% if o.status == 'enviado' %}<span class="muted">O cliente verá a versão atualizada no mesmo link.</span>{% endif %}</div>
+  {% else %}<p class="muted">Orçamento {{ STATUS_ORCAMENTO[o.status][0]|lower }}: não pode mais ser alterado. Use <b>Duplicar</b> para fazer outro a partir dele.</p>{% endif %}
+</form>
+
+{% if o.id and o.status not in ('faturado', 'cancelado') %}
+<div class="acoes-orc" style="justify-content:flex-end">
+  {% if o.status == 'rascunho' %}
+  <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/excluir" onsubmit="return confirm('Excluir o rascunho {{ o.numero_fmt }}?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq perigo">Excluir rascunho</button></form>
+  {% else %}
+  {% if o.status in ('aprovado', 'recusado') %}<form method="post" action="/financeiro/orcamentos/{{ o.numero }}/status"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec" name="acao" value="reabrir">Voltar para "enviado"</button></form>{% endif %}
+  <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/status" onsubmit="return confirm('Cancelar o orçamento {{ o.numero_fmt }}? O link do cliente deixa de funcionar.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq perigo" name="acao" value="cancelar">Cancelar orçamento</button></form>
+  {% endif %}
+</div>
+{% endif %}
+
+<script>
+(function () {
+  var CAT = {{ catalogo_dados|default({})|tojson }};
+  var tb = document.querySelector('#itens tbody'), travado = {{ 'true' if travado else 'false' }};
+  function num(v) { v = String(v || '').replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  function brl(c) { return 'R$ ' + (c / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function linha(tipo, desc, qtd, un, val, cat) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="c-tipo"><select name="item_tipo"><option value="servico">Serviço</option><option value="produto">Produto</option></select><input type="hidden" name="item_cat"></td>' +
+      '<td class="c-desc"><textarea name="item_desc" rows="1"></textarea></td><td class="c-qtd"><input name="item_qtd" inputmode="decimal"></td>' +
+      '<td class="c-un"><input name="item_un"></td><td class="c-val"><input name="item_valor" inputmode="decimal"></td>' +
+      '<td class="c-tot valor"></td><td class="c-x"><button type="button" class="btn-x" title="Remover">×</button></td>';
+    tr.querySelector('select').value = tipo; tr.querySelector('[name=item_cat]').value = cat || '';
+    tr.querySelector('textarea').value = desc || ''; tr.querySelector('[name=item_qtd]').value = qtd || '1';
+    tr.querySelector('[name=item_un]').value = un || (tipo === 'servico' ? 'SV' : 'UN'); tr.querySelector('[name=item_valor]').value = val || '';
+    tb.appendChild(tr); tr.querySelector('textarea').focus(); calc();
+  }
+  function calc() {
+    var serv = 0, prod = 0;
+    tb.querySelectorAll('tr').forEach(function (tr) {
+      var q = num(tr.querySelector('[name=item_qtd]').value), v = Math.round(num(tr.querySelector('[name=item_valor]').value) * 100);
+      var t = Math.round(q * v); tr.querySelector('.c-tot').textContent = brl(t);
+      if (tr.querySelector('[name=item_tipo]').value === 'produto') prod += t; else serv += t;
+    });
+    var imp = Math.round(serv * num(document.getElementById('imp').value) / 100), desc = Math.round(num(document.getElementById('desc').value) * 100);
+    var tot = Math.max(0, serv + prod + imp - desc), h = '';
+    if (prod) h += '<div><span>Produtos</span><span>' + brl(prod) + '</span></div>';
+    if (serv) h += '<div><span>Serviços</span><span>' + brl(serv) + '</span></div>';
+    if (imp) h += '<div><span>Impostos sobre serviços</span><span>' + brl(imp) + '</span></div>';
+    if (desc) h += '<div><span>Desconto</span><span>– ' + brl(desc) + '</span></div>';
+    document.getElementById('totais').innerHTML = h + '<div class="total"><span>Total</span><span>' + brl(tot) + '</span></div>';
+  }
+  document.getElementById('form-orc').addEventListener('input', calc);
+  document.getElementById('form-orc').addEventListener('change', calc);
+  tb.addEventListener('click', function (e) { if (e.target.classList.contains('btn-x') && !travado) { e.target.closest('tr').remove(); calc(); } });
+  var a1 = document.getElementById('add-servico'), a2 = document.getElementById('add-produto'), ac = document.getElementById('add-cat');
+  if (a1) a1.onclick = function () { linha('servico'); };
+  if (a2) a2.onclick = function () { linha('produto'); };
+  if (ac) ac.onchange = function () { var c = CAT[ac.value]; if (c) linha(c.tipo, c.descricao, '1', c.unidade, c.preco, ac.value); ac.value = ''; };
+  if (!tb.children.length && !travado) linha('servico');
+  calc();
+})();
+</script>
+{% endblock %}

@@ -15,6 +15,7 @@
     <a class="btn wa" href="{{ wa_grupo }}" target="_blank" rel="noopener" title="Abre o WhatsApp com a mensagem pronta para escolher o grupo">Enviar no WhatsApp</a>
     {% if wa_solicitante %}<a class="btn sec" href="{{ wa_solicitante }}" target="_blank" rel="noopener">Avisar {{ ch.solicitante_nome.split()[0] }}</a>{% endif %}
     {% endif %}
+    {% if u.papel == 'admin' %}<a class="btn sec" href="/financeiro/orcamentos/novo?chamado={{ ch.numero }}" title="Novo orçamento já com o cliente e a unidade deste chamado">Criar orçamento</a>{% endif %}
     <a class="btn" href="/chamados/{{ ch.numero }}/pdf" target="_blank">Baixar PDF</a>
   </div>
 </div>

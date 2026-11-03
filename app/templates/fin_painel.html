@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, selo_orc, selo_titulo with context %}
+{% block titulo %}Financeiro{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('painel') }}
+<div class="cab">
+  <div><h1>Financeiro</h1><div class="muted">Orçamentos, contas a receber e contratos · {{ hoje|data }}</div></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn" href="/financeiro/orcamentos/novo">+ Novo orçamento</a>
+    <a class="btn sec" href="/financeiro/receber#novo">+ Conta a receber</a></div>
+</div>
+
+{% if ind.contratos_pendentes %}
+<div class="flash aviso">{{ ind.contratos_pendentes }} contrato(s) ainda sem cobrança deste mês.
+  <a href="/financeiro/contratos">Gerar cobranças</a></div>
+{% endif %}
+
+<div class="cards fin">
+  <a href="/financeiro/receber?situacao=abertos" style="--c:#1F5FA8"><b>{{ ind.a_receber|brl }}</b><span>A receber (total)</span></a>
+  <a href="/financeiro/receber?situacao=vencido" style="--c:#B3261E" class="{{ 'ativo' if ind.n_vencidos }}"><b>{{ ind.vencido|brl }}</b><span>Vencido · {{ ind.n_vencidos }} conta(s)</span></a>
+  <a href="/financeiro/receber?situacao=aberto" style="--c:#B07000"><b>{{ ind.proximos30|brl }}</b><span>Vence em 30 dias</span></a>
+  <a href="/financeiro/receber?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#1E7B45"><b>{{ ind.recebido_mes|brl }}</b><span>Recebido no mês</span></a>
+  <a href="/financeiro/orcamentos?status=enviado" style="--c:#5B3A9E"><b>{{ ind.orc_abertos|brl }}</b><span>Orçamentos aguardando · {{ ind.n_orc_abertos }}</span></a>
+  <a href="/financeiro/orcamentos" style="--c:#2B2B2B"><b>{{ ind.conversao ~ '%' if ind.conversao is not none else '—' }}</b><span>Aprovação (90 dias)</span></a>
+</div>
+
+<div class="dash-grid">
+  <div class="card">
+    <h2>Previsto × recebido</h2>
+    <div class="grafico-meses">
+      {% for m in ind.meses %}
+      <div class="gm-col" title="{{ m.mes.strftime('%m/%Y') }} · previsto {{ m.previsto|brl }} · recebido {{ m.recebido|brl }}">
+        <div class="gm-barras">
+          <i class="prev" style="height:{{ (100 * m.previsto / ind.max_mes)|round(1) }}%"></i>
+          <i class="rec" style="height:{{ (100 * m.recebido / ind.max_mes)|round(1) }}%"></i>
+        </div>
+        <span>{{ ['', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][m.mes.month] }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="muted legenda"><i class="prev"></i> previsto (vencimentos) &nbsp; <i class="rec"></i> recebido</div>
+  </div>
+  <div class="card">
+    <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Orçamentos em andamento</h2><a class="btn peq sec" href="/financeiro/orcamentos">Ver todos</a></div>
+    {% for o in orcs %}
+    <a class="linha-lista" href="/financeiro/orcamentos/{{ o.numero }}"><span><b>{{ o.numero_fmt }}</b> · {{ o.titulo }}<br>
+      <span class="muted">{{ o.cliente_fiscal.nome if o.cliente_fiscal else (o.cliente.nome if o.cliente else '—') }}</span></span>
+      <span style="text-align:right">{{ o.total|brl }}<br>{{ selo_orc(o, hoje) }}</span></a>
+    {% else %}<p class="muted">Nenhum orçamento enviado ou aprovado aguardando.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="card">
+    <h2>{% if vencidos %}⚠ {% endif %}Vencidos</h2>
+    {% for t in vencidos %}
+    <a class="linha-lista" href="/financeiro/receber?situacao=vencido"><span><b>{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}</b><br><span class="muted">{{ t.descricao }} · {{ t.parcela_fmt }}</span></span>
+      <span style="text-align:right"><b>{{ t.valor|brl }}</b><br><span style="color:#B3261E;font-weight:700">{{ t.dias_atraso(hoje) }} dia(s)</span></span></a>
+    {% else %}<p class="ok-tudo">✔ Nenhuma conta vencida.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <h2>Próximos vencimentos</h2>
+    {% for t in proximos %}
+    <a class="linha-lista" href="/financeiro/receber"><span><b>{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}</b><br><span class="muted">{{ t.descricao }} · {{ t.parcela_fmt }}</span></span>
+      <span style="text-align:right"><b>{{ t.valor|brl }}</b><br><span class="muted">{{ t.vencimento|data }}</span></span></a>
+    {% else %}<p class="muted">Nada a vencer.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

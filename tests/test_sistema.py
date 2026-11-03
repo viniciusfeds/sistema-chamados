@@ -1207,3 +1207,140 @@ def test_configuracoes_pela_tela():
     assert config.MONITOR_AVISAR_CLIENTE is False and config.MONITOR_INTERVALO_MIN == 5 and config.WHATSAPP_TOKEN == ""
     with SessionLocal() as db:
         assert {c.chave for c in db.scalars(select(Configuracao))} == {"_versao"}
+
+
+# ------------------------------------------------------------------ faturamento
+def test_financeiro_helpers():
+    from app import financeiro as f
+    assert f.cnpj_valido("32402010000140") and not f.cnpj_valido("32402010000141") and f.cpf_valido("52998224725")
+    assert f.centavos("1.234,56") == 123456 and f.centavos("99.9") == 9990 and f.brl(123456) == "R$ 1.234,56"
+    p = f.parcelas(100000, 3, date(2026, 1, 31))
+    assert [v for v, _ in p] == [33334, 33333, 33333] and p[1][1] == date(2026, 2, 28)
+    assert sum(v for v, _ in f.parcelas(100001, 3, date(2026, 11, 10), 30, 50000)) == 100001
+
+
+def test_financeiro_so_admin():
+    tec = entrar("tec@t.com")
+    assert tec.get("/financeiro", follow_redirects=False).status_code == 403
+    assert "Financeiro" not in tec.get("/").text
+
+
+def _cliente_fiscal(c):
+    tok = _csrf(c.get("/financeiro/clientes/novo").text)
+    r = c.post("/financeiro/clientes/salvar", data={
+        "csrf": tok, "documento": "11.222.333/0001-81", "razao_social": "Condomínio Top Ltda", "nome_fantasia": "Cond. Top",
+        "email": "fin@top.com", "telefone": "11 91234-5678", "cep": "07010-000", "logradouro": "Rua A", "numero": "10",
+        "bairro": "Centro", "municipio": "Guarulhos", "uf": "sp", "ibge": "3518800", "unidade_id": str(IDS["torre"])})
+    assert r.status_code == 200 and "Cadastro salvo" in r.text
+    from app.models import ClienteFiscal
+    with SessionLocal() as db:
+        cf = db.scalar(select(ClienteFiscal).where(ClienteFiscal.documento == "11222333000181"))
+        assert cf.uf == "SP" and cf.cliente_id == IDS["top"] and cf.endereco_completo
+        return cf.id
+
+
+def test_orcamento_fluxo_completo():
+    from app.models import Orcamento, Titulo
+    adm = entrar("admin@t.com")
+    cfid = _cliente_fiscal(adm)
+    # documento inválido é recusado
+    tok = _csrf(adm.get("/financeiro/clientes/novo").text)
+    r = adm.post("/financeiro/clientes/salvar", data={"csrf": tok, "documento": "11.222.333/0001-82", "razao_social": "X"})
+    assert "inválido" in r.text
+    r = adm.get(f"/financeiro/orcamentos/novo?cliente={cfid}")
+    tok = _csrf(r.text)
+    r = adm.post("/financeiro/orcamentos/salvar", data={
+        "csrf": tok, "titulo": "Instalação de câmeras", "cliente_fiscal_id": str(cfid), "emissao": "2026-11-03",
+        "validade_dias": "15", "imposto_servicos_pct": "8", "desconto": "100,00",
+        "item_tipo": ["produto", "servico", "servico"], "item_cat": ["", "", ""],
+        "item_desc": ["Câmera 2MP", "Instalação", ""], "item_qtd": ["4", "1", "1"], "item_un": ["UN", "SV", "UN"],
+        "item_valor": ["250,00", "1.000,00", ""]})
+    assert r.status_code == 200 and "salvo" in r.text
+    with SessionLocal() as db:
+        o = db.scalar(select(Orcamento).order_by(Orcamento.id.desc()))
+        # 4x250 + 1000 + 8% de 1000 - 100 = 1980,00
+        assert len(o.itens) == 2 and o.total == 198000 and o.impostos == 8000 and o.status == "rascunho"
+        num, token = o.numero, o.token_publico
+    pdf = adm.get(f"/financeiro/orcamentos/{num}/pdf")
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+    # rascunho não aparece para o cliente
+    assert TestClient(app).get(f"/orcamento/{token}").status_code == 404
+    pag = adm.get(f"/financeiro/orcamentos/{num}")
+    assert "wa.me/5511912345678" in pag.text
+    adm.post(f"/financeiro/orcamentos/{num}/enviar", data={"csrf": _csrf(pag.text), "canal": "marcar"})
+    # cliente aprova pela página pública (sem login)
+    pub = TestClient(app)
+    r = pub.get(f"/orcamento/{token}")
+    assert r.status_code == 200 and "R$ 1.980,00" in r.text and "Aprovar" in r.text
+    assert pub.get(f"/orcamento/{token}/pdf").content[:4] == b"%PDF"
+    r = pub.post(f"/orcamento/{token}/responder", data={"csrf": _csrf(r.text), "acao": "aprovar", "nome": "Síndico"})
+    assert "Marque a confirmação" in r.text
+    r = pub.post(f"/orcamento/{token}/responder", data={"csrf": _csrf(r.text), "acao": "aprovar", "nome": "Síndico",
+                                                         "aceite": "1"})
+    assert "aprovado" in r.text.lower()
+    with SessionLocal() as db:
+        o = db.scalar(select(Orcamento).where(Orcamento.numero == num))
+        assert o.status == "aprovado" and o.respondido_por == "Síndico"
+    # faturar em 2x com entrada
+    pag = adm.get(f"/financeiro/orcamentos/{num}")
+    r = adm.post(f"/financeiro/orcamentos/{num}/faturar", data={"csrf": _csrf(pag.text), "parcelas": "2",
+                                                                "primeiro": "2026-11-10", "intervalo": "30",
+                                                                "entrada": "980,00"})
+    assert "2 parcela" in r.text
+    with SessionLocal() as db:
+        ts = db.scalars(select(Titulo).where(Titulo.orcamento_id == o.id).order_by(Titulo.parcela)).all()
+        assert [t.valor for t in ts] == [98000, 100000] and ts[1].vencimento == date(2026, 12, 10)
+        assert db.get(Orcamento, o.id).status == "faturado"
+        tid = ts[0].id
+    # faturado não pode ser editado
+    r = adm.post("/financeiro/orcamentos/salvar", data={"csrf": _csrf(pag.text), "id": str(o.id), "titulo": "x"})
+    assert "não pode ser alterado" in r.text
+    # baixa e estorno
+    rec = adm.get("/financeiro/receber")
+    assert rec.status_code == 200 and "Condomínio Top" in rec.text or "Cond. Top" in rec.text
+    r = adm.post(f"/financeiro/receber/{tid}/baixar", data={"csrf": _csrf(rec.text), "pago_em": "2026-11-10",
+                                                             "valor_pago": "980,00", "forma": "pix"})
+    assert "registrado" in r.text
+    with SessionLocal() as db:
+        assert db.get(Titulo, tid).status == "pago"
+    csvr = adm.get("/financeiro/receber?situacao=todos&csv=1")
+    assert csvr.status_code == 200 and "Orçamento" in csvr.text and "980,00" in csvr.text
+    adm.post(f"/financeiro/receber/{tid}/operacao", data={"csrf": _csrf(rec.text), "operacao": "estornar"})
+    with SessionLocal() as db:
+        assert db.get(Titulo, tid).status == "aberto"
+    assert adm.get("/financeiro").status_code == 200
+
+
+def test_contratos_geram_uma_vez_por_mes():
+    from app.models import ClienteFiscal, Titulo
+    adm = entrar("admin@t.com")
+    with SessionLocal() as db:
+        cfid = db.scalar(select(ClienteFiscal.id))
+    pag = adm.get("/financeiro/contratos")
+    tok = _csrf(pag.text)
+    adm.post("/financeiro/contratos/salvar", data={"csrf": tok, "cliente_fiscal_id": str(cfid),
+                                                   "descricao": "Manutenção mensal CFTV", "valor": "450,00",
+                                                   "dia_vencimento": "31", "inicio": "2026-01-01"})
+    for _ in range(2):
+        adm.post("/financeiro/contratos/gerar", data={"csrf": tok, "mes": "2026-02"})
+    with SessionLocal() as db:
+        ts = db.scalars(select(Titulo).where(Titulo.competencia == "2026-02")).all()
+        assert len(ts) == 1 and ts[0].valor == 45000 and ts[0].vencimento == date(2026, 2, 28)
+
+
+def test_catalogo_e_chamado_vira_orcamento():
+    from app.models import ItemCatalogo
+    adm = entrar("admin@t.com")
+    pag = adm.get("/financeiro/catalogo")
+    adm.post("/financeiro/catalogo/salvar", data={"csrf": _csrf(pag.text), "tipo": "produto", "descricao": "Câmera 2MP",
+                                                  "preco": "289,90", "ncm": "8525.89.29", "cfop": "5102", "csosn": "102",
+                                                  "origem": "0", "unidade": "un"})
+    with SessionLocal() as db:
+        it = db.scalar(select(ItemCatalogo).where(ItemCatalogo.descricao == "Câmera 2MP"))
+        assert it.ncm == "85258929" and it.preco == 28990 and it.unidade == "UN"
+        ch = db.scalar(select(Chamado).where(Chamado.unidade_id == IDS["torre"])) or None
+    r = adm.get("/financeiro/orcamentos/novo")
+    assert "Câmera 2MP" in r.text
+    if ch:
+        r = adm.get(f"/financeiro/orcamentos/novo?chamado={ch.numero}")
+        assert f"chamado {ch.numero_fmt}" in r.text
