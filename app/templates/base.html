@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titulo %}Chamados{% endblock %} · {{ config.SISTEMA_NOME }}</title>
 <link rel="icon" href="/static/logo.png">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{ config.VERSAO }}">
 </head>
 <body class="{{ 'com-menu' if u }}">
 {% macro ico(n) -%}
-<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">{{ {
+<svg class="ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ {
  'painel': '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
  'novo': '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
  'relatorio': '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',

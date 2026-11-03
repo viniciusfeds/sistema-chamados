@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.10.1 — 2026-11-03
+- Corrige ícones do menu aparecendo gigantes quando o navegador ainda usava o estilo antigo em cache:
+  o arquivo de estilo agora leva a versão no endereço (cada atualização força o navegador a baixar o novo)
+  e os ícones têm tamanho fixo mesmo sem o estilo
+
 ## 1.10.0 — 2026-11-03
 - **Menu lateral à esquerda** no lugar do menu de cima, organizado em grupos (Chamados, Operação, Financeiro,
   Sistema), com ícones e submenus do Financeiro e da Administração
