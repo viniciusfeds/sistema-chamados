@@ -106,7 +106,7 @@
 {%- endmacro %}
 
 {% macro abas_financeiro(ativa) -%}
-<nav class="abas">
+<nav class="abas abas-fin">
   <a href="/financeiro" class="{{ 'ativa' if ativa == 'painel' }}">Visão geral</a>
   <a href="/financeiro/orcamentos" class="{{ 'ativa' if ativa == 'orcamentos' }}">Orçamentos</a>
   <a href="/financeiro/receber" class="{{ 'ativa' if ativa == 'receber' }}">Contas a receber</a>

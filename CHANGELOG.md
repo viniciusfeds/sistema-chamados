@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.10.0 — 2026-11-03
+- **Menu lateral à esquerda** no lugar do menu de cima, organizado em grupos (Chamados, Operação, Financeiro,
+  Sistema), com ícones e submenus do Financeiro e da Administração
+- Botão para **recolher o menu** (só ícones) — a escolha fica lembrada no navegador
+- No celular, o menu abre pelo botão ☰ por cima da tela
+- Usuário logado, Minha conta e Sair ficam no rodapé do menu; o alerta de equipamento offline aparece no item Inventário
+
 ## 1.9.1 — 2026-11-03
 - Tudo do faturamento e do Banco Inter também pode ir no **.env** (veja `.env.example`): dados da empresa,
   padrões de orçamento/cobrança, credenciais do Inter e **certificado por arquivo**

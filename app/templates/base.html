@@ -7,23 +7,76 @@
 <link rel="icon" href="/static/logo.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="{{ 'com-menu' if u }}">
+{% macro ico(n) -%}
+<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">{{ {
+ 'painel': '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+ 'novo': '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+ 'relatorio': '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+ 'inventario': '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
+ 'clientes': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.8 3 2.6 3.5 5.2"/>',
+ 'financeiro': '<path d="M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.8 7 7s2 3 5 3.5 5 1.5 5 3.8-2.2 3.7-5 3.7-5-1.1-5-3"/>',
+ 'admin': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+ 'conta': '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.2-6 8-6s7 2 8 6"/>',
+ 'sair': '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/>',
+ 'menu': '<path d="M3 6h18M3 12h18M3 18h18"/>',
+ 'recolher': '<path d="M15 6l-6 6 6 6"/>',
+}[n]|safe }}</svg>
+{%- endmacro %}
 {% if u %}
-<header class="topo"><div class="in">
+{% set p = request.url.path %}
+<header class="barra-mobile">
+  <button type="button" class="btn-menu" onclick="document.body.classList.toggle('menu-aberto')" aria-label="Abrir menu">{{ ico('menu') }}</button>
   <a href="/" class="marca"><img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}"><span class="marca-nome">{{ config.SISTEMA_NOME }}</span></a>
-  <nav>
-    <a href="/" class="{{ 'ativo' if request.url.path == '/' }}">Painel</a>
-    <a href="/chamados/novo" class="{{ 'ativo' if request.url.path == '/chamados/novo' }}">Abrir chamado</a>
-    <a href="/relatorio" class="{{ 'ativo' if request.url.path == '/relatorio' }}">Relatório</a>
-    {% if u.equipe %}<a href="/inventario" class="{{ 'ativo' if request.url.path.startswith('/inventario') }}">Inventário{% if alerta_oc and alerta_oc[0] %} <span class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</span>{% endif %}</a>{% endif %}
-    {% if u.papel == 'admin' %}<a href="/clientes" class="{{ 'ativo' if request.url.path.startswith('/clientes') }}">Clientes</a>{% endif %}
-    {% if u.papel == 'admin' %}<a href="/financeiro" class="{{ 'ativo' if request.url.path.startswith('/financeiro') }}">Financeiro</a>{% endif %}
-    {% if u.papel == 'admin' %}<a href="/admin" class="{{ 'ativo' if request.url.path == '/admin' }}">Administração</a>{% endif %}
-    <a href="/conta" class="{{ 'ativo' if request.url.path == '/conta' }}">Minha conta</a>
-    <a href="/sair">Sair</a>
+</header>
+<div class="veu" onclick="document.body.classList.remove('menu-aberto')"></div>
+<aside class="lateral" id="lateral">
+  <div class="lat-topo">
+    <a href="/" class="marca"><img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}"><span class="marca-nome">{{ config.SISTEMA_NOME }}</span></a>
+    <button type="button" class="btn-recolher" onclick="recolherMenu()" title="Recolher / expandir menu">{{ ico('recolher') }}</button>
+  </div>
+  <nav class="lat-nav">
+    <div class="lat-grupo">Chamados</div>
+    <a href="/" class="{{ 'ativo' if p == '/' or p.startswith('/chamados/') and p != '/chamados/novo' }}" title="Painel">{{ ico('painel') }}<span>Painel</span></a>
+    <a href="/chamados/novo" class="{{ 'ativo' if p == '/chamados/novo' }}" title="Abrir chamado">{{ ico('novo') }}<span>Abrir chamado</span></a>
+    <a href="/relatorio" class="{{ 'ativo' if p == '/relatorio' }}" title="Relatório">{{ ico('relatorio') }}<span>Relatório</span></a>
+    {% if u.equipe %}
+    <div class="lat-grupo">Operação</div>
+    <a href="/inventario" class="{{ 'ativo' if p.startswith('/inventario') }}" title="Inventário">{{ ico('inventario') }}<span>Inventário</span>{% if alerta_oc and alerta_oc[0] %}<b class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</b>{% endif %}</a>
+    {% if u.papel == 'admin' %}<a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}" title="Clientes">{{ ico('clientes') }}<span>Clientes</span></a>{% endif %}
+    {% endif %}
+    {% if u.papel == 'admin' %}
+    <div class="lat-grupo">Financeiro</div>
+    <a href="/financeiro" class="{{ 'ativo' if p == '/financeiro' }}" title="Financeiro">{{ ico('financeiro') }}<span>Visão geral</span></a>
+    <div class="lat-sub {{ 'aberto' if p.startswith('/financeiro') }}">
+      <a href="/financeiro/orcamentos" class="{{ 'ativo' if p.startswith('/financeiro/orcamentos') }}"><span>Orçamentos</span></a>
+      <a href="/financeiro/receber" class="{{ 'ativo' if p.startswith('/financeiro/receber') }}"><span>Contas a receber</span></a>
+      <a href="/financeiro/contratos" class="{{ 'ativo' if p.startswith('/financeiro/contratos') }}"><span>Contratos</span></a>
+      <a href="/financeiro/catalogo" class="{{ 'ativo' if p.startswith('/financeiro/catalogo') }}"><span>Produtos e serviços</span></a>
+      <a href="/financeiro/inter" class="{{ 'ativo' if p.startswith('/financeiro/inter') }}"><span>Banco Inter</span></a>
+    </div>
+    <div class="lat-grupo">Sistema</div>
+    <a href="/admin" class="{{ 'ativo' if p.startswith('/admin') }}" title="Administração">{{ ico('admin') }}<span>Administração</span></a>
+    <div class="lat-sub {{ 'aberto' if p.startswith('/admin') }}">
+      <a href="/admin#usuarios" class="{{ 'ativo' if p == '/admin' }}"><span>Usuários e tipos</span></a>
+      <a href="/admin/configuracoes" class="{{ 'ativo' if p.startswith('/admin/configuracoes') }}"><span>Configurações</span></a>
+      <a href="/admin/whatsapp" class="{{ 'ativo' if p.startswith('/admin/whatsapp') }}"><span>WhatsApp automático</span></a>
+      <a href="/admin/agentes" class="{{ 'ativo' if p.startswith('/admin/agentes') }}"><span>Agente local</span></a>
+    </div>
+    {% endif %}
   </nav>
-  <div class="quem"><b>{{ u.nome }}</b><br>{{ PAPEIS[u.papel] }}{% if u.descricao_escopo %} · {{ u.descricao_escopo }}{% endif %}</div>
-</div></header>
+  <div class="lat-rodape">
+    <a href="/conta" class="lat-quem {{ 'ativo' if p == '/conta' }}" title="Minha conta">{{ ico('conta') }}<span><b>{{ u.nome }}</b><small>{{ PAPEIS[u.papel] }}{% if u.descricao_escopo %} · {{ u.descricao_escopo }}{% endif %}</small></span></a>
+    <a href="/sair" title="Sair">{{ ico('sair') }}<span>Sair</span></a>
+  </div>
+</aside>
+<script>
+(function () { try { if (localStorage.getItem('nexus_menu_recolhido') === '1') document.body.classList.add('menu-recolhido'); } catch (e) {} })();
+function recolherMenu() {
+  var r = document.body.classList.toggle('menu-recolhido');
+  try { localStorage.setItem('nexus_menu_recolhido', r ? '1' : '0'); } catch (e) {}
+}
+</script>
 {% endif %}
 <main>
 {% if u and u.equipe %}

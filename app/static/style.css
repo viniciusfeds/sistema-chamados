@@ -306,3 +306,64 @@ tr.inativo td{opacity:.55}
 .qr-pix svg{width:220px;height:220px;max-width:100%}
 .boleto-info{font-size:.8rem;margin-top:4px}
 .boleto-info .mono{font-size:.75rem;word-break:break-all}
+
+/* ---------- menu lateral (v1.10) ---------- */
+:root{--lat:240px;--lat-mini:64px}
+body.com-menu{padding-left:var(--lat);transition:padding-left .15s}
+body.com-menu.menu-recolhido{padding-left:var(--lat-mini)}
+.lateral{position:fixed;left:0;top:0;bottom:0;width:var(--lat);background:var(--branco);border-right:1px solid var(--linha);
+  display:flex;flex-direction:column;z-index:30;transition:width .15s,transform .2s}
+.lat-topo{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:12px 10px 10px 14px;border-bottom:1px solid var(--linha)}
+.lat-topo .marca img{height:38px}
+.lat-topo .marca-nome{font-size:.98rem}
+.btn-recolher{border:0;background:none;cursor:pointer;color:var(--cinza);padding:6px;border-radius:8px;display:flex}
+.btn-recolher:hover{background:#F2F2F0}
+.lat-nav{flex:1;overflow-y:auto;padding:6px 8px 12px}
+.lat-grupo{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--cinza-cl);padding:14px 10px 4px}
+.lateral a{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:8px;text-decoration:none;color:var(--texto);
+  font-weight:600;font-size:.95rem;position:relative;white-space:nowrap}
+.lateral a:hover{background:#F6F4F1}
+.lateral a.ativo{background:#FFF0E8;color:var(--laranja-esc)}
+.lateral a.ativo .ico{stroke:var(--laranja)}
+.ico{width:20px;height:20px;flex:0 0 20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lat-sub{display:none;margin:0 0 4px 21px;padding-left:10px;border-left:2px solid var(--linha)}
+.lat-sub.aberto{display:block}
+.lat-sub a{padding:6px 10px;font-size:.88rem;font-weight:600;color:var(--cinza)}
+.lat-sub a.ativo{background:none;color:var(--laranja-esc)}
+.lateral .badge-alerta{margin-left:auto}
+.lat-rodape{border-top:1px solid var(--linha);padding:8px}
+.lat-quem span{display:flex;flex-direction:column;line-height:1.2;overflow:hidden}
+.lat-quem small{font-size:.75rem;color:var(--cinza);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+/* recolhido: só ícones */
+body.menu-recolhido .lateral{width:var(--lat-mini)}
+body.menu-recolhido .lateral .marca-nome,body.menu-recolhido .lateral a>span,body.menu-recolhido .lat-grupo,
+body.menu-recolhido .lat-sub{display:none}
+body.menu-recolhido .lat-topo{flex-direction:column;padding:10px 6px}
+body.menu-recolhido .lat-topo .marca img{height:30px}
+body.menu-recolhido .btn-recolher .ico{transform:rotate(180deg)}
+body.menu-recolhido .lateral a{justify-content:center;padding:10px 0}
+body.menu-recolhido .lateral .badge-alerta{position:absolute;top:2px;right:6px;margin:0;font-size:.65rem}
+body.menu-recolhido .lat-nav{padding-top:10px}
+/* barra do celular */
+.barra-mobile{display:none}
+.veu{display:none}
+@media (max-width:900px){
+  body.com-menu,body.com-menu.menu-recolhido{padding-left:0}
+  .barra-mobile{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:20;background:var(--branco);
+    border-bottom:1px solid var(--linha);padding:6px 12px}
+  .barra-mobile .marca img{height:32px}
+  .btn-menu{border:0;background:none;padding:6px;cursor:pointer;display:flex;color:var(--texto)}
+  .btn-menu .ico{width:26px;height:26px}
+  .lateral,body.menu-recolhido .lateral{width:var(--lat);transform:translateX(-100%);box-shadow:0 0 30px rgba(0,0,0,.18)}
+  body.menu-recolhido .lateral .marca-nome,body.menu-recolhido .lateral a>span,body.menu-recolhido .lat-grupo{display:revert}
+  body.menu-recolhido .lateral a{justify-content:flex-start;padding:8px 10px}
+  body.menu-recolhido .lat-sub.aberto{display:block}
+  body.menu-recolhido .lat-topo{flex-direction:row}
+  body.menu-aberto .lateral{transform:none}
+  body.menu-aberto .veu{display:block;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:25}
+  .btn-recolher{display:none}
+}
+.abas.ancoras{top:0}
+@media (max-width:900px){.abas.ancoras{top:45px}}
+@media print{.lateral,.barra-mobile,.veu{display:none!important}body.com-menu{padding-left:0}}
+@media (min-width:901px){.abas-fin{display:none}}
