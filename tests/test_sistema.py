@@ -1395,3 +1395,127 @@ def test_clientes_novo_e_ficha():
     assert r.headers["location"] == f"/clientes/{cid}"
     assert adm.get("/financeiro/clientes", follow_redirects=False).headers["location"] == "/clientes"
     assert entrar("tec@t.com").get("/clientes", follow_redirects=False).status_code == 403
+
+
+# ------------------------------------------------------------------ Banco Inter (servidor falso)
+import base64 as _b64  # noqa: E402
+import json as _json  # noqa: E402
+import threading as _th  # noqa: E402
+from http.server import BaseHTTPRequestHandler, HTTPServer  # noqa: E402
+
+
+class _InterFalso(BaseHTTPRequestHandler):
+    pedidos, pagos, n = [], set(), 0
+
+    def _json(self, obj, code=200):
+        b = _json.dumps(obj).encode()
+        self.send_response(code); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(b)
+
+    def _corpo(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n).decode() if n else ""
+
+    def do_POST(self):
+        corpo = self._corpo()
+        _InterFalso.pedidos.append(("POST", self.path, corpo, self.headers.get("Authorization")))
+        if self.path == "/oauth/v2/token":
+            assert "client_credentials" in corpo and "boleto-cobranca.write" in corpo
+            return self._json({"access_token": "TOK", "expires_in": 3600})
+        assert self.headers.get("Authorization") == "Bearer TOK"
+        if self.path == "/cobranca/v3/cobrancas":
+            _InterFalso.n += 1
+            return self._json({"codigoSolicitacao": f"cod-{_InterFalso.n}"})
+        if self.path.endswith("/cancelar"):
+            self.send_response(202); self.end_headers(); return
+        self._json({}, 404)
+
+    def do_PUT(self):
+        _InterFalso.pedidos.append(("PUT", self.path, self._corpo(), None))
+        self.send_response(204); self.end_headers()
+
+    def do_GET(self):
+        _InterFalso.pedidos.append(("GET", self.path, "", None))
+        if self.path.endswith("/pdf"):
+            return self._json({"pdf": _b64.b64encode(b"%PDF-1.4 boleto").decode()})
+        if "/sumario" in self.path:
+            return self._json([])
+        cod = self.path.rsplit("/", 1)[-1]
+        pago = cod in _InterFalso.pagos
+        self._json({"cobranca": {"codigoSolicitacao": cod, "situacao": "RECEBIDO" if pago else "A_RECEBER",
+                                 "dataSituacao": "2026-11-20", "valorTotalRecebido": "450.00" if pago else "0",
+                                 "origemRecebimento": "PIX"},
+                    "boleto": {"nossoNumero": "123", "linhaDigitavel": "0" * 47, "codigoBarras": "1" * 44},
+                    "pix": {"txid": "tx1", "pixCopiaECola": "00020126PIXCOPIAECOLA"}})
+
+    def log_message(self, *a):
+        pass
+
+
+def test_inter_boleto_pix_webhook_e_baixa():
+    from datetime import timedelta
+    from app import config, inter
+    from app.models import ClienteFiscal, Titulo
+    srv = HTTPServer(("127.0.0.1", 0), _InterFalso)
+    _th.Thread(target=srv.serve_forever, daemon=True).start()
+    inter.URL_BASE_TESTE = f"http://127.0.0.1:{srv.server_port}"
+    config.INTER_ATIVO, config.INTER_CLIENT_ID, config.INTER_CLIENT_SECRET = True, "cid", "csecret"
+    config.INTER_WEBHOOK_TOKEN = "segredo123"
+    inter._token.update(valor=None, expira=0)
+    try:
+        venc = date.today() + timedelta(days=10)
+        with SessionLocal() as db:
+            cf = db.scalar(select(ClienteFiscal).where(ClienteFiscal.documento == "11222333000181"))
+            t1 = Titulo(cliente_fiscal_id=cf.id, descricao="Manutenção mensal", valor=45000, vencimento=venc)
+            t2 = Titulo(cliente_fiscal_id=cf.id, descricao="Visita", valor=20000, vencimento=venc)
+            db.add_all([t1, t2]); db.commit()
+            id1, id2 = t1.id, t2.id
+        adm = entrar("admin@t.com")
+        rec = adm.get("/financeiro/receber")
+        assert "Gerar boleto" in rec.text
+        tok = _csrf(rec.text)
+        r = adm.post(f"/financeiro/receber/{id1}/boleto", data={"csrf": tok, "acao": "emitir"})
+        assert "Boleto com PIX gerado" in r.text
+        corpo = _json.loads(next(p[2] for p in _InterFalso.pedidos if p[1] == "/cobranca/v3/cobrancas"))
+        assert corpo["valorNominal"] == 450.0 and corpo["pagador"]["cpfCnpj"] == "11222333000181"
+        assert corpo["pagador"]["tipoPessoa"] == "JURIDICA" and corpo["pagador"]["ddd"] == "11"
+        assert corpo["multa"] == {"codigo": "PERCENTUAL", "taxa": 2.0} and corpo["formasRecebimento"] == ["BOLETO", "PIX"]
+        with SessionLocal() as db:
+            t1 = db.get(Titulo, id1)
+            assert t1.inter_codigo == "cod-1" and t1.boleto_ativo and t1.pix_copia_cola and t1.token_publico
+            cod1, token1 = t1.inter_codigo, t1.token_publico
+        assert adm.get(f"/financeiro/receber/{id1}/boleto.pdf").content.startswith(b"%PDF")
+        # página pública do boleto: PIX + QR
+        pub = TestClient(app).get(f"/boleto/{token1}")
+        assert pub.status_code == 200 and "00020126PIXCOPIAECOLA" in pub.text and "<svg" in pub.text
+        # webhook: segredo errado = 404; certo = reconsulta e dá baixa
+        _InterFalso.pagos.add(cod1)
+        assert TestClient(app).post("/webhook/inter/errado", json=[{"codigoSolicitacao": cod1}]).status_code == 404
+        r = TestClient(app).post("/webhook/inter/segredo123", json=[{"codigoSolicitacao": cod1, "situacao": "RECEBIDO"}])
+        assert r.status_code == 200 and r.json()["atualizados"] == 1
+        with SessionLocal() as db:
+            t1 = db.get(Titulo, id1)
+            assert t1.status == "pago" and t1.forma == "pix" and t1.valor_pago == 45000 and t1.pago_em == date(2026, 11, 20)
+        assert "Pagamento recebido" in TestClient(app).get(f"/boleto/{token1}").text
+        # editar conta com boleto ativo cancela no Inter e libera novo boleto
+        adm.post(f"/financeiro/receber/{id2}/boleto", data={"csrf": tok, "acao": "emitir"})
+        r = adm.post(f"/financeiro/receber/{id2}/operacao", data={"csrf": tok, "operacao": "editar", "valor": "210,00",
+                                                                  "vencimento": venc.isoformat(), "descricao": "Visita"})
+        assert "cancelado no Inter" in r.text
+        assert any(p[1].endswith("/cancelar") for p in _InterFalso.pedidos)
+        with SessionLocal() as db:
+            t2 = db.get(Titulo, id2)
+            assert t2.valor == 21000 and not t2.inter_codigo
+        # cobrança pelo WhatsApp leva o link do boleto
+        adm.post(f"/financeiro/receber/{id2}/boleto", data={"csrf": tok, "acao": "emitir"})
+        rec = adm.get("/financeiro/receber")
+        assert "%2Fboleto%2F" in rec.text or "/boleto/" in rec.text
+        # baixa manual cancela o boleto
+        n_cancel = sum(1 for p in _InterFalso.pedidos if p[1].endswith("/cancelar"))
+        adm.post(f"/financeiro/receber/{id2}/baixar", data={"csrf": tok, "valor_pago": "210,00", "forma": "dinheiro"})
+        assert sum(1 for p in _InterFalso.pedidos if p[1].endswith("/cancelar")) == n_cancel + 1
+        assert adm.get("/financeiro/inter").status_code == 200
+    finally:
+        srv.shutdown()
+        inter.URL_BASE_TESTE = None
+        config.INTER_ATIVO = False

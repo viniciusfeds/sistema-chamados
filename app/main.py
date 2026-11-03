@@ -1595,7 +1595,7 @@ async def _erro(request: Request, exc: StarletteHTTPException):
     padrao = {404: "Página não encontrada.", 405: "Ação não permitida."}
     msg = padrao.get(exc.status_code, exc.detail) if exc.detail in ("Not Found", "Method Not Allowed") \
         else exc.detail
-    publico = request.url.path.startswith(("/abrir/", "/acompanhar/", "/orcamento/"))
+    publico = request.url.path.startswith(("/abrir/", "/acompanhar/", "/orcamento/", "/boleto/"))
     return tpl.TemplateResponse(request, "erro.html", {"request": request, "erro": msg, "publico": publico,
                                                       "codigo": exc.status_code, "u": None},
                                 status_code=exc.status_code)

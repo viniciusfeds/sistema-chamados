@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro, copiar with context %}
+{% block titulo %}Banco Inter{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('inter') }}
+<div class="cab">
+  <div><h1>Banco Inter — boleto com PIX</h1>
+    <div class="muted">{% if inter_configurado() %}<b style="color:#2E7D4F">● Ligado</b> · {{ 'Sandbox (testes)' if config.INTER_AMBIENTE == 'sandbox' else 'Produção' }} · {{ com_boleto }} boleto(s) em aberto
+      {% else %}<b>Desligado</b> — siga os passos abaixo{% endif %}</div></div>
+  {% if inter_configurado() %}<form method="post" action="/financeiro/inter/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Conferir pagamentos agora</button></form>{% endif %}
+</div>
+
+<div class="card">
+  <h2>1. Criar a integração no Internet Banking PJ</h2>
+  <ol class="passos">
+    <li>No Internet Banking PJ do Inter: <b>Soluções para sua empresa → Nova Integração</b> (ou “Integrações / API”).</li>
+    <li>Marque as permissões de <b>Boleto com Pix / Cobrança</b> — <i>emitir</i> e <i>consultar</i>.</li>
+    <li>Baixe o <b>certificado (.crt)</b> e a <b>chave (.key)</b> e anote o <b>Client ID</b> e o <b>Client Secret</b>.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h2>2. Client ID e Client Secret</h2>
+  <p>{% if config.INTER_CLIENT_ID %}✔ Client ID <span class="mono">{{ config.INTER_CLIENT_ID[:8] }}…</span>{% else %}Ainda não informado.{% endif %}
+    {% if config.INTER_CLIENT_SECRET %} · Client Secret salvo{% endif %}</p>
+  <a class="btn sec" href="/admin/configuracoes#inter">Abrir Configurações → Banco Inter</a>
+  <p class="dica">Lá também ficam: ligar/desligar, ambiente (produção ou sandbox) e em quantos dias o boleto expira depois do vencimento.
+    Multa e juros dos boletos vêm de <a href="/admin/configuracoes#orcamentos">Orçamentos e cobrança</a> ({{ config.FIN_MULTA_PCT|qtd }}% de multa, {{ config.FIN_JUROS_MES_PCT|qtd }}% de juros ao mês).</p>
+</div>
+
+<form class="card" method="post" action="/financeiro/inter/certificado" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>3. Certificado da integração</h2>
+  {% if cert_ok %}<p>✔ Certificado salvo{% if cert.validade %} · válido até <b>{{ cert.validade|data }}</b>{% endif %}<br><span class="muted mono" style="font-size:.8rem">{{ cert.sujeito }}</span></p>{% endif %}
+  <div class="grid2">
+    <div class="campo"><label>Certificado (.crt)</label><input type="file" name="crt" accept=".crt,.pem,.cer" required></div>
+    <div class="campo"><label>Chave privada (.key)</label><input type="file" name="key" accept=".key,.pem" required></div>
+  </div>
+  <p class="dica">A chave fica guardada criptografada no servidor. Quando o Inter renovar o certificado, envie os arquivos novos aqui.</p>
+  <button class="btn">{{ 'Trocar certificado' if cert_ok else 'Enviar certificado' }}</button>
+</form>
+
+<div class="card">
+  <h2>4. Testar e ativar o aviso de pagamento</h2>
+  <div class="acoes-orc">
+    <form method="post" action="/financeiro/inter/testar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">Testar conexão</button></form>
+    <form method="post" action="/financeiro/inter/webhook"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" {{ 'disabled' if not webhook }}>Cadastrar webhook no Inter</button></form>
+  </div>
+  {% if webhook %}
+  <p class="dica">Endereço que o Inter chama quando um boleto/PIX é pago (o sistema confere no Inter antes de dar baixa):</p>
+  {{ copiar(webhook, 'Copiar') }}
+  {% else %}<p class="flash aviso" style="margin-top:10px">Para o aviso automático, configure o <b>Endereço público com https://</b> em <a href="/admin/configuracoes#empresa">Configurações → Empresa e sistema</a> (ex.: https://app.tecnosit.com.br).</p>{% endif %}
+  <p class="dica">Mesmo sem webhook, o sistema confere os boletos em aberto no Inter a cada 30 minutos e dá baixa sozinho.</p>
+</div>
+
+<div class="card">
+  <h2>Como usar</h2>
+  <ul>
+    <li><b>Contas a receber</b> → botão <b>Gerar boleto</b> em cada conta (o cliente precisa ter CNPJ/CPF e endereço).</li>
+    <li>Ao <b>faturar um orçamento</b>, lançar uma conta ou gerar as mensalidades dos <b>contratos</b>, marque <i>Gerar boleto com PIX no Inter</i>.</li>
+    <li>A mensagem de cobrança no WhatsApp e o e-mail já levam o <b>link do boleto</b> (com PIX copia e cola e QR Code).</li>
+    <li>Dar baixa à mão ou cancelar/editar a conta <b>cancela o boleto no Inter</b> automaticamente.</li>
+  </ul>
+</div>
+{% endblock %}

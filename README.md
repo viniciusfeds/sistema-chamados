@@ -63,6 +63,8 @@ Menu **Financeiro** (administradores):
 3. **Orçamento** → salvar → *Enviar ao cliente* (WhatsApp ou e-mail com PDF). O cliente aprova pelo link.
 4. Orçamento aprovado → **Faturar** → as parcelas vão para **Contas a receber**, onde se dá baixa e se cobra pelo WhatsApp.
 5. Mensalidades: cadastre em **Contratos** e, todo mês, clique em *Gerar cobranças*.
+6. **Boleto com PIX (Banco Inter)**: siga *Financeiro → Banco Inter* (integração no Internet Banking PJ, Client ID/Secret,
+   certificado e webhook). Depois é só marcar *Gerar boleto* — o pagamento dá baixa sozinho.
 
 ## Rodar com Docker (recomendado)
 

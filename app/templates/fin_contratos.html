@@ -9,10 +9,11 @@
 
 <div class="card">
   <h2>Gerar cobranças do mês</h2>
-  <p class="dica" style="margin-top:0">Lança em Contas a receber uma cobrança para cada contrato ativo que ainda não tem a do mês (não duplica).</p>
+  <p class="dica" style="margin-top:0">Lança em Contas a receber uma cobrança para cada contrato ativo que ainda não tem a do mês (não duplica){% if inter_configurado() %} e <b>gera o boleto com PIX no Inter</b>{% endif %}.</p>
   <div class="acoes-orc">
     {% for mes, pend in ((mes_atual, pendentes), (mes_prox, pendentes_prox)) %}
     <form method="post" action="/financeiro/contratos/gerar"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="mes" value="{{ mes }}">
+      {% if inter_configurado() %}<input type="hidden" name="gerar_boleto" value="1">{% endif %}
       <button class="btn {{ '' if pend else 'sec' }}" {{ 'disabled' if not pend }}>{{ mes[5:] }}/{{ mes[:4] }}: {{ pend|length }} pendente(s){% if pend %} · {{ pend|sum(attribute='valor')|brl }}{% endif %}</button></form>
     {% endfor %}
   </div>

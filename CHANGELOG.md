@@ -1,5 +1,17 @@
 # Histórico de versões
 
+## 1.9.0 — 2026-11-03
+- **Boleto com PIX pelo Banco Inter** (API Cobrança v3, certificado mTLS):
+  - *Financeiro → Banco Inter*: passo a passo, envio do certificado (.crt/.key — a chave fica criptografada),
+    teste de conexão e cadastro do webhook; credenciais e ambiente (produção/sandbox) em Configurações
+  - **Gerar boleto** em cada conta a receber, ou em lote ao **faturar o orçamento**, **lançar conta** e
+    **gerar as mensalidades dos contratos**; multa e juros pelas taxas das Configurações
+  - **Baixa automática**: webhook do Inter (o sistema reconsulta a cobrança antes de dar baixa) e conferência
+    a cada 30 min como garantia; botão *Conferir pagamentos*
+  - **Página do boleto para o cliente** (sem login): PIX com QR Code e copia-e-cola, linha digitável e PDF;
+    o link vai na mensagem de cobrança do WhatsApp e no e-mail (com o PDF anexo)
+  - Dar baixa à mão, editar ou cancelar a conta **cancela o boleto no Inter**
+
 ## 1.8.1 — 2026-11-03
 - **Menu Clientes** (principal): lista com busca por nome, unidade, razão social ou CNPJ/CPF e **ficha única do cliente**:
   dados de faturamento (com busca do CNPJ e do CEP), unidades (adicionar, renomear, desativar, CNPJ próprio por

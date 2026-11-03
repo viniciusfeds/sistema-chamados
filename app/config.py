@@ -106,6 +106,15 @@ FIN_DADOS_BANCARIOS = os.environ.get("FIN_DADOS_BANCARIOS", "")
 FIN_MULTA_PCT = float(os.environ.get("FIN_MULTA_PCT", "2"))
 FIN_JUROS_MES_PCT = float(os.environ.get("FIN_JUROS_MES_PCT", "1"))
 
+# Banco Inter (boleto com PIX) — ajustável em Financeiro → Banco Inter
+INTER_ATIVO = os.environ.get("INTER_ATIVO", "0") == "1"
+INTER_AMBIENTE = os.environ.get("INTER_AMBIENTE", "producao")          # producao / sandbox
+INTER_CLIENT_ID = os.environ.get("INTER_CLIENT_ID", "")
+INTER_CLIENT_SECRET = os.environ.get("INTER_CLIENT_SECRET", "")
+INTER_CONTA = os.environ.get("INTER_CONTA", "")                         # x-conta-corrente (opcional)
+INTER_DIAS_AGENDA = int(os.environ.get("INTER_DIAS_AGENDA", "30"))      # dias após o vencimento até expirar
+INTER_WEBHOOK_TOKEN = os.environ.get("INTER_WEBHOOK_TOKEN", "")
+
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")
 WHATSAPP_API_VERSAO = os.environ.get("WHATSAPP_API_VERSAO", "v23.0")

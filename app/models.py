@@ -749,9 +749,31 @@ class Titulo(Base):
     forma: Mapped[str | None] = mapped_column(String(15), nullable=True)
     observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # boleto com PIX (Banco Inter)
+    token_publico: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True)
+    inter_codigo: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)  # codigoSolicitacao
+    inter_situacao: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    nosso_numero: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    linha_digitavel: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    codigo_barras: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    pix_copia_cola: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inter_erro: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    inter_atualizado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cliente_fiscal = relationship("ClienteFiscal")
     orcamento = relationship("Orcamento", back_populates="titulos")
     contrato = relationship("Contrato", back_populates="titulos")
+
+    @property
+    def boleto_ativo(self):
+        """Tem boleto emitido no Inter que ainda pode ser pago."""
+        return bool(self.inter_codigo) and self.inter_situacao in ("EM_PROCESSAMENTO", "A_RECEBER", "ATRASADO")
+
+    @property
+    def linha_digitavel_fmt(self):
+        d = self.linha_digitavel or ""
+        if len(d) != 47:
+            return d
+        return f"{d[:5]}.{d[5:10]} {d[10:15]}.{d[15:21]} {d[21:26]}.{d[26:32]} {d[32]} {d[33:]}"
 
     @property
     def parcela_fmt(self):

@@ -1,0 +1,39 @@
+{% extends "publico_base.html" %}
+{% block titulo %}Pagamento{% endblock %}
+{% block cabecalho %}Pagamento{% endblock %}
+{% block conteudo %}
+<div class="card" style="text-align:center">
+  <div class="muted">{{ t.cliente_fiscal.razao_social if t.cliente_fiscal else '' }}</div>
+  <h1 style="margin:6px 0 2px">{{ t.valor|brl }}</h1>
+  <div>{{ t.descricao }}{% if t.total_parcelas > 1 %} · parcela {{ t.parcela_fmt }}{% endif %}</div>
+  <div class="muted">Vencimento {{ t.vencimento|data }}</div>
+</div>
+{% if t.status == 'pago' %}
+<div class="flash ok" style="text-align:center">✔ Pagamento recebido em {{ t.pago_em|data }}. Obrigado!</div>
+{% elif t.status == 'cancelado' or not t.boleto_ativo %}
+<div class="flash aviso">Esta cobrança não está mais disponível para pagamento. Fale com a {{ config.EMPRESA_NOME }} pelo WhatsApp {{ config.EMPRESA_WHATSAPP }}.</div>
+{% else %}
+  {% if t.pix_copia_cola %}
+  <div class="card" style="text-align:center">
+    <h2>Pagar com PIX</h2>
+    <div class="qr-pix">{{ qr|safe }}</div>
+    <p class="muted">Abra o app do banco, escolha PIX → ler QR Code, ou copie o código:</p>
+    <textarea id="pix" readonly rows="3" style="width:100%;font-family:monospace;font-size:.8rem">{{ t.pix_copia_cola }}</textarea>
+    <button class="btn" type="button" onclick="navigator.clipboard.writeText(document.getElementById('pix').value);this.textContent='Código copiado ✔'">Copiar código PIX</button>
+  </div>
+  {% endif %}
+  {% if t.linha_digitavel %}
+  <div class="card" style="text-align:center">
+    <h2>Pagar com boleto</h2>
+    <p class="mono" id="linha" style="font-size:1rem;word-break:break-all">{{ t.linha_digitavel_fmt }}</p>
+    <div class="acoes-orc" style="justify-content:center">
+      <button class="btn sec" type="button" onclick="navigator.clipboard.writeText('{{ t.linha_digitavel }}');this.textContent='Copiado ✔'">Copiar linha digitável</button>
+      <a class="btn" href="/boleto/{{ token }}/pdf" target="_blank">📄 Baixar boleto (PDF)</a>
+    </div>
+  </div>
+  {% elif t.inter_situacao == 'EM_PROCESSAMENTO' %}
+  <div class="flash aviso">O boleto está sendo gerado pelo banco. Atualize a página em alguns segundos.</div>
+  {% endif %}
+  <p class="muted" style="text-align:center">Após o vencimento: multa de {{ config.FIN_MULTA_PCT|qtd }}% e juros de {{ config.FIN_JUROS_MES_PCT|qtd }}% ao mês. Pagamento confirmado automaticamente.</p>
+{% endif %}
+{% endblock %}

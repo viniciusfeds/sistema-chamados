@@ -303,3 +303,6 @@ tr.inativo td{opacity:.55}
 .ev-checks{display:flex;flex-wrap:wrap;gap:4px 18px;margin:6px 0 12px}
 :target{scroll-margin-top:120px}
 .acoes-orc input[type=checkbox]{flex:0 0 auto;min-width:0}
+.qr-pix svg{width:220px;height:220px;max-width:100%}
+.boleto-info{font-size:.8rem;margin-top:4px}
+.boleto-info .mono{font-size:.75rem;word-break:break-all}

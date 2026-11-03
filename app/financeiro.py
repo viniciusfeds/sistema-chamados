@@ -223,7 +223,11 @@ def texto_cobranca(t: Titulo, hoje: date, link_pdf=""):
     else:
         linhas.append(f"Lembrete: a cobrança *{t.descricao}* ({t.parcela_fmt}), no valor de *{brl(t.valor)}*, "
                       f"vence em {venc}.")
-    if config.FIN_PIX_CHAVE:
+    if t.boleto_ativo and link_pdf:
+        linhas.append(f"Boleto e PIX para pagamento: {link_pdf}")
+        if t.linha_digitavel:
+            linhas.append(f"Linha digitável: {t.linha_digitavel_fmt}")
+    elif config.FIN_PIX_CHAVE:
         linhas.append(f"PIX: {config.FIN_PIX_CHAVE}")
     linhas += ["Se já pagou, por favor desconsidere e nos envie o comprovante.", "", f"— {config.EMPRESA_NOME}"]
     return "\n".join(linhas)

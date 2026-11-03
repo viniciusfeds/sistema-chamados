@@ -5,7 +5,8 @@
 {{ abas_financeiro('receber') }}
 <div class="cab">
   <div><h1>Contas a receber</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|brl }}{% if tot.aberto %} · em aberto {{ tot.aberto|brl }}{% endif %}{% if tot.pago %} · recebido {{ tot.pago|brl }}{% endif %}</div></div>
-  <div class="acoes-orc"><a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
+  <div class="acoes-orc">{% if inter_configurado() %}<form method="post" action="/financeiro/inter/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" title="Consultar no Inter os boletos em aberto">↻ Conferir pagamentos</button></form>{% endif %}
+    <a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
     <a class="btn" href="#novo" onclick="document.getElementById('novo').open=true">+ Nova conta</a></div>
 </div>
 <div class="card">
@@ -35,7 +36,9 @@
     <td data-l="Valor" class="valor"><b>{{ t.valor|brl }}</b>
       {% if sit == 'vencido' %}{% set m, j = encargos(t, hoje) %}{% if m or j %}<div class="muted" title="Multa {{ m|brl }} + juros {{ j|brl }}">c/ encargos {{ (t.valor + m + j)|brl }}</div>{% endif %}{% endif %}
       {% if t.status == 'pago' %}<div class="muted">pago {{ t.valor_pago|brl }}</div>{% endif %}</td>
-    <td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.status == 'pago' %}<div class="muted">{{ t.pago_em|data }} · {{ FORMAS_PAGAMENTO.get(t.forma or '', '') }}</div>{% endif %}</td>
+    <td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.status == 'pago' %}<div class="muted">{{ t.pago_em|data }} · {{ FORMAS_PAGAMENTO.get(t.forma or '', '') }}</div>{% endif %}
+      {% if t.inter_codigo %}<div class="boleto-info"><span class="tag {{ 'alerta' if t.inter_situacao in ('FALHA_EMISSAO', 'EXPIRADO') else '' }}">Inter: {{ SITUACOES_INTER.get(t.inter_situacao, t.inter_situacao) }}</span>
+        {% if t.inter_erro %}<div style="color:#B3261E">{{ t.inter_erro }}</div>{% endif %}</div>{% endif %}</td>
     <td>
       {% if t.status == 'aberto' %}
       <details><summary class="btn peq">Receber</summary>
@@ -48,6 +51,17 @@
           <button class="btn peq">Confirmar recebimento</button></form>
       </details>
       <div class="acoes-orc" style="margin-top:4px">
+        {% if t.boleto_ativo %}
+          {% if t.linha_digitavel %}<a class="btn peq sec" href="/financeiro/receber/{{ t.id }}/boleto.pdf" target="_blank">📄 Boleto</a>
+          <button type="button" class="btn peq sec" onclick="navigator.clipboard.writeText('{{ t.pix_copia_cola or '' }}');this.textContent='PIX copiado ✔'">PIX</button>{% endif %}
+          <form method="post" action="/financeiro/receber/{{ t.id }}/boleto"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+            <button class="btn peq sec" name="acao" value="atualizar" title="Consultar no Inter">↻</button>
+            <button class="btn peq perigo" name="acao" value="cancelar" onclick="return confirm('Cancelar o boleto no Inter? A conta continua em aberto.')" title="Cancelar boleto">✕ boleto</button></form>
+        {% elif inter_configurado() and t.cliente_fiscal %}
+          <form method="post" action="/financeiro/receber/{{ t.id }}/boleto"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+            <button class="btn peq" name="acao" value="emitir" {{ 'disabled title="Vencimento já passou: edite a data"' if t.vencimento < hoje }}>Gerar boleto</button></form>
+        {% endif %}
+        {% if t.cliente_fiscal and t.cliente_fiscal.email %}<form method="post" action="/financeiro/receber/{{ t.id }}/email"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}"><button class="btn peq sec" title="Enviar cobrança para {{ t.cliente_fiscal.email }}">E-mail</button></form>{% endif %}
         {% if zap.get(t.id) %}<a class="btn peq sec" href="{{ zap[t.id] }}" target="_blank" title="Mensagem de cobrança pelo WhatsApp">WhatsApp</a>{% endif %}
         <details><summary class="btn peq sec">Editar</summary>
           <form method="post" action="/financeiro/receber/{{ t.id }}/operacao" class="baixa">
@@ -89,6 +103,7 @@
       <div class="campo"><label>Parcelas</label><input type="number" name="parcelas" value="1" min="1" max="48"></div>
     </div>
     <input type="hidden" name="intervalo" value="30">
+    {% if inter_configurado() %}<label class="check"><input type="checkbox" name="gerar_boleto" value="1" checked> Gerar boleto com PIX no Inter</label>{% endif %}
     <button class="btn">Lançar</button>
   </form>
 </details>

@@ -140,4 +140,6 @@ def iniciar():
         return None
     parar = threading.Event()
     threading.Thread(target=_laco, args=(parar,), daemon=True, name="monitor").start()
+    from . import inter
+    inter.iniciar_sincronizacao(parar)      # confere boletos do Inter em aberto (garantia do webhook)
     return parar

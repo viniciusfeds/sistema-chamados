@@ -64,6 +64,7 @@
     <div class="campo"><label>Intervalo</label><select name="intervalo"><option value="30">Mensal (mesmo dia)</option><option value="15">15 dias</option><option value="7">7 dias</option><option value="28">28 dias</option></select></div>
   </div>
   <div class="campo" style="max-width:300px"><label>Entrada (valor da 1ª parcela, opcional)</label><input name="entrada" inputmode="decimal" placeholder="Ex.: {{ (o.total // 2)|brl_num }}"></div>
+  {% if inter_configurado() %}<label class="check"><input type="checkbox" name="gerar_boleto" value="1" checked> Gerar boleto com PIX no Inter para cada parcela</label>{% endif %}
   <button class="btn">Faturar {{ o.total|brl }}</button>
 </form>
 {% endif %}

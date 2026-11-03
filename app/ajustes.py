@@ -109,6 +109,16 @@ SECOES = [
         Campo("FIN_MULTA_PCT", "Multa por atraso (%)", "num", minimo=0, maximo=2),
         Campo("FIN_JUROS_MES_PCT", "Juros por mês de atraso (%)", "num", minimo=0, maximo=10),
     ]),
+    ("inter", "Banco Inter — boleto com PIX",
+     "Credenciais da integração criada no Internet Banking PJ. O certificado é enviado em Financeiro → Banco Inter.", [
+        Campo("INTER_ATIVO", "Emissão de boleto pelo Inter ligada", "bool"),
+        Campo("INTER_AMBIENTE", "Ambiente", "escolha", opcoes={"producao": "Produção", "sandbox": "Sandbox (testes)"}),
+        Campo("INTER_CLIENT_ID", "Client ID"),
+        Campo("INTER_CLIENT_SECRET", "Client Secret", "senha"),
+        Campo("INTER_CONTA", "Conta corrente (só números)", ajuda="Só se a integração tiver mais de uma conta."),
+        Campo("INTER_DIAS_AGENDA", "Boleto expira após o vencimento (dias)", "int",
+              "Depois desse prazo o boleto não pode mais ser pago (máx. 60).", minimo=0, maximo=60),
+    ]),
     ("whatsapp", "WhatsApp (API oficial da Meta)", "Dados do app na Meta. Passo a passo em docs/WHATSAPP.md.", [
         Campo("WHATSAPP_TOKEN", "Token permanente", "senha"),
         Campo("WHATSAPP_PHONE_ID", "Identificação do número (Phone number ID)"),
@@ -136,6 +146,7 @@ _ALERTA = {"ALERTA_HORAS_URGENTE": "urgente", "ALERTA_HORAS_ALTA": "alta", "ALER
            "ALERTA_HORAS_BAIXA": "baixa"}
 _CIFRADO = "enc:"
 _VERSAO = "_versao"
+INTERNOS = ("INTER_WEBHOOK_TOKEN",)
 
 
 class ValorInvalido(ValueError):
@@ -231,6 +242,9 @@ def carregar(db=None):
                 log.warning("Configuração %s ignorada: %s", chave, e)
                 valor = PADROES[chave]
         _gravar_config(chave, list(valor) if isinstance(valor, list) else valor)
+    for chave in INTERNOS:                      # valores gerados pelo sistema (não aparecem na tela)
+        if linhas.get(chave):
+            setattr(config, chave, linhas[chave])
     _estado["versao"] = linhas.get(_VERSAO)
     _estado["conferido"] = time.monotonic()
 
@@ -294,3 +308,15 @@ def salvar(db, form: dict) -> list[str]:
     db.commit()
     carregar(db)
     return []
+
+
+def gravar_interno(db, chave, valor):
+    """Grava um valor gerado pelo sistema (ex.: segredo do webhook) e avisa os outros processos."""
+    agora = datetime.now(timezone.utc).replace(tzinfo=None)
+    linha = db.get(Configuracao, chave) or Configuracao(chave=chave)
+    linha.valor, linha.atualizado_em = valor, agora
+    versao = db.get(Configuracao, _VERSAO) or Configuracao(chave=_VERSAO)
+    versao.valor, versao.atualizado_em = secrets.token_hex(8), agora
+    db.add_all([linha, versao])
+    db.commit()
+    setattr(config, chave, valor)

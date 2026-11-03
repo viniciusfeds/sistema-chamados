@@ -11,7 +11,7 @@ from email.message import EmailMessage
 
 from fastapi import Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import avisos, config, financeiro
@@ -293,8 +293,8 @@ def orc_excluir(request: Request, numero: int, u: Usuario = Depends(so_admin), d
 
 @app.post("/financeiro/orcamentos/{numero}/faturar", dependencies=[Depends(checar_csrf)])
 def orc_faturar(request: Request, numero: int, parcelas: int = Form(1), primeiro: str = Form(""),
-                intervalo: int = Form(30), entrada: str = Form(""), u: Usuario = Depends(so_admin),
-                db: Session = Depends(get_db)):
+                intervalo: int = Form(30), entrada: str = Form(""), gerar_boleto: str = Form(""),
+                u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     o = _orc(db, numero)
     if o.status != "aprovado":
         flash(request, "Só orçamentos aprovados podem ser faturados.", "erro")
@@ -310,8 +310,27 @@ def orc_faturar(request: Request, numero: int, parcelas: int = Form(1), primeiro
     ts = financeiro.gerar_titulos_orcamento(db, o, max(1, min(48, parcelas)), _data(primeiro, hoje()),
                                             max(1, min(365, intervalo)), ent)
     db.commit()
-    flash(request, f"Faturado: {len(ts)} parcela(s) lançada(s) em Contas a receber.")
+    msg = f"Faturado: {len(ts)} parcela(s) lançada(s) em Contas a receber."
+    if gerar_boleto:
+        msg += " " + _boletos_em_lote(request, db, ts)
+    flash(request, msg, "erro" if "falhou" in msg else "ok")
     return voltar(f"/financeiro/orcamentos/{numero}")
+
+
+def _boletos_em_lote(request, db, titulos):
+    if not inter.configurado():
+        return "Boletos não gerados: configure o Banco Inter em Financeiro → Banco Inter."
+    ok, erros = 0, []
+    for t in titulos:
+        sucesso, msg = _boleto(request, db, t, "")
+        if sucesso:
+            ok += 1
+        else:
+            erros.append(f"{t.parcela_fmt}: {msg}")
+    txt = f"{ok} boleto(s) gerado(s) no Inter."
+    if erros:
+        txt += " Geração falhou em " + "; ".join(erros[:3]) + ("…" if len(erros) > 3 else "")
+    return txt
 
 
 # ------------------------------------------------------------------ página pública do orçamento
@@ -414,7 +433,7 @@ def receber(request: Request, situacao: str = "abertos", de: str = "", ate: str 
     zap = {}
     for t in lista:
         if t.status == "aberto" and t.cliente_fiscal:
-            zap[t.id] = avisos.link_whatsapp(financeiro.texto_cobranca(t, h),
+            zap[t.id] = avisos.link_whatsapp(financeiro.texto_cobranca(t, h, link_boleto(request, t)),
                                              avisos.numero_whatsapp(t.cliente_fiscal.telefone))
     tot = {"valor": sum(t.valor for t in lista if t.status != "cancelado"),
            "pago": sum(t.valor_pago or 0 for t in lista if t.status == "pago"),
@@ -427,7 +446,8 @@ def receber(request: Request, situacao: str = "abertos", de: str = "", ate: str 
 @app.post("/financeiro/receber/novo", dependencies=[Depends(checar_csrf)])
 def receber_novo(request: Request, cliente_fiscal_id: str = Form(""), descricao: str = Form(...),
                  valor: str = Form(...), vencimento: str = Form(...), parcelas: int = Form(1),
-                 intervalo: int = Form(30), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+                 intervalo: int = Form(30), gerar_boleto: str = Form(""), u: Usuario = Depends(so_admin),
+                 db: Session = Depends(get_db)):
     try:
         total = centavos(valor)
     except ValueError as e:
@@ -437,11 +457,17 @@ def receber_novo(request: Request, cliente_fiscal_id: str = Form(""), descricao:
         flash(request, "Informe um valor maior que zero.", "erro")
         return voltar("/financeiro/receber")
     lista = financeiro.parcelas(total, max(1, min(48, parcelas)), _data(vencimento, hoje()), max(1, intervalo))
+    novos = []
     for i, (v, venc) in enumerate(lista, 1):
-        db.add(Titulo(cliente_fiscal_id=_int(cliente_fiscal_id), descricao=descricao.strip()[:200], parcela=i,
-                      total_parcelas=len(lista), valor=v, vencimento=venc))
+        t = Titulo(cliente_fiscal_id=_int(cliente_fiscal_id), descricao=descricao.strip()[:200], parcela=i,
+                   total_parcelas=len(lista), valor=v, vencimento=venc)
+        db.add(t)
+        novos.append(t)
     db.commit()
-    flash(request, f"{len(lista)} conta(s) a receber lançada(s).")
+    msg = f"{len(lista)} conta(s) a receber lançada(s)."
+    if gerar_boleto:
+        msg += " " + _boletos_em_lote(request, db, novos)
+    flash(request, msg, "erro" if "falhou" in msg else "ok")
     return voltar("/financeiro/receber")
 
 
@@ -465,12 +491,18 @@ def receber_baixar(request: Request, tid: int, pago_em: str = Form(""), valor_pa
     except ValueError as e:
         flash(request, str(e), "erro")
         return voltar(voltar_para)
+    aviso = ""
+    if t.boleto_ativo:
+        try:
+            inter.cancelar(db, t, "Pago por outro meio")
+        except inter.ErroInter as e:
+            aviso = f" Atenção: não consegui cancelar o boleto no Inter ({e}) — cancele pelo app do banco."
     t.status, t.pago_em = "pago", _data(pago_em, hoje())
     t.forma = forma if forma in FORMAS_PAGAMENTO else "outro"
     if observacao.strip():
         t.observacao = ((t.observacao + "\n") if t.observacao else "") + observacao.strip()
     db.commit()
-    flash(request, f"Recebimento de {brl(t.valor_pago)} registrado.")
+    flash(request, f"Recebimento de {brl(t.valor_pago)} registrado." + aviso, "erro" if aviso else "ok")
     return voltar(voltar_para if voltar_para.startswith("/") else "/financeiro/receber")
 
 
@@ -481,12 +513,22 @@ def receber_operacao(request: Request, tid: int, operacao: str = Form(...), valo
                      db: Session = Depends(get_db)):
     t = _titulo(db, tid)
     destino = voltar_para if voltar_para.startswith("/") else "/financeiro/receber"
+    if operacao in ("cancelar", "editar") and t.boleto_ativo:
+        try:
+            inter.cancelar(db, t, "Cobrança alterada" if operacao == "editar" else "Cobrança cancelada")
+            inter.esquecer_boleto(t)
+            flash_extra = " O boleto anterior foi cancelado no Inter" + (" — gere um novo." if operacao == "editar" else ".")
+        except inter.ErroInter as e:
+            flash(request, f"Não consegui cancelar o boleto no Inter: {e}", "erro")
+            return voltar(destino)
+    else:
+        flash_extra = ""
     if operacao == "estornar" and t.status == "pago":
         t.status, t.pago_em, t.valor_pago, t.forma = "aberto", None, None, None
         flash(request, "Baixa estornada: a conta voltou a ficar em aberto.")
     elif operacao == "cancelar" and t.status == "aberto":
         t.status = "cancelado"
-        flash(request, "Conta cancelada.")
+        flash(request, "Conta cancelada." + flash_extra)
     elif operacao == "reativar" and t.status == "cancelado":
         t.status = "aberto"
         flash(request, "Conta reativada.")
@@ -498,7 +540,7 @@ def receber_operacao(request: Request, tid: int, operacao: str = Form(...), valo
             return voltar(destino)
         t.vencimento = _data(vencimento, t.vencimento)
         t.descricao = descricao.strip()[:200] or t.descricao
-        flash(request, "Conta atualizada.")
+        flash(request, "Conta atualizada." + flash_extra)
     else:
         flash(request, "Operação não permitida.", "erro")
         return voltar(destino)
@@ -554,7 +596,8 @@ def contrato_alternar(request: Request, cid: int, u: Usuario = Depends(so_admin)
 
 
 @app.post("/financeiro/contratos/gerar", dependencies=[Depends(checar_csrf)])
-def contratos_gerar(request: Request, mes: str = Form(...), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+def contratos_gerar(request: Request, mes: str = Form(...), gerar_boleto: str = Form(""), u: Usuario = Depends(so_admin),
+                    db: Session = Depends(get_db)):
     try:
         ano, m = (int(x) for x in mes.split("-"))
         ref = date(ano, m, 1)
@@ -562,8 +605,11 @@ def contratos_gerar(request: Request, mes: str = Form(...), u: Usuario = Depends
         raise HTTPException(400, "Mês inválido.")
     novos = financeiro.gerar_contratos(db, ref)
     db.commit()
-    flash(request, f"{len(novos)} cobrança(s) de {m:02d}/{ano} lançada(s) em Contas a receber." if novos
-          else "Nenhuma cobrança pendente para esse mês.")
+    msg = (f"{len(novos)} cobrança(s) de {m:02d}/{ano} lançada(s) em Contas a receber." if novos
+           else "Nenhuma cobrança pendente para esse mês.")
+    if novos and gerar_boleto:
+        msg += " " + _boletos_em_lote(request, db, novos)
+    flash(request, msg, "erro" if "falhou" in msg else "ok")
     return voltar("/financeiro/contratos")
 
 
@@ -719,3 +765,199 @@ def catalogo_alternar(request: Request, iid: int, u: Usuario = Depends(so_admin)
         it.ativo = not it.ativo
         db.commit()
     return voltar("/financeiro/catalogo")
+
+
+# ================================================================== Banco Inter (boleto com PIX)
+from fastapi import File, UploadFile  # noqa: E402
+
+from . import inter  # noqa: E402
+
+tpl.env.globals.update(inter_configurado=inter.configurado, SITUACOES_INTER=inter.SITUACOES)
+
+
+def qr_svg(texto, tamanho=220):
+    """QR Code em SVG (para o PIX copia e cola), sem dependência extra."""
+    from reportlab.graphics import renderSVG
+    from reportlab.graphics.barcode import qr
+    from reportlab.graphics.shapes import Drawing
+    w = qr.QrCodeWidget(texto)
+    x0, y0, x1, y1 = w.getBounds()
+    d = Drawing(tamanho, tamanho, transform=[tamanho / (x1 - x0), 0, 0, tamanho / (y1 - y0), 0, 0])
+    d.add(w)
+    svg = renderSVG.drawToString(d)
+    return svg[svg.index("<svg"):]
+
+
+def link_boleto(request, t):
+    return f"{base_url(request)}/boleto/{t.token_publico}" if t.token_publico else ""
+
+
+@app.get("/financeiro/inter", response_class=HTMLResponse)
+def inter_pagina(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    url = config.URL_PUBLICA or ""
+    return render(request, "fin_inter.html", u=u, cert=inter.info_certificado(), cert_ok=inter.certificado_salvo(),
+                  webhook=(f"{url}/webhook/inter/{inter.webhook_token()}" if url.startswith("https://") else ""),
+                  com_boleto=db.scalar(select(func.count(Titulo.id)).where(Titulo.inter_codigo.is_not(None),
+                                                                          Titulo.status == "aberto")) or 0)
+
+
+@app.post("/financeiro/inter/certificado", dependencies=[Depends(checar_csrf)])
+async def inter_certificado(request: Request, crt: UploadFile = File(...), key: UploadFile = File(...),
+                            u: Usuario = Depends(so_admin)):
+    try:
+        inter.salvar_certificado(await crt.read(300_000), await key.read(300_000))
+        inter._contexto()                 # confere se certificado e chave combinam
+        flash(request, "Certificado do Inter salvo.")
+    except inter.ErroInter as e:
+        flash(request, str(e), "erro")
+    return voltar("/financeiro/inter")
+
+
+@app.post("/financeiro/inter/testar", dependencies=[Depends(checar_csrf)])
+def inter_testar(request: Request, u: Usuario = Depends(so_admin)):
+    try:
+        inter.token(renovar=True)
+        h = hoje()
+        inter.chamar("GET", f"/cobrancas/sumario?dataInicial={(h - timedelta(days=30)).isoformat()}&dataFinal={h.isoformat()}")
+        flash(request, f"Conexão com o Inter OK ({'sandbox' if config.INTER_AMBIENTE == 'sandbox' else 'produção'}).")
+    except inter.ErroInter as e:
+        flash(request, str(e), "erro")
+    return voltar("/financeiro/inter")
+
+
+@app.post("/financeiro/inter/webhook", dependencies=[Depends(checar_csrf)])
+def inter_webhook_registrar(request: Request, u: Usuario = Depends(so_admin)):
+    url = config.URL_PUBLICA or ""
+    if not url.startswith("https://"):
+        flash(request, "Configure o Endereço público com https:// (Configurações → Empresa e sistema).", "erro")
+        return voltar("/financeiro/inter")
+    try:
+        inter.registrar_webhook(f"{url}/webhook/inter/{inter.webhook_token()}")
+        flash(request, "Webhook cadastrado no Inter: os pagamentos vão dar baixa sozinhos.")
+    except inter.ErroInter as e:
+        flash(request, str(e), "erro")
+    return voltar("/financeiro/inter")
+
+
+@app.post("/financeiro/inter/sincronizar", dependencies=[Depends(checar_csrf)])
+def inter_sincronizar(request: Request, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    try:
+        n = inter.sincronizar(db, limite=200)
+        flash(request, f"Boletos conferidos no Inter: {n} pagamento(s) novo(s) baixado(s).")
+    except inter.ErroInter as e:
+        flash(request, str(e), "erro")
+    return voltar(request.headers.get("referer", "/financeiro/receber").split(request.url.netloc)[-1] or "/financeiro/receber")
+
+
+@app.post("/webhook/inter/{segredo}")
+async def inter_webhook(request: Request, segredo: str, db: Session = Depends(get_db)):
+    import hmac as _hmac
+    if not config.INTER_WEBHOOK_TOKEN or not _hmac.compare_digest(segredo, config.INTER_WEBHOOK_TOKEN):
+        raise HTTPException(404)
+    try:
+        itens = await request.json()
+    except ValueError:
+        raise HTTPException(400, "JSON inválido")
+    n = inter.processar_webhook(db, itens)
+    return {"ok": True, "atualizados": n}
+
+
+def _boleto(request, db, t, voltar_para):
+    try:
+        inter.emitir(db, t)
+        if t.boleto_ativo and t.linha_digitavel:
+            return True, f"Boleto com PIX gerado: {brl(t.valor)}, vence {t.vencimento:%d/%m/%Y}."
+        if t.inter_situacao == "EM_PROCESSAMENTO":
+            return True, "Boleto enviado ao Inter e ainda em processamento — atualize em alguns segundos."
+        return False, t.inter_erro or f"Situação no Inter: {inter.SITUACOES.get(t.inter_situacao, t.inter_situacao)}"
+    except inter.ErroInter as e:
+        db.rollback()
+        return False, str(e)
+
+
+@app.post("/financeiro/receber/{tid}/boleto", dependencies=[Depends(checar_csrf)])
+def receber_boleto(request: Request, tid: int, acao: str = Form("emitir"), voltar_para: str = Form("/financeiro/receber"),
+                   u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    t = _titulo(db, tid)
+    destino = voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/financeiro/receber"
+    try:
+        if acao == "emitir":
+            ok, msg = _boleto(request, db, t, destino)
+            flash(request, msg, "ok" if ok else "erro")
+        elif acao == "atualizar":
+            sit = inter.atualizar(db, t)
+            flash(request, "Pagamento confirmado pelo Inter — baixa feita." if sit in inter.PAGO
+                  else f"Situação no Inter: {inter.SITUACOES.get(sit, sit)}.")
+        elif acao == "cancelar":
+            inter.cancelar(db, t, "Cancelado pelo emissor")
+            inter.esquecer_boleto(t)
+            db.commit()
+            flash(request, "Boleto cancelado no Inter. A conta continua em aberto (pode gerar outro).")
+    except inter.ErroInter as e:
+        flash(request, str(e), "erro")
+    return voltar(destino)
+
+
+@app.get("/financeiro/receber/{tid}/boleto.pdf")
+def receber_boleto_pdf(tid: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    t = _titulo(db, tid)
+    try:
+        return _anexo_pdf(inter.pdf(t), f"Boleto {t.descricao[:40]} {t.parcela_fmt.replace('/', '-')}.pdf")
+    except inter.ErroInter as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/financeiro/receber/{tid}/email", dependencies=[Depends(checar_csrf)])
+def receber_email(request: Request, tid: int, para: str = Form(""), voltar_para: str = Form("/financeiro/receber"),
+                  u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    t = _titulo(db, tid)
+    destino = voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/financeiro/receber"
+    para = para.strip() or (t.cliente_fiscal.email if t.cliente_fiscal else "") or ""
+    if not para:
+        flash(request, "O cliente não tem e-mail cadastrado.", "erro")
+        return voltar(destino)
+    anexos = []
+    if t.boleto_ativo:
+        try:
+            anexos.append((f"Boleto_{t.id}.pdf", inter.pdf(t), "application/pdf"))
+        except inter.ErroInter:
+            pass
+    texto = financeiro.texto_cobranca(t, hoje(), link_boleto(request, t)).replace("*", "")
+    try:
+        enviar_email(para, f"Cobrança — {t.descricao} · {config.EMPRESA_NOME}", texto, anexos)
+        flash(request, f"Cobrança enviada para {para}{' com o boleto em anexo' if anexos else ''}.")
+    except ValueError as e:
+        flash(request, str(e), "erro")
+    return voltar(destino)
+
+
+# ------------------------------------------------------------------ página pública do boleto
+def _titulo_publico(db, token) -> Titulo:
+    t = db.scalar(select(Titulo).where(Titulo.token_publico == token)) if token else None
+    if not t:
+        raise HTTPException(404, "Cobrança não encontrada.")
+    return t
+
+
+@app.get("/boleto/{token}", response_class=HTMLResponse)
+def boleto_publico(request: Request, token: str, db: Session = Depends(get_db)):
+    t = _titulo_publico(db, token)
+    if t.boleto_ativo and t.status == "aberto" and inter.configurado():
+        try:                                  # confere se já foi pago antes de mostrar
+            if (t.inter_atualizado_em is None or (agora_utc() - t.inter_atualizado_em).total_seconds() > 120):
+                inter.atualizar(db, t)
+        except inter.ErroInter:
+            pass
+    return render(request, "publico_boleto.html", t=t, hoje=hoje(), token=token,
+                  qr=qr_svg(t.pix_copia_cola) if t.pix_copia_cola and t.status == "aberto" else "")
+
+
+@app.get("/boleto/{token}/pdf")
+def boleto_publico_pdf(token: str, db: Session = Depends(get_db)):
+    t = _titulo_publico(db, token)
+    if not t.boleto_ativo:
+        raise HTTPException(404, "Este boleto não está mais disponível.")
+    try:
+        return _anexo_pdf(inter.pdf(t), f"Boleto {config.EMPRESA_NOME}.pdf")
+    except inter.ErroInter as e:
+        raise HTTPException(503, str(e))
