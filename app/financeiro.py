@@ -44,6 +44,15 @@ def numero(txt, padrao=1.0) -> float:
         raise ValueError(f"Quantidade inválida: {txt}")
 
 
+def preco_venda(custo: int, margem: float) -> int:
+    """Margem sobre o custo: custo R$ 100 + 30% = R$ 130."""
+    return round(custo * (1 + (margem or 0) / 100))
+
+
+def margem_de(custo: int, venda: int):
+    return round(100 * (venda - custo) / custo, 2) if custo else None
+
+
 def qtd_fmt(q):
     q = float(q or 0)
     return f"{q:.0f}" if q == int(q) else f"{q:.3f}".rstrip("0").replace(".", ",")

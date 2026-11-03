@@ -610,7 +610,9 @@ class ItemCatalogo(Base):
     codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     descricao: Mapped[str] = mapped_column(String(250))
     unidade: Mapped[str] = mapped_column(String(6), default="UN")
-    preco: Mapped[int] = mapped_column(Integer, default=0)              # centavos
+    preco: Mapped[int] = mapped_column(Integer, default=0)              # centavos (venda)
+    custo: Mapped[int | None] = mapped_column(Integer, nullable=True)   # centavos (compra) — nunca vai ao cliente
+    margem: Mapped[float | None] = mapped_column(nullable=True)         # % sobre o custo
     # produto (NF-e)
     ncm: Mapped[str | None] = mapped_column(String(8), nullable=True)
     cfop: Mapped[str | None] = mapped_column(String(4), nullable=True)
@@ -684,6 +686,18 @@ class Orcamento(Base):
         return max(0, self._soma() + self.impostos - (self.desconto or 0))
 
     @property
+    def analise(self):
+        """Uso interno (nunca no PDF): custo dos itens com custo informado e lucro bruto."""
+        com = [i for i in self.itens if i.custo_unitario is not None]
+        if not com:
+            return None
+        custo = sum(i.custo_total for i in com)
+        venda = sum(i.total for i in com)
+        lucro = venda - custo - (self.desconto or 0)
+        return {"custo": custo, "venda": venda, "lucro": lucro, "itens": len(com), "sem_custo": len(self.itens) - len(com),
+                "margem": round(100 * lucro / custo, 1) if custo else None}
+
+    @property
     def valido_ate(self):
         from datetime import timedelta
         return self.emissao + timedelta(days=self.validade_dias or 0)
@@ -703,12 +717,18 @@ class ItemOrcamento(Base):
     unidade: Mapped[str] = mapped_column(String(6), default="UN")
     quantidade: Mapped[float] = mapped_column(default=1)
     valor_unitario: Mapped[int] = mapped_column(Integer, default=0)   # centavos
+    custo_unitario: Mapped[int | None] = mapped_column(Integer, nullable=True)  # interno: não sai no PDF
+    margem: Mapped[float | None] = mapped_column(nullable=True)                  # % sobre o custo
     orcamento = relationship("Orcamento", back_populates="itens")
     catalogo = relationship("ItemCatalogo")
 
     @property
     def total(self):
         return round((self.quantidade or 0) * (self.valor_unitario or 0))
+
+    @property
+    def custo_total(self):
+        return round((self.quantidade or 0) * (self.custo_unitario or 0)) if self.custo_unitario is not None else None
 
 
 class Contrato(Base):

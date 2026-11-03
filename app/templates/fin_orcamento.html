@@ -104,13 +104,15 @@
 
   <h2 style="margin-top:14px">Itens</h2>
   <table class="itens" id="itens">
-    <thead><tr><th class="c-tipo">Tipo</th><th>Descrição</th><th class="c-qtd">Qtd.</th><th class="c-un">Un.</th><th class="c-val">Valor unit.</th><th class="c-tot valor">Total</th><th class="c-x"></th></tr></thead>
+    <thead><tr><th class="c-tipo">Tipo</th><th>Descrição</th><th class="c-qtd">Qtd.</th><th class="c-un">Un.</th><th class="c-custo interno" title="Só você vê — não sai no orçamento">🔒 Custo</th><th class="c-marg interno" title="Margem sobre o custo — não sai no orçamento">🔒 Margem %</th><th class="c-val">Valor unit.</th><th class="c-tot valor">Total</th><th class="c-x"></th></tr></thead>
     <tbody>
     {% for i in o.itens %}
     <tr><td class="c-tipo"><select name="item_tipo">{% for k, v in TIPOS_ITEM.items() %}<option value="{{ k }}" {{ 'selected' if i.tipo == k }}>{{ v }}</option>{% endfor %}</select><input type="hidden" name="item_cat" value="{{ i.catalogo_id or '' }}"></td>
       <td class="c-desc"><textarea name="item_desc" rows="1">{{ i.descricao }}</textarea></td>
       <td class="c-qtd"><input name="item_qtd" value="{{ i.quantidade|qtd }}" inputmode="decimal"></td>
       <td class="c-un"><input name="item_un" value="{{ i.unidade }}"></td>
+      <td class="c-custo interno"><input name="item_custo" value="{{ i.custo_unitario|brl_num if i.custo_unitario is not none else '' }}" inputmode="decimal" placeholder="—"></td>
+      <td class="c-marg interno"><input name="item_margem" value="{{ i.margem|qtd if i.margem is not none else '' }}" inputmode="decimal" placeholder="—"></td>
       <td class="c-val"><input name="item_valor" value="{{ i.valor_unitario|brl_num }}" inputmode="decimal"></td>
       <td class="c-tot valor">{{ i.total|brl }}</td>
       <td class="c-x"><button type="button" class="btn-x" title="Remover">×</button></td></tr>
@@ -132,7 +134,8 @@
       <div class="campo"><label>Impostos sobre serviços (%)</label><input name="imposto_servicos_pct" id="imp" value="{{ o.imposto_servicos_pct|qtd }}" inputmode="decimal"></div>
       <div class="campo"><label>Desconto (R$)</label><input name="desconto" id="desc" value="{{ o.desconto|brl_num if o.desconto else '' }}" inputmode="decimal"></div>
     </div>
-    <div class="totais" id="totais"></div>
+    <div><div class="totais" id="totais"></div>
+      <div class="analise" id="analise" hidden></div></div>
   </div>
 
   <div class="grid3" style="margin-top:10px">
@@ -164,22 +167,44 @@
   var tb = document.querySelector('#itens tbody'), travado = {{ 'true' if travado else 'false' }};
   function num(v) { v = String(v || '').replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
   function brl(c) { return 'R$ ' + (c / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-  function linha(tipo, desc, qtd, un, val, cat) {
+  var MARGEM_PADRAO = {{ config.ORC_MARGEM_PADRAO_PCT|tojson }};
+  function fmt(c) { return (c / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function fmtPct(p) { return (Math.round(p * 100) / 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}); }
+  // custo/margem -> valor de venda; valor digitado -> margem
+  tb.addEventListener('input', function (e) {
+    var tr = e.target.closest('tr'); if (!tr) return;
+    var cu = tr.querySelector('[name=item_custo]'), mg = tr.querySelector('[name=item_margem]'), vl = tr.querySelector('[name=item_valor]');
+    var custo = Math.round(num(cu.value) * 100);
+    if (e.target === cu || e.target === mg) {
+      if (!custo) return;
+      if (e.target === cu && !mg.value.trim()) mg.value = fmtPct(MARGEM_PADRAO);
+      vl.value = fmt(Math.round(custo * (1 + num(mg.value) / 100)));
+    } else if (e.target === vl && custo) {
+      mg.value = fmtPct(100 * (Math.round(num(vl.value) * 100) - custo) / custo);
+    }
+  }, true);
+  function linha(tipo, desc, qtd, un, val, cat, custo, margem) {
     var tr = document.createElement('tr');
     tr.innerHTML = '<td class="c-tipo"><select name="item_tipo"><option value="servico">Serviço</option><option value="produto">Produto</option></select><input type="hidden" name="item_cat"></td>' +
       '<td class="c-desc"><textarea name="item_desc" rows="1"></textarea></td><td class="c-qtd"><input name="item_qtd" inputmode="decimal"></td>' +
-      '<td class="c-un"><input name="item_un"></td><td class="c-val"><input name="item_valor" inputmode="decimal"></td>' +
+      '<td class="c-un"><input name="item_un"></td>' +
+      '<td class="c-custo interno"><input name="item_custo" inputmode="decimal" placeholder="—"></td>' +
+      '<td class="c-marg interno"><input name="item_margem" inputmode="decimal" placeholder="—"></td>' +
+      '<td class="c-val"><input name="item_valor" inputmode="decimal"></td>' +
       '<td class="c-tot valor"></td><td class="c-x"><button type="button" class="btn-x" title="Remover">×</button></td>';
     tr.querySelector('select').value = tipo; tr.querySelector('[name=item_cat]').value = cat || '';
     tr.querySelector('textarea').value = desc || ''; tr.querySelector('[name=item_qtd]').value = qtd || '1';
     tr.querySelector('[name=item_un]').value = un || (tipo === 'servico' ? 'SV' : 'UN'); tr.querySelector('[name=item_valor]').value = val || '';
+    tr.querySelector('[name=item_custo]').value = custo || ''; tr.querySelector('[name=item_margem]').value = margem || '';
     tb.appendChild(tr); tr.querySelector('textarea').focus(); calc();
   }
   function calc() {
-    var serv = 0, prod = 0;
+    var serv = 0, prod = 0, custoT = 0, vendaC = 0, comCusto = 0, semCusto = 0;
     tb.querySelectorAll('tr').forEach(function (tr) {
       var q = num(tr.querySelector('[name=item_qtd]').value), v = Math.round(num(tr.querySelector('[name=item_valor]').value) * 100);
       var t = Math.round(q * v); tr.querySelector('.c-tot').textContent = brl(t);
+      var cu = tr.querySelector('[name=item_custo]').value.trim();
+      if (cu) { custoT += Math.round(q * Math.round(num(cu) * 100)); vendaC += t; comCusto++; } else if (tr.querySelector('[name=item_desc]').value.trim()) semCusto++;
       if (tr.querySelector('[name=item_tipo]').value === 'produto') prod += t; else serv += t;
     });
     var imp = Math.round(serv * num(document.getElementById('imp').value) / 100), desc = Math.round(num(document.getElementById('desc').value) * 100);
@@ -189,6 +214,16 @@
     if (imp) h += '<div><span>Impostos sobre serviços</span><span>' + brl(imp) + '</span></div>';
     if (desc) h += '<div><span>Desconto</span><span>– ' + brl(desc) + '</span></div>';
     document.getElementById('totais').innerHTML = h + '<div class="total"><span>Total</span><span>' + brl(tot) + '</span></div>';
+    var an = document.getElementById('analise');
+    if (comCusto) {
+      var lucro = vendaC - custoT - desc;
+      an.hidden = false;
+      an.innerHTML = '<b>🔒 Só para você — não aparece no orçamento</b>' +
+        '<div><span>Custo dos itens</span><span>' + brl(custoT) + '</span></div>' +
+        '<div><span>Lucro bruto' + (desc ? ' (já com o desconto)' : '') + '</span><span class="' + (lucro < 0 ? 'neg' : '') + '">' + brl(lucro) + '</span></div>' +
+        '<div><span>Margem sobre o custo</span><span>' + (custoT ? fmtPct(100 * lucro / custoT) + '%' : '—') + '</span></div>' +
+        (semCusto ? '<div class="muted">' + semCusto + ' item(ns) sem custo informado (fora da conta)</div>' : '');
+    } else an.hidden = true;
   }
   document.getElementById('form-orc').addEventListener('input', calc);
   document.getElementById('form-orc').addEventListener('change', calc);
@@ -196,7 +231,7 @@
   var a1 = document.getElementById('add-servico'), a2 = document.getElementById('add-produto'), ac = document.getElementById('add-cat');
   if (a1) a1.onclick = function () { linha('servico'); };
   if (a2) a2.onclick = function () { linha('produto'); };
-  if (ac) ac.onchange = function () { var c = CAT[ac.value]; if (c) linha(c.tipo, c.descricao, '1', c.unidade, c.preco, ac.value); ac.value = ''; };
+  if (ac) ac.onchange = function () { var c = CAT[ac.value]; if (c) linha(c.tipo, c.descricao, '1', c.unidade, c.preco, ac.value, c.custo, c.margem); ac.value = ''; };
   if (!tb.children.length && !travado) linha('servico');
   calc();
 })();

@@ -125,7 +125,9 @@ def _editor(request, u, db, o, **extra):
     catalogo = db.scalars(select(ItemCatalogo).where(ItemCatalogo.ativo).order_by(ItemCatalogo.descricao)).all()
     unidades = db.scalars(select(Unidade).join(Cliente).where(Unidade.ativa).order_by(Cliente.nome, Unidade.nome)).all()
     dados = {str(c.id): {"tipo": c.tipo, "descricao": c.descricao, "unidade": c.unidade,
-                         "preco": brl(c.preco, simbolo=False)} for c in catalogo}
+                         "preco": brl(c.preco, simbolo=False),
+                         "custo": brl(c.custo, simbolo=False) if c.custo is not None else "",
+                         "margem": financeiro.qtd_fmt(c.margem) if c.margem is not None else ""} for c in catalogo}
     return render(request, "fin_orcamento.html", u=u, o=o, catalogo=catalogo, catalogo_dados=dados,
                   clientes=_clientes_fiscais(db),
                   unidades=unidades, hoje=hoje(), link=link_orcamento(request, o) if o and o.id else "", **extra)
@@ -189,13 +191,21 @@ async def orc_salvar(request: Request, u: Usuario = Depends(so_admin), db: Sessi
         o.imposto_servicos_pct = max(0.0, min(50.0, financeiro.numero(f.get("imposto_servicos_pct"), 0)))
         tipos, descs, qtds = f.getlist("item_tipo"), f.getlist("item_desc"), f.getlist("item_qtd")
         uns, vals, cats = f.getlist("item_un"), f.getlist("item_valor"), f.getlist("item_cat")
+        custos, margens = f.getlist("item_custo"), f.getlist("item_margem")
         novos = []
         for i, desc in enumerate(descs):
             if not desc.strip():
                 continue
+            custo_txt = custos[i] if i < len(custos) else ""
+            marg_txt = margens[i] if i < len(margens) else ""
+            custo = centavos(custo_txt, None) if custo_txt.strip() else None
+            valor = centavos(vals[i])
+            if custo is not None and not vals[i].strip() and marg_txt.strip():
+                valor = financeiro.preco_venda(custo, financeiro.numero(marg_txt, 0))
             novos.append(ItemOrcamento(ordem=i, tipo=tipos[i] if tipos[i] in TIPOS_ITEM else "servico",
                                        descricao=desc.strip(), unidade=(uns[i] or "UN").strip()[:6].upper(),
-                                       quantidade=financeiro.numero(qtds[i], 1), valor_unitario=centavos(vals[i]),
+                                       quantidade=financeiro.numero(qtds[i], 1), valor_unitario=valor,
+                                       custo_unitario=custo, margem=financeiro.margem_de(custo, valor) if custo else None,
                                        catalogo_id=_int(cats[i]) if i < len(cats) else None))
     except ValueError as e:
         flash(request, str(e), "erro")
@@ -272,6 +282,7 @@ def orc_duplicar(request: Request, numero: int, u: Usuario = Depends(so_admin), 
                   observacoes=o.observacoes, desconto=o.desconto, imposto_servicos_pct=o.imposto_servicos_pct,
                   itens=[ItemOrcamento(ordem=i.ordem, tipo=i.tipo, descricao=i.descricao, unidade=i.unidade,
                                        quantidade=i.quantidade, valor_unitario=i.valor_unitario,
+                                       custo_unitario=i.custo_unitario, margem=i.margem,
                                        catalogo_id=i.catalogo_id) for i in o.itens])
     db.add(n)
     db.commit()
@@ -732,6 +743,12 @@ async def catalogo_salvar(request: Request, u: Usuario = Depends(so_admin), db: 
     it = db.get(ItemCatalogo, _int(f.get("id"))) if _int(f.get("id")) else ItemCatalogo(ativo=True)
     try:
         it.preco = centavos(f.get("preco"))
+        it.custo = centavos(f.get("custo"), None) if (f.get("custo") or "").strip() else None
+        it.margem = financeiro.numero(f.get("margem"), 0) if (f.get("margem") or "").strip() else None
+        if it.custo is not None and it.margem is not None and not (f.get("preco") or "").strip():
+            it.preco = financeiro.preco_venda(it.custo, it.margem)
+        elif it.custo:
+            it.margem = financeiro.margem_de(it.custo, it.preco)     # o preço digitado manda; a margem acompanha
         aliq = financeiro.numero(f.get("aliquota_iss"), 0) if (f.get("aliquota_iss") or "").strip() else None
     except ValueError as e:
         flash(request, str(e), "erro")

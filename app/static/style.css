@@ -375,3 +375,12 @@ body.menu-recolhido .lat-nav{padding-top:10px}
 .passos-banco span{font-size:.82rem;font-weight:700;padding:4px 10px;border-radius:999px;background:#F0F0EE;color:var(--cinza)}
 .passos-banco span.ok{background:#E6F4EA;color:#2E7D4F}
 .passos-banco span.ok::before{content:"✔ "}
+
+/* custo e margem: uso interno */
+table.itens .c-custo{width:100px}table.itens .c-marg{width:76px}
+table.itens td.interno input{background:#FFFBEA;border-color:#EADFB4}
+table.itens th.interno{background:#C98A00}
+.interno-campo input{background:#FFFBEA;border-color:#EADFB4}
+.analise{margin:10px 0 0 auto;max-width:360px;background:#FFFBEA;border:1px solid #EADFB4;border-radius:8px;padding:10px 12px;font-size:.92rem}
+.analise div{display:flex;justify-content:space-between;gap:16px;padding:2px 0}
+.analise .neg{color:#B3261E;font-weight:800}

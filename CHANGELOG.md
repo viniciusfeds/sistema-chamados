@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 1.12.0 — 2026-11-03
+- **Preço de compra e margem** (uso interno — nunca aparecem para o cliente):
+  - Catálogo: preço de compra + margem sobre o custo calculam o preço de venda; digitar o preço de venda recalcula a
+    margem; mostra o lucro por unidade
+  - Orçamento: colunas 🔒 Custo e 🔒 Margem em cada item (vêm do catálogo e podem ser ajustadas), e quadro
+    “Só para você” com custo dos itens, lucro bruto e margem do orçamento
+  - PDF e página do cliente continuam só com o preço de venda (coberto por teste automático)
+- Configurações → Orçamentos e cobrança: **margem padrão** sugerida (30%)
+
 ## 1.11.0 — 2026-11-03
 - **Administração → Integração bancária**: o Banco Inter saiu do Financeiro e ganhou tela própria, com tudo junto:
   status e passos (credenciais, certificado, ligar, aviso de pagamento), **credenciais editáveis na própria tela**,

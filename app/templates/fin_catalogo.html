@@ -14,12 +14,13 @@
 <div class="card" style="padding:0;overflow:hidden">
 {% if lista %}
 <table class="resp">
-  <thead><tr><th>Item</th><th>Tipo</th><th class="valor">Preço</th><th>Fiscal</th><th></th></tr></thead>
+  <thead><tr><th>Item</th><th>Tipo</th><th class="valor">🔒 Custo</th><th class="valor">Preço de venda</th><th>Fiscal</th><th></th></tr></thead>
   <tbody>{% for i in lista %}
   <tr class="{{ 'inativo' if not i.ativo }}">
     <td data-l="Item"><b>{{ i.descricao }}</b>{% if i.codigo %}<div class="muted">Cód. {{ i.codigo }}</div>{% endif %}</td>
     <td data-l="Tipo">{{ TIPOS_ITEM[i.tipo] }} · {{ i.unidade }}</td>
-    <td data-l="Preço" class="valor">{{ i.preco|brl }}</td>
+    <td data-l="Custo" class="valor muted">{% if i.custo is not none %}{{ i.custo|brl }}{% if i.margem is not none %}<div style="font-size:.8rem">+{{ i.margem|qtd }}%</div>{% endif %}{% else %}—{% endif %}</td>
+    <td data-l="Preço de venda" class="valor"><b>{{ i.preco|brl }}</b></td>
     <td data-l="Fiscal" class="muted">{% if i.tipo == 'produto' %}NCM {{ i.ncm or '—' }} · CFOP {{ i.cfop or '—' }} · CSOSN {{ i.csosn or '—' }}
       {% else %}Cód. tributação {{ i.ctribnac or '—' }}{% if i.aliquota_iss is not none %} · ISS {{ i.aliquota_iss|qtd }}%{% endif %}{% endif %}
       {% if (i.tipo == 'produto' and not i.ncm) or (i.tipo == 'servico' and not i.ctribnac) %}<span class="tag alerta">falta dado fiscal</span>{% endif %}</td>
@@ -39,9 +40,14 @@
     <div class="campo"><label>Código <span class="muted">(opcional)</span></label><input name="codigo" value="{{ e.codigo or '' if e else '' }}"></div>
     <div class="campo"><label>Unidade</label><input name="unidade" value="{{ e.unidade if e else 'UN' }}" placeholder="UN, SV, H, M, CX"></div>
   </div>
-  <div class="grid2">
-    <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ e.descricao if e else '' }}" placeholder="Ex.: Câmera bullet 2MP Intelbras VHD 3230 B"></div>
-    <div class="campo"><label>Preço de venda</label><input name="preco" inputmode="decimal" value="{{ e.preco|brl_num if e else '' }}"></div>
+  <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ e.descricao if e else '' }}" placeholder="Ex.: Câmera bullet 2MP Intelbras VHD 3230 B"></div>
+  <div class="grid3 precos">
+    <div class="campo interno-campo"><label>🔒 Preço de compra (custo)</label><input name="custo" id="cat-custo" inputmode="decimal" value="{{ e.custo|brl_num if e and e.custo is not none else '' }}" placeholder="0,00">
+      <div class="dica">Só você vê. Não aparece no orçamento.</div></div>
+    <div class="campo interno-campo"><label>🔒 Margem sobre o custo (%)</label><input name="margem" id="cat-margem" inputmode="decimal" value="{{ e.margem|qtd if e and e.margem is not none else '' }}" placeholder="{{ config.ORC_MARGEM_PADRAO_PCT|qtd }}">
+      <div class="dica">Ex.: custo 100,00 + 30% = venda 130,00.</div></div>
+    <div class="campo"><label>Preço de venda</label><input name="preco" id="cat-preco" inputmode="decimal" value="{{ e.preco|brl_num if e else '' }}">
+      <div class="dica" id="cat-lucro"></div></div>
   </div>
   <div data-tipo="produto">
     <h3>Dados fiscais do produto (NF-e)</h3>
@@ -70,6 +76,20 @@
   <button class="btn">Salvar item</button>{% if e %} <a class="btn sec" href="/financeiro/catalogo">Cancelar</a>{% endif %}
 </form>
 <script>
+(function () {
+  var cu = document.getElementById('cat-custo'), mg = document.getElementById('cat-margem'), pr = document.getElementById('cat-preco'),
+      lu = document.getElementById('cat-lucro'), PAD = {{ config.ORC_MARGEM_PADRAO_PCT|tojson }};
+  function num(v) { v = String(v || '').replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  function fmt(c) { return (c / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function pct(p) { return (Math.round(p * 100) / 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}); }
+  function lucro() { var c = Math.round(num(cu.value) * 100), p = Math.round(num(pr.value) * 100);
+    lu.textContent = c && p ? 'Lucro por unidade: R$ ' + fmt(p - c) : ''; }
+  cu.addEventListener('input', function () { var c = Math.round(num(cu.value) * 100); if (!c) return lucro();
+    if (!mg.value.trim()) mg.value = pct(PAD); pr.value = fmt(Math.round(c * (1 + num(mg.value) / 100))); lucro(); });
+  mg.addEventListener('input', function () { var c = Math.round(num(cu.value) * 100); if (c) pr.value = fmt(Math.round(c * (1 + num(mg.value) / 100))); lucro(); });
+  pr.addEventListener('input', function () { var c = Math.round(num(cu.value) * 100); if (c) mg.value = pct(100 * (Math.round(num(pr.value) * 100) - c) / c); lucro(); });
+  lucro();
+})();
 (function () { var t = document.getElementById('cat-tipo');
   function ver() { document.querySelectorAll('[data-tipo]').forEach(function (g) { g.hidden = g.dataset.tipo !== t.value; }); }
   t.onchange = ver; ver(); })();

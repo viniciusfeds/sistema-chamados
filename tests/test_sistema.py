@@ -1541,3 +1541,49 @@ def test_integracao_bancaria_na_administracao():
     assert config.INTER_CLIENT_ID == "abc-123" and config.INTER_CLIENT_SECRET == "s3cr3t"
     assert "Integração bancária" in adm.get("/admin").text
     assert entrar("tec@t.com").get("/admin/integracao-bancaria", follow_redirects=False).status_code == 403
+
+
+def test_custo_e_margem_nao_vao_para_o_cliente():
+    from app import financeiro as fin
+    from app.models import ClienteFiscal, ItemCatalogo, Orcamento
+    assert fin.preco_venda(10000, 30) == 13000 and fin.margem_de(10000, 15000) == 50.0
+    adm = entrar("admin@t.com")
+    pag = adm.get("/financeiro/catalogo")
+    # custo + margem, preço vazio -> calcula a venda
+    adm.post("/financeiro/catalogo/salvar", data={"csrf": _csrf(pag.text), "tipo": "produto", "descricao": "DVR 8 canais",
+                                                  "custo": "500,00", "margem": "40", "preco": "", "unidade": "UN"})
+    # custo + preço digitado -> margem acompanha o preço
+    adm.post("/financeiro/catalogo/salvar", data={"csrf": _csrf(pag.text), "tipo": "produto", "descricao": "Fonte 12V",
+                                                  "custo": "20,00", "margem": "30", "preco": "35,00", "unidade": "UN"})
+    with SessionLocal() as db:
+        dvr = db.scalar(select(ItemCatalogo).where(ItemCatalogo.descricao == "DVR 8 canais"))
+        fonte = db.scalar(select(ItemCatalogo).where(ItemCatalogo.descricao == "Fonte 12V"))
+        assert (dvr.custo, dvr.margem, dvr.preco) == (50000, 40.0, 70000)
+        assert (fonte.custo, fonte.preco, fonte.margem) == (2000, 3500, 75.0)
+        cfid = db.scalar(select(ClienteFiscal.id).where(ClienteFiscal.documento == "11222333000181"))
+    ed = adm.get("/financeiro/orcamentos/novo")
+    assert "Custo" in ed.text and '"custo": "500,00"' in ed.text
+    adm.post("/financeiro/orcamentos/salvar", data={
+        "csrf": _csrf(ed.text), "titulo": "Kit DVR", "cliente_fiscal_id": str(cfid), "emissao": "2026-11-03", "validade_dias": "15",
+        "imposto_servicos_pct": "0", "desconto": "",
+        "item_tipo": ["produto", "servico"], "item_cat": ["", ""], "item_desc": ["DVR 8 canais", "Instalação"],
+        "item_qtd": ["2", "1"], "item_un": ["UN", "SV"], "item_custo": ["500,00", ""], "item_margem": ["40", ""],
+        "item_valor": ["", "300,00"]})
+    with SessionLocal() as db:
+        o = db.scalar(select(Orcamento).where(Orcamento.titulo == "Kit DVR"))
+        dv = o.itens[0]
+        assert dv.valor_unitario == 70000 and dv.custo_unitario == 50000 and dv.margem == 40.0
+        an = o.analise
+        assert an["custo"] == 100000 and an["lucro"] == 40000 and an["sem_custo"] == 1
+        num, token = o.numero, o.token_publico
+    ed = adm.get(f"/financeiro/orcamentos/{num}")
+    assert 'name="item_custo" value="500,00"' in ed.text
+    adm.post(f"/financeiro/orcamentos/{num}/enviar", data={"csrf": _csrf(ed.text), "canal": "marcar"})
+    pub = TestClient(app).get(f"/orcamento/{token}").text
+    assert "R$ 700,00" in pub and "500,00" not in pub and "Custo" not in pub and "40%" not in pub
+    pdf = adm.get(f"/financeiro/orcamentos/{num}/pdf").content
+    import shutil
+    import subprocess
+    if shutil.which("pdftotext"):
+        texto = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
+        assert "700,00" in texto and "500,00" not in texto and "Custo" not in texto
