@@ -23,6 +23,8 @@
  'agenda': '<rect x="3" y="5" width="18" height="16" rx="1.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
  'preventiva': '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5M12 7v5l3 2"/>',
  'recolher': '<path d="M15 6l-6 6 6 6"/>',
+ 'ponto': '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/>',
+ 'rh': '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="11" r="2.5"/><path d="M5.5 17c.6-2 2-3 3.5-3s2.9 1 3.5 3M14 9h4M14 13h4"/>',
 }[n]|safe }}</svg>
 {%- endmacro %}
 {% if u %}
@@ -38,6 +40,8 @@
     <button type="button" class="btn-recolher" onclick="recolherMenu()" title="Recolher / expandir menu">{{ ico('recolher') }}</button>
   </div>
   <nav class="lat-nav">
+    {% if u.funcionario_rh and u.funcionario_rh.ativo %}<a href="/ponto" class="{{ 'ativo' if p.startswith('/ponto') }}" title="Meu ponto">{{ ico('ponto') }}<span>Meu ponto</span></a>{% endif %}
+    {% if u.papel != 'funcionario' %}
     <div class="lat-grupo">Chamados</div>
     <a href="/" class="{{ 'ativo' if p == '/' or p.startswith('/chamados/') and p != '/chamados/novo' }}" title="Painel">{{ ico('painel') }}<span>Painel</span></a>
     {% if u.pode('abrir') %}<a href="/chamados/novo" class="{{ 'ativo' if p == '/chamados/novo' }}" title="Abrir chamado">{{ ico('novo') }}<span>Abrir chamado</span></a>{% endif %}
@@ -49,6 +53,7 @@
     {% if u.pode('inventario') %}<a href="/inventario" class="{{ 'ativo' if p.startswith('/inventario') }}" title="Inventário">{{ ico('inventario') }}<span>Inventário</span>{% if alerta_oc and alerta_oc[0] %}<b class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</b>{% endif %}</a>{% endif %}
     {% if u.papel == 'admin' %}<a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}" title="Clientes">{{ ico('clientes') }}<span>Clientes</span></a>{% endif %}
     {% endif %}
+    {% endif %}
     {% if u.papel == 'admin' %}
     <div class="lat-grupo">Financeiro</div>
     <a href="/financeiro" class="{{ 'ativo' if p == '/financeiro' }}" title="Financeiro">{{ ico('financeiro') }}<span>Visão geral</span></a>
@@ -57,6 +62,15 @@
       <a href="/financeiro/receber" class="{{ 'ativo' if p.startswith('/financeiro/receber') }}"><span>Contas a receber</span></a>
       <a href="/financeiro/contratos" class="{{ 'ativo' if p.startswith('/financeiro/contratos') }}"><span>Contratos</span></a>
       <a href="/financeiro/catalogo" class="{{ 'ativo' if p.startswith('/financeiro/catalogo') }}"><span>Produtos e serviços</span></a>
+    </div>
+    <div class="lat-grupo">RH</div>
+    <a href="/rh" class="{{ 'ativo' if p.startswith('/rh') }}" title="Controle de ponto">{{ ico('rh') }}<span>Controle de ponto</span>{% set npend = ajustes_pendentes() %}{% if npend %}<b class="badge-alerta">{{ npend }}</b>{% endif %}</a>
+    <div class="lat-sub {{ 'aberto' if p.startswith('/rh') }}">
+      <a href="/rh" class="{{ 'ativo' if p == '/rh' }}"><span>Ponto do dia</span></a>
+      <a href="/rh/ponto" class="{{ 'ativo' if p.startswith('/rh/ponto') }}"><span>Espelho de ponto</span></a>
+      <a href="/rh/ajustes" class="{{ 'ativo' if p.startswith('/rh/ajustes') }}"><span>Ajustes</span></a>
+      <a href="/rh/funcionarios" class="{{ 'ativo' if p.startswith('/rh/funcionarios') }}"><span>Funcionários</span></a>
+      <a href="/rh/locais" class="{{ 'ativo' if p.startswith('/rh/locais') }}"><span>Locais e feriados</span></a>
     </div>
     <div class="lat-grupo">Sistema</div>
     <a href="/admin" class="{{ 'ativo' if p.startswith('/admin') }}" title="Administração">{{ ico('admin') }}<span>Administração</span></a>

@@ -1832,3 +1832,127 @@ def test_tecnico_restrito_ve_so_atribuidos_e_modulos_liberados():
         u = db.get(Usuario, tr_id)
         assert u.modulos is None and not u.so_atribuidos
     assert "Câmera de outro" in c.get("/").text and c.get("/inventario").status_code == 200
+
+
+# ------------------------------------------------------------------ RH: ponto
+def test_rh_ponto_completo():
+    from datetime import datetime as DT, timedelta as TD
+    from app import ponto
+    from app.models import AjustePonto, EspelhoPonto, Funcionario, LocalPonto, Marcacao
+    adm = entrar("admin@t.com")
+    tok = _csrf(adm.get("/rh/funcionarios?novo=1").text)
+    hoje = date.today()
+    adm_dt = (hoje - TD(days=120)).isoformat()
+    form = {"csrf": tok, "nome": "Maria Ponto", "cpf": "529.982.247-25", "cargo": "Auxiliar", "admissao": adm_dt,
+            "tolerancia_min": "10", "exige_local": "1", "acesso": "novo", "banco_inicio": adm_dt, "email": "maria@t.com", "senha": "senha12345",
+            **{f"jornada_{i}": ("8:00" if i < 5 else "0") for i in range(7)}}
+    r = adm.post("/rh/funcionarios/salvar", data=form)
+    assert "Maria Ponto salvo" in r.text
+    with SessionLocal() as db:
+        fu = db.scalar(select(Funcionario).where(Funcionario.nome == "Maria Ponto"))
+        assert fu.usuario.papel == "funcionario" and fu.jornada_ok[0] == 480 and fu.jornada_ok[5] == 0
+        fid = fu.id
+        db.add(LocalPonto(nome="Sede", latitude=-23.4543, longitude=-46.5333, raio_m=200, ativo=True))
+        db.commit()
+    # funcionário: só enxerga o ponto
+    m = entrar_em("maria@t.com", destino="/ponto")
+    assert m.get("/", follow_redirects=False).headers["location"] == "/ponto"
+    assert m.get("/chamados/novo", follow_redirects=False).status_code == 303
+    assert m.get("/rh", follow_redirects=False).status_code == 303
+    pg = m.get("/ponto").text
+    assert "Registrar entrada" in pg and 'href="/relatorio"' not in pg
+    tk = _csrf(pg)
+    r = m.post("/ponto/registrar", data={"csrf": tk, "latitude": "-23.4545", "longitude": "-46.5335", "precisao": "15"})
+    assert "Entrada registrada" in r.text and "Local: Sede" in r.text
+    r = m.post("/ponto/registrar", data={"csrf": tk, "latitude": "-23.4545", "longitude": "-46.5335"})
+    assert "Aguarde um minuto" in r.text
+    with SessionLocal() as db:
+        mc = db.scalar(select(Marcacao).where(Marcacao.funcionario_id == fid))
+        assert not mc.fora_local and mc.distancia_m < 50 and mc.hash and mc.ip
+        mc.momento -= TD(minutes=5); db.commit()
+    r = m.post("/ponto/registrar", data={"csrf": tk, "latitude": "-23.5505", "longitude": "-46.6333"})  # centro de SP
+    assert "fora dos locais" in r.text
+    with SessionLocal() as db:
+        assert db.scalars(select(Marcacao).where(Marcacao.funcionario_id == fid).order_by(Marcacao.nsr)).all()[-1].fora_local
+    # cálculo: dia útil anterior 08:00-12:00 / 13:00-17:30 = 8:30 → +0:30
+    d = hoje - TD(days=1)
+    while d.weekday() >= 5:
+        d -= TD(days=1)
+    with SessionLocal() as db:
+        fu = db.get(Funcionario, fid)
+        for h in ("08:00", "12:00", "13:00", "17:30"):
+            ponto.registrar(db, fu, DT.combine(d, DT.strptime(h, "%H:%M").time()), origem="admin")
+        dia = ponto.periodo(db, fu, d, d, hoje)[0][0]
+        assert dia["trabalhado"] == 510 and dia["saldo"] == 30 and dia["extra50"] == 30 and not dia["flags"]
+        # 5 minutos a mais fica na tolerância
+        assert ponto.calcular_dia(fu, d, [], [], None, hoje)["falta"]
+    # funcionário pede marcação esquecida e abono; RH aprova
+    mes_ant = (hoje.replace(day=1) - TD(days=1))
+    dia_ant = mes_ant.replace(day=10)
+    while dia_ant.weekday() >= 5:
+        dia_ant += TD(days=1)
+    dia_ab = dia_ant + TD(days=1)
+    while dia_ab.weekday() >= 5:
+        dia_ab += TD(days=1)
+    r = m.post("/ponto/ajuste", data={"csrf": tk, "tipo": "marcacao", "data": dia_ant.isoformat(), "hora": "08:05",
+                                     "motivo": "Esqueci de bater"})
+    assert "enviada para aprovação" in r.text
+    r = m.post("/ponto/ajuste", data={"csrf": tk, "tipo": "abono", "data": dia_ab.isoformat(),
+                                     "motivo": "Atestado médico"}, files={"anexo": ("a.png", _foto(fmt="PNG", exif_gps=False), "image/png")})
+    assert "enviada para aprovação" in r.text
+    aj = adm.get("/rh/ajustes").text
+    assert "Esqueci de bater" in aj and "ver anexo" in aj
+    with SessionLocal() as db:
+        ids = [a.id for a in db.scalars(select(AjustePonto).where(AjustePonto.funcionario_id == fid)).all()]
+        anexo_id = db.scalar(select(AjustePonto).where(AjustePonto.anexo.is_not(None))).id
+    assert m.get(f"/ponto/anexo/{anexo_id}").status_code == 200
+    for i in ids:
+        adm.post(f"/rh/ajustes/{i}", data={"csrf": tok, "decisao": "aprovar"})
+    with SessionLocal() as db:
+        fu = db.get(Funcionario, fid)
+        dias, tot = ponto.periodo(db, fu, dia_ant, dia_ab, hoje)
+        assert dias[0]["marcacoes"][0].origem == "ajuste" and "Marcação ímpar" in dias[0]["flags"]
+        assert dias[-1]["situacao"] == "Abonado" and not dias[-1]["falta"]
+    # RH lança banco, fecha o mês anterior; funcionário assina
+    mes = f"{mes_ant:%Y-%m}"
+    adm.post("/rh/ponto/acao", data={"csrf": tok, "funcionario_id": fid, "mes": mes, "op": "lancamento",
+                                     "data": dia_ant.isoformat(), "minutos": "-2:00", "descricao": "Folga compensada"})
+    esp = adm.get(f"/rh/ponto?funcionario={fid}&mes={mes}").text
+    assert "Folga compensada" in esp and "−2:00" in esp
+    r = adm.post("/rh/ponto/acao", data={"csrf": tok, "funcionario_id": fid, "mes": mes, "op": "fechar"})
+    assert "já pode conferir" in r.text
+    r = m.post("/ponto/ajuste", data={"csrf": tk, "tipo": "marcacao", "data": dia_ant.isoformat(), "hora": "18:00",
+                                     "motivo": "Saída"})
+    assert "já foi fechado" in r.text
+    with SessionLocal() as db:
+        eid = db.scalar(select(EspelhoPonto).where(EspelhoPonto.funcionario_id == fid)).id
+    assert "para assinar" in m.get("/ponto").text
+    r = m.post(f"/ponto/espelho/{eid}/assinar", data={"csrf": tk, "concordo": "1"})
+    assert "assinado" in r.text
+    pdf = m.get(f"/ponto/espelho/{mes}.pdf").content
+    assert pdf[:4] == b"%PDF"
+    import subprocess
+    txt = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
+    assert "Maria Ponto" in txt and "Assinado eletronicamente" in txt and "Folga compensada" in txt
+    assert adm.get(f"/rh/espelho/{fid}/{mes}.pdf").content[:4] == b"%PDF"
+    painel = adm.get("/rh").text
+    assert "Maria Ponto" in painel and "Fora do local" in painel
+    # feriados nacionais
+    adm.post("/rh/feriados", data={"csrf": tok, "op": "nacionais", "ano": str(hoje.year)})
+    assert "Tiradentes" in adm.get("/rh/locais").text
+    # técnico ligado ao RH ganha "Meu ponto"
+    with SessionLocal() as db:
+        tec_id = db.scalar(select(Usuario).where(Usuario.email == "tec@t.com")).id
+    form2 = {**form, "nome": "Tec Funcionário", "cpf": "", "acesso": "existente", "usuario_id": str(tec_id)}
+    adm.post("/rh/funcionarios/salvar", data=form2)
+    t = entrar("tec@t.com")
+    assert 'href="/ponto"' in t.get("/").text and "Registrar entrada" in t.get("/ponto").text
+    assert t.get("/rh").status_code == 403
+
+
+def entrar_em(email, destino="/"):
+    c = TestClient(app)
+    tok = _csrf(c.get("/login").text)
+    r = c.post("/login", data={"email": email, "senha": "senha12345", "next": "/", "csrf": tok}, follow_redirects=False)
+    assert r.status_code == 303
+    return c

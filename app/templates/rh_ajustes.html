@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_rh with context %}
+{% block titulo %}RH · Ajustes{% endblock %}
+{% block conteudo %}
+{{ abas_rh('ajustes') }}
+<div class="cab"><div><h1>Ajustes de ponto</h1><div class="muted">Solicitações dos funcionários: marcação esquecida, abono, batida em duplicidade</div></div></div>
+<div class="card"><h2 style="margin-top:0">Aguardando aprovação</h2>
+  {% for a in pend %}
+  <div class="linha-lista" style="align-items:flex-start;flex-wrap:wrap">
+    <span style="flex:1;min-width:260px"><b>{{ a.funcionario.nome }}</b> · {{ a.data|data }} ({{ DIAS_SEMANA[a.data.weekday()][:3] }})<br>
+      {{ a.tipo_rotulo }}{% if a.hora %} às <b>{{ a.hora.strftime('%H:%M') }}</b>{% endif %}{% if a.tipo == 'abono' %} — {{ fmt_min(a.minutos) if a.minutos else 'dia inteiro' }}{% endif %}{% if a.marcacao %} — marcação das {{ a.marcacao.momento.strftime('%H:%M') }}{% endif %}
+      <br><span class="muted">“{{ a.motivo }}”</span>{% if a.anexo %} · <a href="/ponto/anexo/{{ a.id }}" target="_blank">ver anexo</a>{% endif %}
+      · <a href="/rh/ponto?funcionario={{ a.funcionario_id }}&mes={{ a.data.strftime('%Y-%m') }}">espelho</a></span>
+    <form method="post" action="/rh/ajustes/{{ a.id }}" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <input name="resposta" placeholder="Resposta (opcional)" style="min-width:180px">
+      <button class="btn peq" name="decisao" value="aprovar">Aprovar</button>
+      <button class="btn peq perigo" name="decisao" value="recusar">Recusar</button></form>
+  </div>
+  {% else %}<p class="muted">Nada pendente.</p>{% endfor %}
+</div>
+<div class="card" style="padding:0;overflow:hidden"><h2 style="padding:16px 18px 0;margin:0">Histórico</h2>
+{% if hist %}<table class="resp">
+  <thead><tr><th>Funcionário</th><th>Dia</th><th>Ajuste</th><th>Motivo</th><th>Decisão</th></tr></thead>
+  <tbody>{% for a in hist %}<tr>
+    <td data-l="Funcionário">{{ a.funcionario.nome }}</td><td data-l="Dia">{{ a.data|data }}</td>
+    <td data-l="Ajuste">{{ a.tipo_rotulo }}{% if a.hora %} às {{ a.hora.strftime('%H:%M') }}{% endif %}{% if a.tipo == 'abono' %} ({{ fmt_min(a.minutos) if a.minutos else 'dia' }}){% endif %}</td>
+    <td data-l="Motivo">{{ a.motivo }}{% if a.anexo %} · <a href="/ponto/anexo/{{ a.id }}" target="_blank">anexo</a>{% endif %}</td>
+    <td data-l="Decisão"><span class="situ {{ 'verde' if a.status == 'aprovado' else 'vermelho' }}">{{ STATUS_AJUSTE[a.status] }}</span>
+      <div class="muted">{{ a.decidido_por.nome if a.decidido_por else '' }} · {{ a.decidido_em.strftime('%d/%m %H:%M') if a.decidido_em else '' }}{% if a.resposta %} — {{ a.resposta }}{% endif %}</div></td>
+  </tr>{% endfor %}</tbody></table>
+{% else %}<p class="vazio">Sem histórico.</p>{% endif %}
+</div>
+{% endblock %}

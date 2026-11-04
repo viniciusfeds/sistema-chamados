@@ -31,12 +31,23 @@ class PrecisaLogin(Exception):
     pass
 
 
+class SoPonto(Exception):
+    """Usuário com perfil Funcionário tentou abrir algo além do ponto: volta para /ponto."""
+
+
+LIVRE_FUNCIONARIO = ("/ponto", "/conta", "/sair")
+
+
 def usuario_atual(request: Request, db: Session = Depends(get_db)) -> Usuario:
     uid = request.session.get("uid")
     u = db.get(Usuario, uid) if uid else None
     if not u or not u.ativo:
         request.session.clear()
         raise PrecisaLogin()
+    if u.papel == "funcionario":
+        caminho = request.url.path
+        if not any(caminho == p or caminho.startswith(p + "/") for p in LIVRE_FUNCIONARIO):
+            raise SoPonto()
     if u.papel == "tecnico" and u.modulos is not None:
         from .models import MODULOS_TECNICO
         caminho = request.url.path

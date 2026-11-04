@@ -123,3 +123,17 @@
 {% macro selo_titulo(t, hoje) -%}
 {% set s = SITUACOES_TITULO[t.situacao(hoje)] %}<span class="selo" style="background:{{ s[1] }}">{{ s[0] }}</span>
 {%- endmacro %}
+
+{% macro abas_rh(ativa) -%}
+<nav class="abas">
+  <a href="/rh" class="{{ 'ativa' if ativa == 'painel' }}">Ponto do dia</a>
+  <a href="/rh/ponto" class="{{ 'ativa' if ativa == 'ponto' }}">Espelho de ponto</a>
+  <a href="/rh/ajustes" class="{{ 'ativa' if ativa == 'ajustes' }}">Ajustes{% set n = ajustes_pendentes() %}{% if n %} <b class="badge-alerta" style="position:static">{{ n }}</b>{% endif %}</a>
+  <a href="/rh/funcionarios" class="{{ 'ativa' if ativa == 'funcionarios' }}">Funcionários</a>
+  <a href="/rh/locais" class="{{ 'ativa' if ativa == 'locais' }}">Locais e feriados</a>
+</nav>
+{%- endmacro %}
+
+{% macro marcas(dia, mapa=False) -%}
+{% for m in dia.marcacoes %}<span class="marca-ponto {{ 'fora' if m.fora_local or m.sem_localizacao }} {{ 'ajuste' if m.origem != 'registro' }}" title="{{ nome_marcacao(loop.index0) }}{% if m.local %} · {{ m.local.nome }} ({{ m.distancia_m }} m){% endif %}{% if m.sem_localizacao %} · sem localização{% endif %}{% if m.origem != 'registro' %} · incluída por ajuste{% endif %} · NSR {{ '%09d'|format(m.nsr) }}">{% if mapa and m.mapa %}<a href="{{ m.mapa }}" target="_blank" rel="noopener">{{ m.momento.strftime('%H:%M') }}</a>{% else %}{{ m.momento.strftime('%H:%M') }}{% endif %}</span>{% endfor %}
+{%- endmacro %}

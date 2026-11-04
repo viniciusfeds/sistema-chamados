@@ -1,5 +1,28 @@
 # Histórico de versões
 
+## 1.16.0 — 2026-11-04
+- **Módulo de RH — controle de ponto** (menu RH → Controle de ponto)
+  - **Meu ponto**: o funcionário registra entrada, intervalo e saída pelo celular ou computador; o horário é o do
+    servidor e a **geolocalização** (com a precisão do GPS) é gravada em cada batida, com comprovante (NSR) e
+    código de integridade encadeado
+  - batida **fora dos locais cadastrados** ou **sem localização** é aceita, mas fica sinalizada para o RH; cada
+    horário abre no mapa
+  - **Locais de trabalho** (sede, unidades de clientes) com raio em metros; “usar minha localização agora” e
+    “cadastrar este local” a partir de uma batida
+  - **Funcionários**: CPF, PIS, cargo, admissão, jornada por dia da semana, tolerância (10 min), acesso com login só
+    para o ponto, ligado a um técnico já existente ou sem login
+  - **Ponto do dia**: quem está trabalhando, em intervalo, ausente; ocorrências e banco de cada um
+  - **Espelho de ponto** mensal: marcações, previsto × trabalhado, extras (dias úteis e domingos/feriados), atrasos,
+    faltas, abonos, ocorrências (marcação ímpar, intervalo menor que 1 h, fora do local)
+  - **Banco de horas** com saldo inicial e lançamentos (folga compensada, horas pagas)
+  - **Ajustes com aprovação**: marcação esquecida, abono (com atestado anexado) e desconsiderar batida; o RH aprova
+    ou recusa, e o que o RH lança direto também fica no histórico
+  - **Fechamento do mês**: o funcionário confere e **assina eletronicamente** o espelho (IP, data e hora, ressalva
+    opcional); o PDF sai com o registro da assinatura e o mês fechado não aceita mais ajustes
+  - **Feriados**: nacionais com um clique (inclui Sexta-feira Santa e Corpus Christi) e municipais à mão
+  - novo perfil **Funcionário (só ponto)**, que só enxerga *Meu ponto* e *Minha conta*
+- Agenda: chamados de preventiva mostram o nome do plano
+
 ## 1.15.1 — 2026-11-03
 - **Orçamento: busca no catálogo enquanto digita.** O campo “Buscar no catálogo” e a descrição de cada item mostram a
   lista dos produtos e serviços cadastrados que batem com as letras digitadas (nome ou código, sem diferenciar

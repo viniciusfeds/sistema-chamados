@@ -66,6 +66,21 @@ Menu **Financeiro** (administradores):
 6. **Boleto com PIX (Banco Inter)**: siga *Administração → Integração bancária* (integração no Internet Banking PJ,
    Client ID/Secret, certificado e webhook). Depois é só marcar *Gerar boleto* — o pagamento dá baixa sozinho.
 
+### RH — controle de ponto
+Menu **RH → Controle de ponto** (administradores):
+1. Em **Locais e feriados**, cadastre a sede e as unidades onde a equipe trabalha (coordenadas + raio) e inclua os
+   feriados nacionais e municipais.
+2. Em **Funcionários**, cadastre cada pessoa com a jornada por dia da semana e escolha o acesso: login só para o ponto,
+   um técnico que já usa o sistema ou sem login.
+3. O funcionário abre **Meu ponto** no celular e toca em *Registrar*: o horário é o do servidor e a posição do GPS é
+   gravada. Batida fora dos locais ou sem localização é aceita, mas fica sinalizada em vermelho.
+4. Esquecimentos, atestados e batidas duplicadas: o funcionário pede o ajuste e o RH aprova em **Ajustes**.
+5. No **Espelho de ponto**, confira o mês, lance compensações no banco de horas e clique em *Fechar mês*: o
+   funcionário assina o espelho em *Meu ponto* e o PDF sai com o registro da assinatura.
+
+> A geolocalização só funciona em HTTPS (como em app.tecnosit.com.br). O módulo é um controle interno; ele não
+> gera os arquivos AFD/AEJ da Portaria 671/2021.
+
 ## Rodar com Docker (recomendado)
 
 O sistema já vem pronto para Docker: imagem Python 3.12, usuário sem privilégios de root, *healthcheck* em `/saude`, reinício automático e dados num volume.

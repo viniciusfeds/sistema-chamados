@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_rh with context %}
+{% block titulo %}RH · Locais e feriados{% endblock %}
+{% block conteudo %}
+{{ abas_rh('locais') }}
+<div class="cab"><div><h1>Locais de trabalho</h1><div class="muted">A batida feita longe de todos os locais ativos fica marcada como “fora do local” (sem bloquear)</div></div></div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if locais %}<table class="resp">
+  <thead><tr><th>Local</th><th>Coordenadas</th><th>Raio</th><th>Unidade</th><th></th></tr></thead>
+  <tbody>{% for l in locais %}<tr class="{{ 'inativo' if not l.ativo }}">
+    <td data-l="Local"><b>{{ l.nome }}</b>{% if not l.ativo %} <span class="tag cinza">inativo</span>{% endif %}</td>
+    <td data-l="Coordenadas"><a href="https://www.google.com/maps?q={{ '%.6f'|format(l.latitude) }},{{ '%.6f'|format(l.longitude) }}" target="_blank" rel="noopener">{{ '%.5f'|format(l.latitude) }}, {{ '%.5f'|format(l.longitude) }}</a></td>
+    <td data-l="Raio">{{ l.raio_m }} m</td>
+    <td data-l="Unidade">{{ l.unidade.nome if l.unidade else '—' }}</td>
+    <td><form method="post" action="/rh/locais/{{ l.id }}/acao" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn peq sec" name="acao" value="alternar">{{ 'Desativar' if l.ativo else 'Ativar' }}</button>
+      <button class="btn peq perigo" name="acao" value="excluir" onclick="return confirm('Excluir o local {{ l.nome }}?')">Excluir</button></form></td>
+  </tr>{% endfor %}</tbody></table>
+{% else %}<p class="vazio">Nenhum local cadastrado. Cadastre a sede e as unidades onde a equipe trabalha.</p>{% endif %}
+</div>
+<form class="card" method="post" action="/rh/locais/salvar" id="novo-local">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2 style="margin-top:0">+ Novo local</h2>
+  <div class="grid3">
+    <div class="campo"><label>Nome</label><input name="nome" required placeholder="Ex.: Sede TecnosIT"></div>
+    <div class="campo"><label>Coordenadas</label><input name="coordenadas" id="coord" required value="{{ pre }}" placeholder="-23.45432, -46.53321">
+      <div class="dica">No Google Maps, clique com o botão direito no local e copie os números. <a href="#" id="minha-pos">Usar minha localização agora</a></div></div>
+    <div class="campo"><label>Raio (metros)</label><input name="raio_m" inputmode="numeric" value="200"></div>
+  </div>
+  <div class="campo"><label>Unidade de cliente <span class="muted">(opcional)</span></label><select name="unidade_id"><option value="">—</option>
+    {% for un in unidades %}<option value="{{ un.id }}">{{ un.cliente.nome }} · {{ un.nome }}</option>{% endfor %}</select></div>
+  <button class="btn">Salvar local</button>
+</form>
+
+<div class="card" id="feriados">
+  <h2 style="margin-top:0">Feriados</h2>
+  <p class="muted" style="margin-top:0">Em feriado a jornada prevista é zero e a hora trabalhada conta como extra de domingo/feriado.</p>
+  <form method="post" action="/rh/feriados" class="acoes-orc" style="margin-bottom:12px"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="ano" value="{{ ano }}"><button class="btn peq sec" name="op" value="nacionais">+ Feriados nacionais de {{ ano }}</button></form>
+  <form method="post" action="/rh/feriados" class="acoes-orc" style="margin-bottom:12px"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="date" name="data" required style="max-width:170px;min-width:0"><input name="nome" required placeholder="Ex.: Aniversário de Guarulhos">
+    <button class="btn peq" name="op" value="incluir">Incluir</button></form>
+  {% for f in feriados %}<div class="linha-lista"><span><b>{{ f.data|data }}</b> {{ DIAS_SEMANA[f.data.weekday()][:3] }} · {{ f.nome }}</span>
+    <form method="post" action="/rh/feriados"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="fid" value="{{ f.id }}">
+      <button class="btn-x" name="op" value="excluir" title="Remover">×</button></form></div>
+  {% else %}<p class="muted">Nenhum feriado cadastrado a partir de {{ ano }}.</p>{% endfor %}
+</div>
+<script>
+document.getElementById('minha-pos').onclick = function (e) {
+  e.preventDefault(); var c = document.getElementById('coord'); c.value = 'Obtendo…';
+  navigator.geolocation.getCurrentPosition(function (p) { c.value = p.coords.latitude.toFixed(6) + ', ' + p.coords.longitude.toFixed(6); },
+    function () { c.value = ''; alert('Não foi possível obter a localização.'); }, {enableHighAccuracy: true, timeout: 15000});
+};
+</script>
+{% endblock %}

@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
-from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
+from .auth import (PrecisaLogin, SoPonto, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
@@ -68,6 +68,11 @@ tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
 tpl.env.filters["iso"] = lambda d: d.isoformat() if isinstance(d, date) else (str(d) if d else "")
 tpl.env.filters["local"] = lambda d: (d.replace(tzinfo=timezone.utc).astimezone(config.FUSO).strftime("%d/%m/%Y %H:%M")
                                       if d else "")
+
+
+@app.exception_handler(SoPonto)
+async def _so_ponto(request: Request, exc):
+    return RedirectResponse("/ponto", 303)
 
 
 @app.exception_handler(PrecisaLogin)
@@ -1689,3 +1694,4 @@ async def _erro(request: Request, exc: StarletteHTTPException):
 # Faturamento (orçamentos, contas a receber, contratos) — rotas em módulo próprio
 from . import rotas_clientes, rotas_financeiro  # noqa: E402,F401
 from . import rotas_assinatura, rotas_preventiva  # noqa: E402,F401
+from . import rotas_rh  # noqa: E402,F401

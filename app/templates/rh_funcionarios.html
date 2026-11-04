@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_rh with context %}
+{% block titulo %}RH · Funcionários{% endblock %}
+{% block conteudo %}
+{{ abas_rh('funcionarios') }}
+<div class="cab">
+  <div><h1>Funcionários</h1><div class="muted">Cadastro, jornada e acesso para bater o ponto</div></div>
+  <a class="btn" href="?novo=1#form">+ Novo funcionário</a>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Nome</th><th>Cargo</th><th>Jornada</th><th>Acesso</th><th>Situação</th><th></th></tr></thead>
+  <tbody>{% for f in lista %}
+  <tr class="{{ 'inativo' if not f.ativo }}">
+    <td data-l="Nome"><b>{{ f.nome }}</b>{% if f.cpf %}<div class="muted">CPF {{ f.cpf_fmt }}</div>{% endif %}</td>
+    <td data-l="Cargo">{{ f.cargo or '—' }}{% if f.admissao %}<div class="muted">desde {{ f.admissao|data }}</div>{% endif %}</td>
+    <td data-l="Jornada">{{ fmt_min(f.carga_semanal) }} semanais<div class="muted">{% for m in f.jornada_ok %}{% if m %}{{ DIAS_SEMANA[loop.index0][:3] }} {{ fmt_min(m) }}{% if not loop.last %} · {% endif %}{% endif %}{% endfor %}</div></td>
+    <td data-l="Acesso">{% if f.usuario %}{{ f.usuario.email }}<div class="muted">{{ PAPEIS[f.usuario.papel] }}</div>{% else %}<span class="muted">sem login</span>{% endif %}</td>
+    <td data-l="Situação">{{ 'Ativo' if f.ativo else 'Inativo' }}</td>
+    <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ f.id }}#form">Editar</a><a class="btn peq sec" href="/rh/ponto?funcionario={{ f.id }}">Espelho</a></div></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum funcionário cadastrado.</p>{% endif %}
+</div>
+
+{% if ed %}{% set e = ed %}
+<form class="card" method="post" action="/rh/funcionarios/salvar" id="form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if e.id %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <h2>{{ 'Editar ' ~ e.nome if e.id else 'Novo funcionário' }}</h2>
+  <div class="grid3">
+    <div class="campo"><label>Nome completo</label><input name="nome" required value="{{ e.nome or '' }}"></div>
+    <div class="campo"><label>CPF</label><input name="cpf" inputmode="numeric" value="{{ e.cpf_fmt }}"></div>
+    <div class="campo"><label>PIS <span class="muted">(opcional)</span></label><input name="pis" inputmode="numeric" value="{{ e.pis or '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Cargo</label><input name="cargo" value="{{ e.cargo or '' }}" placeholder="Ex.: Técnico de CFTV"></div>
+    <div class="campo"><label>Admissão</label><input type="date" name="admissao" value="{{ e.admissao.isoformat() if e.admissao else '' }}"></div>
+    <div class="campo"><label>Tolerância diária (min)</label><input name="tolerancia_min" inputmode="numeric" value="{{ e.tolerancia_min if e.tolerancia_min is not none else 10 }}">
+      <div class="dica">Até esse total no dia, atraso ou extra não contam (CLT: 10 min).</div></div>
+  </div>
+  <div class="campo"><label>Jornada prevista por dia <span class="muted">(horas trabalhadas, sem o intervalo — 0 = folga)</span></label>
+    <div class="jornada-grid">{% for m in e.jornada_ok %}<div><div class="dica" style="text-align:center">{{ DIAS_SEMANA[loop.index0][:3] }}</div>
+      <input name="jornada_{{ loop.index0 }}" value="{{ fmt_min(m) }}"></div>{% endfor %}</div>
+    <div class="dica">Padrão: 8:00 de segunda a sexta e 4:00 no sábado (44 h semanais).</div></div>
+  <div class="grid3">
+    <div class="campo"><label>Banco de horas a partir de</label><input type="date" name="banco_inicio" value="{{ e.banco_inicio.isoformat() if e.banco_inicio else '' }}">
+      <div class="dica">Vazio = dia do cadastro aqui. Antes dessa data nada conta (use o saldo inicial para trazer o banco anterior).</div></div>
+    <div class="campo"><label>Saldo inicial do banco</label><input name="saldo_inicial" value="{{ fmt_min(e.banco_saldo_inicial or 0, True) }}" placeholder="+0:00">
+      <div class="dica">Use − para débito, ex.: −3:30.</div></div>
+    <div class="campo"><label>&nbsp;</label>
+      <label class="check"><input type="checkbox" name="exige_local" value="1" {{ 'checked' if e.exige_local or not e.id }}> <span>Sinalizar batida fora dos locais cadastrados</span></label>
+      {% if e.id %}<label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if e.ativo }}> <span>Ativo</span></label>{% endif %}</div>
+  </div>
+  <div class="campo"><label>Acesso para bater o ponto</label>
+    <select name="acesso" id="acesso">
+      {% if e.usuario %}<option value="manter" selected>Manter: {{ e.usuario.email }} ({{ PAPEIS[e.usuario.papel] }})</option>{% endif %}
+      <option value="novo" {{ 'selected' if not e.usuario }}>Criar login só para o ponto</option>
+      <option value="existente">Usar um usuário que já existe (técnico/admin)</option>
+      <option value="nenhum">Sem login (o RH lança as marcações)</option>
+    </select></div>
+  <div class="grid2" data-ac="novo"><div class="campo"><label>E-mail (login)</label><input type="email" name="email"></div>
+    <div class="campo"><label>Senha inicial</label><input type="password" name="senha" minlength="8" autocomplete="new-password"></div></div>
+  <div class="campo" data-ac="existente"><label>Usuário</label><select name="usuario_id"><option value="">Selecione…</option>
+    {% for x in usuarios %}<option value="{{ x.id }}">{{ x.nome }} · {{ x.email }} ({{ PAPEIS[x.papel] }})</option>{% endfor %}</select>
+    <div class="dica">O técnico continua com o acesso dele e ganha o item <b>Meu ponto</b> no menu.</div></div>
+  <div class="acoes-orc"><button class="btn">Salvar funcionário</button><a class="btn sec" href="/rh/funcionarios">Cancelar</a></div>
+</form>
+<script>
+(function () { var s = document.getElementById('acesso');
+  function m() { document.querySelectorAll('[data-ac]').forEach(function (el) { el.hidden = el.dataset.ac !== s.value; }); }
+  s.addEventListener('change', m); m(); })();
+</script>
+{% endif %}
+{% endblock %}

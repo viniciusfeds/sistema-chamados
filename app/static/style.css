@@ -404,3 +404,24 @@ canvas.rubrica{width:100%;height:150px;border:2px dashed #C9C9C9;border-radius:1
 .pin{flex:0 0 12px;align-self:center}
 @media (max-width:820px){.calendario{display:none}}
 @media (min-width:821px){.agenda-lista{display:none}}
+
+/* ---------- RH / ponto */
+.marca-ponto{display:inline-block;font-variant-numeric:tabular-nums;font-weight:700;background:#F2F2F0;border-radius:6px;padding:2px 7px;margin:1px 3px 1px 0;font-size:.88rem}
+.marca-ponto a{text-decoration:none;color:inherit}
+.marca-ponto.fora{background:#FDECEC;color:#8E1C16}
+.marca-ponto.ajuste{background:#E8F0FB;color:#1F5FA8}
+.relogio-ponto{text-align:center;padding:26px 18px}
+.relogio-ponto .hora{font-size:3.2rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-1px;line-height:1}
+.relogio-ponto .data{color:var(--cinza);margin:6px 0 18px}
+.btn-ponto{font-size:1.25rem;padding:16px 34px;border-radius:14px;min-width:260px;justify-content:center}
+.gps{font-size:.85rem;color:var(--cinza);margin-top:12px;min-height:1.2em}
+.gps.ok{color:#1E7B45}.gps.ruim{color:#B07000}
+.situ{display:inline-block;font-size:.78rem;font-weight:700;border-radius:999px;padding:2px 10px;white-space:nowrap}
+.situ.verde{background:#E6F4EA;color:#1E7B45}.situ.vermelho{background:#FDECEC;color:#B3261E}
+.situ.azul{background:#E8F0FB;color:#1F5FA8}.situ.laranja{background:#FFF1E8;color:#B54708}.situ.cinza{background:#EFEFEF;color:#555}
+.saldo-pos{color:#1E7B45;font-weight:700}.saldo-neg{color:#B3261E;font-weight:700}
+tr.fds td{background:#FAFAF8}
+tr.falta td{color:#B3261E}
+.jornada-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.jornada-grid input{text-align:center}
+@media (max-width:700px){.jornada-grid{grid-template-columns:repeat(4,1fr)}.relogio-ponto .hora{font-size:2.6rem}.btn-ponto{min-width:0;width:100%}}

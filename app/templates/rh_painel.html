@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_rh, marcas with context %}
+{% block titulo %}RH · Ponto do dia{% endblock %}
+{% block conteudo %}
+{{ abas_rh('painel') }}
+<div class="cab">
+  <div><h1>Ponto do dia</h1><div class="muted">{{ DIAS_SEMANA[d.weekday()] }}, {{ d|data }}{% if d == hoje %} · agora{% endif %}</div></div>
+  <div class="acoes-orc"><a class="btn peq sec" href="?data={{ ant }}">‹ Dia anterior</a>{% if prox %}<a class="btn peq sec" href="?data={{ prox }}">Próximo ›</a>{% endif %}
+    <a class="btn" href="/rh/funcionarios?novo=1#form">+ Funcionário</a></div>
+</div>
+{% if sem_local %}<div class="flash aviso">Nenhum local de trabalho cadastrado: as batidas ficam registradas com a posição, mas sem a conferência de “fora do local”. <a href="/rh/locais">Cadastrar locais</a></div>{% endif %}
+{% if pend %}<div class="flash aviso">{{ pend }} solicitação(ões) de ajuste aguardando aprovação. <a href="/rh/ajustes">Ver ajustes</a></div>{% endif %}
+{% set n_trab = linhas|selectattr('cor', 'equalto', 'verde')|list|length %}
+{% set n_aus = linhas|selectattr('sit', 'equalto', 'Ausente')|list|length %}
+<div class="cards fin">
+  <a href="#lista" style="--c:#1E7B45"><b>{{ n_trab }}</b><span>Trabalhando agora</span></a>
+  <a href="#lista" style="--c:#B3261E"><b>{{ n_aus }}</b><span>Sem marcação {{ 'hoje' if d == hoje else 'no dia' }}</span></a>
+  <a href="#lista" style="--c:#B54708"><b>{{ linhas|selectattr('dia.flags')|list|length }}</b><span>Com ocorrência</span></a>
+  <a href="/rh/ajustes" style="--c:#5B3A9E"><b>{{ pend }}</b><span>Ajustes pendentes</span></a>
+</div>
+<div class="card" style="padding:0;overflow:hidden" id="lista">
+{% if linhas %}
+<table class="resp">
+  <thead><tr><th>Funcionário</th><th>Situação</th><th>Marcações</th><th>Trabalhado</th><th>Ocorrências</th><th>Banco</th><th></th></tr></thead>
+  <tbody>{% for l in linhas %}
+  <tr>
+    <td data-l="Funcionário"><b>{{ l.fu.nome }}</b><div class="muted">{{ l.fu.cargo or '' }}</div></td>
+    <td data-l="Situação"><span class="situ {{ l.cor }}">{{ l.sit }}</span></td>
+    <td data-l="Marcações">{{ marcas(l.dia, True) if l.dia.marcacoes else '—' }}</td>
+    <td data-l="Trabalhado">{{ fmt_min(l.dia.trabalhado) if l.dia.trabalhado else '—' }} <span class="muted">/ {{ fmt_min(l.dia.previsto) }}</span></td>
+    <td data-l="Ocorrências">{% for f in l.dia.flags %}<span class="tag alerta">{{ f }}</span> {% endfor %}</td>
+    <td data-l="Banco"><span class="{{ 'saldo-pos' if l.banco > 0 else ('saldo-neg' if l.banco < 0 else '') }}">{{ fmt_min(l.banco, True) }}</span></td>
+    <td><a class="btn peq sec" href="/rh/ponto?funcionario={{ l.fu.id }}&mes={{ d.strftime('%Y-%m') }}">Espelho</a></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhum funcionário cadastrado. <a href="/rh/funcionarios?novo=1#form">Cadastre o primeiro</a>.</p>{% endif %}
+</div>
+<p class="dica">Clique no horário para ver no mapa onde a marcação foi feita. Vermelho = fora dos locais cadastrados ou sem localização; azul = incluída por ajuste.</p>
+{% endblock %}

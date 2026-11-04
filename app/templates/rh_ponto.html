@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_rh, marcas with context %}
+{% block titulo %}RH · Espelho de ponto{% endblock %}
+{% block conteudo %}
+{{ abas_rh('ponto') }}
+<div class="cab">
+  <div><h1>Espelho de ponto</h1><div class="muted">{{ titulo_mes }}</div></div>
+  <form method="get" class="acoes-orc">
+    <select name="funcionario" onchange="this.form.submit()" style="max-width:280px">
+      {% for f in lista %}<option value="{{ f.id }}" {{ 'selected' if fu and fu.id == f.id }}>{{ f.nome }}{{ '' if f.ativo else ' (inativo)' }}</option>{% endfor %}</select>
+    <input type="month" name="mes" value="{{ mes }}" onchange="this.form.submit()" style="max-width:170px;min-width:0">
+  </form>
+</div>
+{% if not fu %}<div class="card"><p class="vazio">Cadastre um funcionário em <a href="/rh/funcionarios?novo=1#form">Funcionários</a>.</p></div>
+{% else %}
+<div class="acoes-orc" style="margin-bottom:12px">
+  <a class="btn peq sec" href="?funcionario={{ fu.id }}&mes={{ ant }}">‹ {{ ant[5:] }}/{{ ant[:4] }}</a>
+  <a class="btn peq sec" href="?funcionario={{ fu.id }}&mes={{ prox }}">{{ prox[5:] }}/{{ prox[:4] }} ›</a>
+  <a class="btn peq sec" href="/rh/espelho/{{ fu.id }}/{{ mes }}.pdf" target="_blank">📄 PDF do espelho</a>
+  <form method="post" action="/rh/ponto/acao"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="funcionario_id" value="{{ fu.id }}"><input type="hidden" name="mes" value="{{ mes }}">
+    {% if esp %}<button class="btn peq perigo" name="op" value="reabrir" onclick="return confirm('Reabrir o mês? {{ 'A assinatura do funcionário será descartada.' if esp.assinado_em else '' }}')">Reabrir mês</button>
+    {% else %}<button class="btn peq" name="op" value="fechar" onclick="return confirm('Fechar {{ titulo_mes|lower }} e enviar para {{ fu.nome }} assinar?')">Fechar mês e enviar para assinatura</button>{% endif %}
+  </form>
+</div>
+{% if esp %}<div class="flash {{ 'ok' if esp.assinado_em else 'aviso' }}">
+  {% if esp.assinado_em %}Assinado por {{ fu.nome }} em {{ esp.assinado_em.strftime('%d/%m/%Y %H:%M') }} (IP {{ esp.assinado_ip }}).{% if esp.observacao %} Ressalva: “{{ esp.observacao }}”{% endif %}
+  {% else %}Mês fechado em {{ esp.fechado_em.strftime('%d/%m/%Y %H:%M') }} — aguardando a assinatura do funcionário.{% endif %}
+  {% if mudou %} <b>Atenção: os registros mudaram depois do fechamento.</b>{% endif %}</div>{% endif %}
+{% if pend %}<div class="flash aviso">{{ pend|length }} ajuste(s) pendente(s) deste funcionário. <a href="/rh/ajustes">Decidir</a></div>{% endif %}
+
+<div class="cards fin">
+  <a style="--c:#1F5FA8"><b>{{ fmt_min(tot.trabalhado) }}</b><span>Trabalhadas · previstas {{ fmt_min(tot.previsto) }}</span></a>
+  <a style="--c:#1E7B45"><b>{{ fmt_min(tot.extra50 + tot.extra100) }}</b><span>Extras{% if tot.extra100 %} · {{ fmt_min(tot.extra100) }} dom./feriado{% endif %}</span></a>
+  <a style="--c:#B3261E"><b>{{ fmt_min(tot.debito) }}</b><span>Atrasos/saídas · {{ tot.faltas }} falta(s)</span></a>
+  <a style="--c:{{ '#1E7B45' if final >= 0 else '#B3261E' }}"><b>{{ fmt_min(final, True) }}</b><span>Banco ao fim do mês · anterior {{ fmt_min(anterior, True) }}</span></a>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+<table class="resp">
+  <thead><tr><th>Dia</th><th>Marcações</th><th>Previsto</th><th>Trabalhado</th><th>Saldo</th><th>Ocorrências</th></tr></thead>
+  <tbody>{% for x in dias %}
+  <tr class="{{ 'fds' if x.data.weekday() >= 5 or x.feriado }} {{ 'falta' if x.falta }}">
+    <td data-l="Dia"><b>{{ x.data.strftime('%d/%m') }}</b> <span class="muted">{{ DIAS_SEMANA[x.data.weekday()][:3] }}</span></td>
+    <td data-l="Marcações">{{ marcas(x, True) if x.marcacoes else '—' }}</td>
+    <td data-l="Previsto">{{ fmt_min(x.previsto) if x.previsto else '—' }}</td>
+    <td data-l="Trabalhado">{{ fmt_min(x.trabalhado) if x.trabalhado else '—' }}</td>
+    <td data-l="Saldo">{% if x.passado and x.saldo %}<span class="{{ 'saldo-pos' if x.saldo > 0 else 'saldo-neg' }}">{{ fmt_min(x.saldo, True) }}</span>{% else %}—{% endif %}</td>
+    <td data-l="Ocorrências">{% if x.situacao %}<span class="muted">{{ x.situacao }}</span> {% endif %}{% if x.abono and x.situacao != 'Abonado' %}<span class="tag">Abono {{ fmt_min(x.abono) }}</span> {% endif %}
+      {% for f in x.flags %}<span class="tag alerta">{{ f }}</span> {% endfor %}
+      {% for m in x.marcacoes if m.fora_local %}{% if loop.first %}<a class="dica" href="/rh/locais?lat={{ m.latitude }}&lng={{ m.longitude }}#novo-local">cadastrar este local</a>{% endif %}{% endfor %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+</div>
+
+<div class="grid2" style="align-items:start">
+<form class="card" method="post" action="/rh/ponto/acao" {{ 'hidden' if esp }}>
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="funcionario_id" value="{{ fu.id }}"><input type="hidden" name="mes" value="{{ mes }}">
+  <h2 style="margin-top:0">Lançar ajuste</h2>
+  <div class="grid2">
+    <div class="campo"><label>Tipo</label><select name="op" id="rh-op">{% for k, v in TIPOS_AJUSTE.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+      <option value="lancamento">Lançamento no banco de horas</option></select></div>
+    <div class="campo"><label>Dia</label><input type="date" name="data" id="rh-data" required value="{{ (hoje if mes == hoje.strftime('%Y-%m') else dias[-1].data).isoformat() }}"></div>
+  </div>
+  <div class="campo" data-op="marcacao"><label>Horário</label><input type="time" name="hora"></div>
+  <div class="campo" data-op="abono lancamento"><label id="rh-min-l">Horas</label><input name="minutos" placeholder="ex.: 2:30"><div class="dica" id="rh-min-d"></div></div>
+  <div class="campo" data-op="desconsiderar"><label>Marcação</label><select name="marcacao_id" id="rh-marc"><option value="">Escolha…</option>
+    {% for x in dias %}{% for m in x.marcacoes %}<option value="{{ m.id }}" data-dia="{{ x.data.isoformat() }}">{{ x.data.strftime('%d/%m') }} às {{ m.momento.strftime('%H:%M') }}</option>{% endfor %}{% endfor %}</select></div>
+  <div class="campo" data-op="marcacao abono desconsiderar"><label>Motivo</label><input name="motivo" placeholder="Ex.: atestado médico; esqueceu de bater"></div>
+  <div class="campo" data-op="lancamento"><label>Descrição</label><input name="descricao" placeholder="Ex.: folga compensada; horas extras pagas na folha"></div>
+  <button class="btn">Lançar</button>
+  <p class="dica">Fica registrado como ajuste aprovado por você (histórico em Ajustes).</p>
+</form>
+<div class="card"><h2 style="margin-top:0">Lançamentos no banco neste mês</h2>
+  {% for x in lanc %}<div class="linha-lista"><span>{{ x.data|data }} · {{ x.descricao }}</span><b class="{{ 'saldo-pos' if x.minutos > 0 else 'saldo-neg' }}">{{ fmt_min(x.minutos, True) }}</b></div>
+  {% else %}<p class="muted">Nenhum lançamento.</p>{% endfor %}
+  <div class="dica">Jornada: {% for m in fu.jornada_ok %}{% if m %}{{ DIAS_SEMANA[loop.index0][:3] }} {{ fmt_min(m) }} {% endif %}{% endfor %}· tolerância {{ fu.tolerancia_min }} min</div>
+</div>
+</div>
+<script>
+(function () { var s = document.getElementById('rh-op'), d = document.getElementById('rh-data'), mc = document.getElementById('rh-marc');
+  function m() {
+    document.querySelectorAll('[data-op]').forEach(function (el) { el.hidden = el.dataset.op.split(' ').indexOf(s.value) < 0; });
+    var lanc = s.value === 'lancamento';
+    document.getElementById('rh-min-l').textContent = lanc ? 'Horas (+ crédito / − débito)' : 'Horas a abonar';
+    document.getElementById('rh-min-d').textContent = lanc ? 'Ex.: −8:00 para um dia de folga compensada.' : 'Vazio = dia inteiro.';
+    Array.prototype.forEach.call(mc.options, function (o) { if (o.value) o.hidden = o.dataset.dia !== d.value; });
+  }
+  s.addEventListener('change', m); d.addEventListener('change', m); m(); })();
+</script>
+{% endif %}
+{% endblock %}

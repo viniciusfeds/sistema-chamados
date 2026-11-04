@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 
 from sqlalchemy import (JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Table, Text,
                         Time, UniqueConstraint, func)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 from .db import Base
 
@@ -12,6 +12,7 @@ PAPEIS = {
     "tecnico": "Técnico",
     "gestor": "Gestor do cliente",
     "unidade": "Unidade",
+    "funcionario": "Funcionário (só ponto)",
 }
 
 PRIORIDADES = {  # chave -> (rótulo, cor, ordem)
@@ -937,3 +938,153 @@ class PlanoPreventiva(Base):
     @property
     def itens_checklist(self):
         return [x.strip(" -•☐\t") for x in (self.checklist or "").splitlines() if x.strip(" -•☐\t")]
+
+
+# ====================================================================== RH — registro de ponto
+DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+JORNADA_PADRAO = [480, 480, 480, 480, 480, 240, 0]          # 44 h semanais (minutos por dia, seg..dom)
+TIPOS_AJUSTE = {
+    "marcacao": "Incluir marcação esquecida",
+    "abono": "Abono (atestado, falta justificada)",
+    "desconsiderar": "Desconsiderar marcação",
+}
+STATUS_AJUSTE = {"pendente": "Pendente", "aprovado": "Aprovado", "recusado": "Recusado"}
+
+
+class Funcionario(Base):
+    __tablename__ = "rh_funcionarios"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    cpf: Mapped[str | None] = mapped_column(String(11), nullable=True)
+    pis: Mapped[str | None] = mapped_column(String(11), nullable=True)
+    cargo: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    admissao: Mapped[date | None] = mapped_column(Date, nullable=True)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True, unique=True)
+    jornada: Mapped[list | None] = mapped_column(JSON, nullable=True)        # minutos previstos seg..dom
+    tolerancia_min: Mapped[int] = mapped_column(Integer, default=10)          # CLT art. 58 §1º
+    banco_inicio: Mapped[date | None] = mapped_column(Date, nullable=True)    # início da contagem do banco
+    banco_saldo_inicial: Mapped[int] = mapped_column(Integer, default=0)      # minutos
+    exige_local: Mapped[bool] = mapped_column(Boolean, default=True)         # sinaliza batida fora dos locais
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    usuario = relationship("Usuario", backref=backref("funcionario_rh", uselist=False))
+
+    @property
+    def jornada_ok(self):
+        j = list(self.jornada or JORNADA_PADRAO)
+        return (j + [0] * 7)[:7]
+
+    @property
+    def cpf_fmt(self):
+        c = self.cpf or ""
+        return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}" if len(c) == 11 else c
+
+    @property
+    def carga_semanal(self):
+        return sum(self.jornada_ok)
+
+
+class LocalPonto(Base):
+    """Locais onde a batida é considerada 'no local' (sede, unidades de clientes)."""
+    __tablename__ = "rh_locais"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    latitude: Mapped[float] = mapped_column()
+    longitude: Mapped[float] = mapped_column()
+    raio_m: Mapped[int] = mapped_column(Integer, default=200)
+    unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id"), nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    unidade = relationship("Unidade")
+
+
+class Marcacao(Base):
+    __tablename__ = "rh_marcacoes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nsr: Mapped[int] = mapped_column(Integer, unique=True, index=True)        # número sequencial do registro
+    funcionario_id: Mapped[int] = mapped_column(ForeignKey("rh_funcionarios.id"), index=True)
+    momento: Mapped[datetime] = mapped_column(DateTime, index=True)           # horário do servidor (local)
+    origem: Mapped[str] = mapped_column(String(12), default="registro")       # registro / ajuste / admin
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
+    precisao_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    local_id: Mapped[int | None] = mapped_column(ForeignKey("rh_locais.id"), nullable=True)
+    distancia_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fora_local: Mapped[bool] = mapped_column(Boolean, default=False)
+    sem_localizacao: Mapped[bool] = mapped_column(Boolean, default=False)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agente: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    desconsiderada: Mapped[bool] = mapped_column(Boolean, default=False)
+    hash: Mapped[str | None] = mapped_column(String(64), nullable=True)       # encadeado com a marcação anterior
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    funcionario = relationship("Funcionario")
+    local = relationship("LocalPonto")
+
+    @property
+    def mapa(self):
+        if self.latitude is None:
+            return ""
+        return f"https://www.google.com/maps?q={self.latitude:.6f},{self.longitude:.6f}"
+
+
+class AjustePonto(Base):
+    __tablename__ = "rh_ajustes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    funcionario_id: Mapped[int] = mapped_column(ForeignKey("rh_funcionarios.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(15))
+    data: Mapped[date] = mapped_column(Date)
+    hora: Mapped[time | None] = mapped_column(Time, nullable=True)            # marcação a incluir
+    minutos: Mapped[int | None] = mapped_column(Integer, nullable=True)       # abono parcial (None = dia todo)
+    marcacao_id: Mapped[int | None] = mapped_column(ForeignKey("rh_marcacoes.id"), nullable=True)
+    motivo: Mapped[str] = mapped_column(Text)
+    anexo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default="pendente")
+    resposta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    solicitado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    decidido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    decidido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    funcionario = relationship("Funcionario")
+    marcacao = relationship("Marcacao", foreign_keys=[marcacao_id])
+    decidido_por = relationship("Usuario", foreign_keys=[decidido_por_id])
+
+    @property
+    def tipo_rotulo(self):
+        return TIPOS_AJUSTE.get(self.tipo, self.tipo)
+
+
+class Feriado(Base):
+    __tablename__ = "rh_feriados"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    data: Mapped[date] = mapped_column(Date, unique=True)
+    nome: Mapped[str] = mapped_column(String(120))
+
+
+class LancamentoBanco(Base):
+    """Lançamento manual no banco de horas (folga compensada, horas pagas, saldo anterior)."""
+    __tablename__ = "rh_banco"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    funcionario_id: Mapped[int] = mapped_column(ForeignKey("rh_funcionarios.id"), index=True)
+    data: Mapped[date] = mapped_column(Date)
+    minutos: Mapped[int] = mapped_column(Integer)                             # + crédito / − débito
+    descricao: Mapped[str] = mapped_column(String(200))
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EspelhoPonto(Base):
+    """Fechamento mensal: o funcionário confere e assina o espelho."""
+    __tablename__ = "rh_espelhos"
+    __table_args__ = (UniqueConstraint("funcionario_id", "mes"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    funcionario_id: Mapped[int] = mapped_column(ForeignKey("rh_funcionarios.id"), index=True)
+    mes: Mapped[str] = mapped_column(String(7))                               # AAAA-MM
+    resumo: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    hash: Mapped[str] = mapped_column(String(64))
+    fechado_em: Mapped[datetime] = mapped_column(DateTime)
+    fechado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    assinado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    assinado_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    assinado_agente: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)       # ressalva do funcionário
+    funcionario = relationship("Funcionario")

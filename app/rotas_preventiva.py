@@ -126,7 +126,8 @@ def agenda(request: Request, mes: str = "", tecnico: str = "", cliente: str = ""
     for a in db.scalars(st).all():
         ch = a.chamado
         add(a.data, {"hora": a.hora, "tipo": "preventiva" if ch.origem == "preventiva" else "chamado",
-                     "titulo": f"{ch.numero_fmt} · {ch.unidade.nome_curto}", "detalhe": a.descricao,
+                     "titulo": f"{ch.numero_fmt} · {ch.unidade.nome_curto}",
+                     "detalhe": f"{ch.titulo} — {a.descricao}" if ch.origem == "preventiva" else a.descricao,
                      "tecnico": ch.tecnico.nome if ch.tecnico else "", "link": f"/chamados/{ch.numero}"})
     sp = select(PlanoPreventiva).join(Unidade).where(PlanoPreventiva.ativo) \
         .options(selectinload(PlanoPreventiva.unidade), selectinload(PlanoPreventiva.tecnico))

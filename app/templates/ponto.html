@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "_macros.html" import marcas with context %}
+{% block titulo %}Meu ponto{% endblock %}
+{% block conteudo %}
+{% if not fu %}
+<div class="card" style="max-width:620px">
+  <h1>Meu ponto</h1>
+  <p class="muted">Seu usuário ainda não está ligado a um cadastro de funcionário. Peça ao administrador para ligar em
+    <b>RH → Funcionários</b>.</p>
+</div>
+{% else %}
+<div class="cab">
+  <div><h1>Meu ponto</h1><div class="muted">{{ fu.nome }}{% if fu.cargo %} · {{ fu.cargo }}{% endif %}</div></div>
+</div>
+
+<div class="grid2" style="align-items:start">
+  <div class="card relogio-ponto">
+    <div class="hora" id="relogio">{{ agora_srv.strftime('%H:%M:%S') }}</div>
+    <div class="data">{{ DIAS_SEMANA[hoje.weekday()] }}, {{ hoje|data }}{% if hoje_dia.feriado %} · {{ hoje_dia.feriado }}{% endif %}</div>
+    <form method="post" action="/ponto/registrar" id="form-ponto">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="latitude"><input type="hidden" name="longitude"><input type="hidden" name="precisao">
+      <button type="submit" class="btn btn-ponto" id="btn-ponto">⏱ Registrar {{ proxima|lower }}</button>
+    </form>
+    <div class="gps" id="gps">A localização é pedida no momento do registro.</div>
+    <div style="margin-top:16px">{% if hoje_dia.marcacoes %}<div class="muted" style="margin-bottom:4px">Hoje</div>{{ marcas(hoje_dia) }}
+      {% else %}<span class="muted">Nenhuma marcação hoje.</span>{% endif %}</div>
+  </div>
+  <div>
+    <div class="cards fin" style="grid-template-columns:1fr 1fr">
+      <a href="#mes" style="--c:{{ '#1E7B45' if banco >= 0 else '#B3261E' }}"><b>{{ fmt_min(banco, True) }}</b><span>Banco de horas (até ontem)</span></a>
+      <a href="#mes" style="--c:#1F5FA8"><b>{{ fmt_min(hoje_dia.trabalhado) }}</b><span>Trabalhado hoje · previsto {{ fmt_min(hoje_dia.jornada if not hoje_dia.feriado else 0) }}</span></a>
+    </div>
+    {% for e in espelhos if not e.assinado_em %}
+    <form class="card validar" method="post" action="/ponto/espelho/{{ e.id }}/assinar" id="espelhos">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <h2 style="margin-top:0">Espelho de {{ e.mes[5:] }}/{{ e.mes[:4] }} para assinar</h2>
+      <p class="muted" style="margin-top:0">Confira as marcações no PDF antes de assinar.
+        <a href="/ponto/espelho/{{ e.mes }}.pdf" target="_blank">Abrir espelho (PDF)</a></p>
+      <div class="campo"><label>Ressalva <span class="muted">(opcional — se discordar de algo, escreva aqui)</span></label>
+        <textarea name="observacao" rows="2"></textarea></div>
+      <label class="check"><input type="checkbox" name="concordo" value="1" style="width:auto" required> <span>Conferi as marcações e confirmo este espelho de ponto</span></label>
+      <button class="btn">Assinar eletronicamente</button>
+    </form>
+    {% endfor %}
+    <div class="card"><h2 style="margin-top:0">Precisa corrigir algo?</h2>
+      <p class="muted" style="margin-top:0">Esqueceu de bater, teve atestado ou bateu duas vezes: <a href="#ajuste">solicite um ajuste</a> — o RH aprova.</p></div>
+  </div>
+</div>
+
+<div class="card" id="mes" style="padding:0;overflow:hidden">
+  <div class="cab" style="padding:16px 18px 0">
+    <h2 style="margin:0">{{ titulo_mes }}</h2>
+    <div class="acoes-orc"><a class="btn peq sec" href="?mes={{ ant }}#mes">‹ Anterior</a>{% if prox %}<a class="btn peq sec" href="?mes={{ prox }}#mes">Próximo ›</a>{% endif %}
+      <a class="btn peq sec" href="/ponto/espelho/{{ mes }}.pdf" target="_blank">PDF</a></div>
+  </div>
+  {% if tot %}<div class="muted" style="padding:6px 18px 10px">Trabalhado {{ fmt_min(tot.trabalhado) }} de {{ fmt_min(tot.previsto) }} previstas ·
+    saldo do mês <b class="{{ 'saldo-pos' if tot.saldo > 0 else ('saldo-neg' if tot.saldo < 0 else '') }}">{{ fmt_min(tot.saldo, True) }}</b>{% if tot.faltas %} · {{ tot.faltas }} falta(s){% endif %}</div>{% endif %}
+  {% if dias %}
+  <table class="resp">
+    <thead><tr><th>Dia</th><th>Marcações</th><th>Trabalhado</th><th>Saldo</th><th>Ocorrências</th></tr></thead>
+    <tbody>{% for x in dias %}
+    <tr class="{{ 'fds' if x.data.weekday() >= 5 or x.feriado }} {{ 'falta' if x.falta }}">
+      <td data-l="Dia"><b>{{ x.data.strftime('%d/%m') }}</b> <span class="muted">{{ DIAS_SEMANA[x.data.weekday()][:3] }}</span></td>
+      <td data-l="Marcações">{{ marcas(x) if x.marcacoes else '—' }}</td>
+      <td data-l="Trabalhado">{{ fmt_min(x.trabalhado) if x.trabalhado else '—' }}</td>
+      <td data-l="Saldo">{% if x.passado and x.saldo %}<span class="{{ 'saldo-pos' if x.saldo > 0 else 'saldo-neg' }}">{{ fmt_min(x.saldo, True) }}</span>{% else %}—{% endif %}</td>
+      <td data-l="Ocorrências">{% if x.situacao %}<span class="muted">{{ x.situacao }}</span>{% endif %}
+        {% for f in x.flags %}<span class="tag alerta">{{ f }}</span> {% endfor %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="vazio">Sem dias neste mês ainda.</p>{% endif %}
+</div>
+
+<div class="grid2" style="align-items:start">
+<form class="card" method="post" action="/ponto/ajuste" enctype="multipart/form-data" id="ajuste">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2 style="margin-top:0">Solicitar ajuste</h2>
+  <div class="grid2">
+    <div class="campo"><label>O que aconteceu</label><select name="tipo" id="aj-tipo">{% for k, v in TIPOS_AJUSTE.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Dia</label><input type="date" name="data" id="aj-data" required max="{{ hoje.isoformat() }}" value="{{ hoje.isoformat() }}"></div>
+  </div>
+  <div class="campo" data-aj="marcacao"><label>Horário que deveria ter batido</label><input type="time" name="hora"></div>
+  <div class="campo" data-aj="abono" hidden><label>Horas a abonar <span class="muted">(deixe vazio para o dia inteiro)</span></label><input name="minutos" placeholder="ex.: 2:30"></div>
+  <div class="campo" data-aj="desconsiderar" hidden><label>Marcação a desconsiderar</label><select name="marcacao_id" id="aj-marc"><option value="">Escolha…</option>
+    {% for x in dias %}{% for m in x.marcacoes if m.origem == 'registro' %}<option value="{{ m.id }}" data-dia="{{ x.data.isoformat() }}">{{ x.data.strftime('%d/%m') }} às {{ m.momento.strftime('%H:%M') }}</option>{% endfor %}{% endfor %}</select></div>
+  <div class="campo"><label>Motivo</label><textarea name="motivo" rows="2" required placeholder="Ex.: esqueci de bater a saída; atestado médico; batida em duplicidade"></textarea></div>
+  <div class="campo"><label>Anexo <span class="muted">(opcional — foto ou PDF do atestado)</span></label><input type="file" name="anexo" accept="image/*,application/pdf"></div>
+  <button class="btn">Enviar para o RH</button>
+</form>
+<div class="card" id="ajustes"><h2 style="margin-top:0">Minhas solicitações</h2>
+  {% for a in ajustes %}
+  <div class="linha-lista"><span><b>{{ a.data|data }}</b> · {{ a.tipo_rotulo }}{% if a.hora %} às {{ a.hora.strftime('%H:%M') }}{% endif %}
+    <br><span class="muted">{{ a.motivo }}{% if a.resposta %} — RH: {{ a.resposta }}{% endif %}</span></span>
+    <span class="situ {{ {'pendente': 'laranja', 'aprovado': 'verde', 'recusado': 'vermelho'}[a.status] }}">{{ STATUS_AJUSTE[a.status] }}</span></div>
+  {% else %}<p class="muted">Nenhuma solicitação.</p>{% endfor %}
+  {% if espelhos %}<h2>Espelhos</h2>
+  {% for e in espelhos %}<div class="linha-lista"><a href="/ponto/espelho/{{ e.mes }}.pdf" target="_blank">{{ e.mes[5:] }}/{{ e.mes[:4] }}</a>
+    <span class="situ {{ 'verde' if e.assinado_em else 'laranja' }}">{{ ('Assinado em ' ~ e.assinado_em.strftime('%d/%m')) if e.assinado_em else 'Aguardando sua assinatura' }}</span></div>{% endfor %}{% endif %}
+</div>
+</div>
+
+<script>
+(function () {
+  var dif = new Date('{{ agora_srv.isoformat() }}').getTime() - Date.now(), rel = document.getElementById('relogio');
+  function tic() { var d = new Date(Date.now() + dif); rel.textContent = d.toTimeString().slice(0, 8); }
+  setInterval(tic, 1000); tic();
+  var f = document.getElementById('form-ponto'), b = document.getElementById('btn-ponto'), g = document.getElementById('gps'), enviando = false;
+  f.addEventListener('submit', function (e) {
+    if (enviando) return; e.preventDefault();
+    b.disabled = true; g.className = 'gps'; g.textContent = 'Obtendo sua localização…';
+    function enviar() { enviando = true; f.submit(); }
+    if (!navigator.geolocation) { if (confirm('Este aparelho não fornece localização. Registrar mesmo assim?')) enviar(); else b.disabled = false; return; }
+    navigator.geolocation.getCurrentPosition(function (p) {
+      f.latitude.value = p.coords.latitude; f.longitude.value = p.coords.longitude; f.precisao.value = Math.round(p.coords.accuracy);
+      g.className = 'gps ok'; g.textContent = 'Localização obtida (precisão de ' + Math.round(p.coords.accuracy) + ' m). Registrando…';
+      enviar();
+    }, function (err) {
+      g.className = 'gps ruim';
+      g.textContent = err.code === 1 ? 'Você bloqueou a localização no navegador.' : 'Não foi possível obter a localização.';
+      if (confirm(g.textContent + ' O registro vai ficar marcado como "sem localização". Registrar mesmo assim?')) enviar();
+      else b.disabled = false;
+    }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+  });
+  var tipo = document.getElementById('aj-tipo'), dia = document.getElementById('aj-data'), marc = document.getElementById('aj-marc');
+  function mostrar() {
+    document.querySelectorAll('[data-aj]').forEach(function (el) { el.hidden = el.dataset.aj !== tipo.value; });
+    Array.prototype.forEach.call(marc.options, function (o) { if (o.value) o.hidden = o.dataset.dia !== dia.value; });
+  }
+  tipo.addEventListener('change', mostrar); dia.addEventListener('change', mostrar); mostrar();
+})();
+</script>
+{% endif %}
+{% endblock %}
