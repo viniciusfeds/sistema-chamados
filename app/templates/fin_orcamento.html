@@ -123,8 +123,8 @@
   <div class="acoes-orc" style="margin:10px 0">
     <button type="button" class="btn peq sec" id="add-servico">+ Serviço</button>
     <button type="button" class="btn peq sec" id="add-produto">+ Produto</button>
-    {% if catalogo %}<select id="add-cat" style="max-width:340px"><option value="">+ Do catálogo…</option>
-      {% for c in catalogo %}<option value="{{ c.id }}">{{ TIPOS_ITEM[c.tipo] }} · {{ c.descricao }} · {{ c.preco|brl }}</option>{% endfor %}</select>
+    {% if catalogo %}<input id="add-busca" type="search" autocomplete="off" placeholder="🔍 Buscar no catálogo: digite o nome ou código…"
+      style="max-width:380px;flex:1" aria-label="Buscar item do catálogo">
     {% else %}<a class="muted" href="/financeiro/catalogo">Cadastre produtos e serviços no catálogo para incluir mais rápido</a>{% endif %}
   </div>
   {% endif %}
@@ -162,6 +162,19 @@
 </div>
 {% endif %}
 
+<style>
+.ac-lista{position:fixed;z-index:60;background:var(--card,#fff);border:1px solid var(--linha,#ddd);border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.14);max-height:320px;overflow:auto;padding:4px;min-width:280px}
+.ac-item{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:14px;line-height:1.3}
+.ac-item:hover,.ac-item.sel{background:var(--realce,#fff1e8)}
+.ac-item .ac-desc{flex:1;min-width:0}
+.ac-item .ac-desc small{display:block;color:var(--muted,#777);font-size:12px}
+.ac-item .ac-preco{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.ac-item mark{background:none;color:var(--laranja,#e8590c);font-weight:700;padding:0}
+.ac-tag{font-size:11px;padding:2px 7px;border-radius:20px;background:#eef2ff;color:#3949ab;white-space:nowrap}
+.ac-tag.produto{background:#e8f5e9;color:#2e7d32}
+.ac-vazio{padding:10px;color:var(--muted,#777);font-size:13px}
+</style>
 <script>
 (function () {
   var CAT = {{ catalogo_dados|default({})|tojson }};
@@ -236,10 +249,101 @@
   document.getElementById('form-orc').addEventListener('input', calc);
   document.getElementById('form-orc').addEventListener('change', calc);
   tb.addEventListener('click', function (e) { if (e.target.classList.contains('btn-x') && !travado) { e.target.closest('tr').remove(); calc(); } });
-  var a1 = document.getElementById('add-servico'), a2 = document.getElementById('add-produto'), ac = document.getElementById('add-cat');
+  var a1 = document.getElementById('add-servico'), a2 = document.getElementById('add-produto'), ac = document.getElementById('add-busca');
   if (a1) a1.onclick = function () { linha('servico'); };
   if (a2) a2.onclick = function () { linha('produto'); };
-  if (ac) ac.onchange = function () { var c = CAT[ac.value]; if (c) linha(c.tipo, c.descricao, '1', c.unidade, c.preco, ac.value, c.custo, c.margem); ac.value = ''; };
+  // ---------- busca no catálogo enquanto digita (campo de adicionar e descrição de cada linha)
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  var LISTA = Object.keys(CAT).map(function (id) { var c = CAT[id]; return {id: id, c: c, n: norm(c.descricao), k: norm(c.codigo)}; });
+  function buscar(txt) {
+    var ps = norm(txt).split(/\s+/).filter(Boolean); if (!ps.length) return [];
+    var r = LISTA.filter(function (x) { return ps.every(function (p) { return x.n.indexOf(p) >= 0 || x.k.indexOf(p) >= 0; }); });
+    r.sort(function (a, b) { var p = ps[0], sa = (a.n.indexOf(p) === 0 || a.k === p) ? 0 : 1, sb = (b.n.indexOf(p) === 0 || b.k === p) ? 0 : 1;
+      return sa - sb || a.n.localeCompare(b.n); });
+    return r.slice(0, 10);
+  }
+  function destacar(texto, txt) {
+    var h = esc(texto), ps = norm(txt).split(/\s+/).filter(Boolean), n = norm(texto), marcas = [];
+    ps.forEach(function (p) { var i = n.indexOf(p); if (i >= 0) marcas.push([i, i + p.length]); });
+    if (!marcas.length) return h;
+    marcas.sort(function (a, b) { return a[0] - b[0]; });
+    var out = '', pos = 0;
+    marcas.forEach(function (m) { if (m[0] < pos) return; out += esc(texto.slice(pos, m[0])) + '<mark>' + esc(texto.slice(m[0], m[1])) + '</mark>'; pos = m[1]; });
+    return out + esc(texto.slice(pos));
+  }
+  var caixa = document.createElement('div'); caixa.className = 'ac-lista'; caixa.hidden = true; caixa.setAttribute('role', 'listbox');
+  document.body.appendChild(caixa);
+  var alvo = null, achados = [], sel = -1, aoEscolher = null;
+  function fechar() { caixa.hidden = true; alvo = null; achados = []; sel = -1; }
+  function posicionar() {
+    if (!alvo) return; var r = alvo.getBoundingClientRect();
+    caixa.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Math.max(r.width, 300) - 8)) + 'px';
+    caixa.style.width = Math.max(r.width, 300) + 'px';
+    var baixo = window.innerHeight - r.bottom;
+    if (baixo < 220 && r.top > baixo) { caixa.style.top = ''; caixa.style.bottom = (window.innerHeight - r.top + 4) + 'px'; }
+    else { caixa.style.bottom = ''; caixa.style.top = (r.bottom + 4) + 'px'; }
+  }
+  function mostrar(el, txt, cb, vazio) {
+    alvo = el; aoEscolher = cb; achados = buscar(txt); sel = achados.length ? 0 : -1;
+    if (!achados.length && !vazio) { caixa.hidden = true; return; }
+    caixa.innerHTML = achados.length ? achados.map(function (x, i) {
+      var c = x.c;
+      return '<div class="ac-item' + (i === sel ? ' sel' : '') + '" data-i="' + i + '" role="option">' +
+        '<span class="ac-tag ' + c.tipo + '">' + (c.tipo === 'produto' ? 'Produto' : 'Serviço') + '</span>' +
+        '<span class="ac-desc">' + destacar(c.descricao, txt) + (c.codigo ? '<small>Cód. ' + destacar(c.codigo, txt) + ' · ' + esc(c.unidade) + '</small>' : '<small>' + esc(c.unidade) + '</small>') + '</span>' +
+        '<span class="ac-preco">R$ ' + esc(c.preco) + '</span></div>';
+    }).join('') : '<div class="ac-vazio">' + vazio + '</div>';
+    caixa.hidden = false; posicionar();
+  }
+  function marcar(i) {
+    sel = i; caixa.querySelectorAll('.ac-item').forEach(function (d, j) { d.classList.toggle('sel', j === i); if (j === i) d.scrollIntoView({block: 'nearest'}); });
+  }
+  function escolher(i) { var x = achados[i]; if (!x || !aoEscolher) return; var cb = aoEscolher, el = alvo; fechar(); cb(x.id, x.c, el); }
+  caixa.addEventListener('mousedown', function (e) { var d = e.target.closest('.ac-item'); if (d) { e.preventDefault(); escolher(+d.dataset.i); } });
+  function teclas(e) {
+    if (caixa.hidden || alvo !== e.target) return false;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (achados.length) marcar((sel + 1) % achados.length); return true; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); if (achados.length) marcar((sel - 1 + achados.length) % achados.length); return true; }
+    if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); escolher(sel); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); fechar(); return true; }
+    return false;
+  }
+  window.addEventListener('resize', posicionar);
+  window.addEventListener('scroll', posicionar, true);
+  document.addEventListener('focusout', function (e) { if (e.target === alvo) setTimeout(function () { if (document.activeElement !== alvo) fechar(); }, 120); });
+  function preencher(tr, id, c) {
+    tr.querySelector('[name=item_tipo]').value = c.tipo; tr.querySelector('[name=item_cat]').value = id;
+    tr.querySelector('[name=item_desc]').value = c.descricao; tr.querySelector('[name=item_un]').value = c.unidade;
+    tr.querySelector('[name=item_valor]').value = c.preco;
+    tr.querySelector('[name=item_custo]').value = c.custo || ''; tr.querySelector('[name=item_margem]').value = c.margem || '';
+    var q = tr.querySelector('[name=item_qtd]'); if (!q.value.trim()) q.value = '1';
+    calc(); q.focus(); q.select();
+  }
+  if (ac) {
+    ac.addEventListener('input', function () {
+      var t = ac.value.trim();
+      if (t.length < 1) { fechar(); return; }
+      mostrar(ac, t, function (id, c) {
+        ac.value = '';
+        var vazia = Array.prototype.find.call(tb.children, function (tr) {     // reaproveita linha em branco
+          return !tr.querySelector('[name=item_desc]').value.trim() && !tr.querySelector('[name=item_valor]').value.trim(); });
+        if (vazia) { preencher(vazia, id, c); return; }
+        linha(c.tipo, c.descricao, '1', c.unidade, c.preco, id, c.custo, c.margem);
+        var q = tb.lastElementChild.querySelector('[name=item_qtd]'); q.focus(); q.select(); },
+        'Nada no catálogo com “' + esc(t) + '”. Use <b>+ Serviço</b> ou <b>+ Produto</b> para um item avulso.');
+    });
+    ac.addEventListener('focus', function () { if (ac.value.trim()) ac.dispatchEvent(new Event('input')); });
+    ac.addEventListener('keydown', function (e) { if (!teclas(e) && e.key === 'Enter') e.preventDefault(); });
+  }
+  if (LISTA.length && !travado) {
+    tb.addEventListener('input', function (e) {
+      var el = e.target; if (el.name !== 'item_desc') return;
+      var t = el.value.trim(); if (t.length < 2) { if (alvo === el) fechar(); return; }
+      mostrar(el, t, function (id, c, campo) { preencher(campo.closest('tr'), id, c); });
+    });
+    tb.addEventListener('keydown', function (e) { if (e.target.name === 'item_desc') teclas(e); });
+  }
   if (!tb.children.length && !travado) linha('servico');
   calc();
 })();

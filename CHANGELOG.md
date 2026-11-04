@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.15.1 — 2026-11-03
+- **Orçamento: busca no catálogo enquanto digita.** O campo “Buscar no catálogo” e a descrição de cada item mostram a
+  lista dos produtos e serviços cadastrados que batem com as letras digitadas (nome ou código, sem diferenciar
+  acentos e maiúsculas, várias palavras em qualquer ordem). Setas ↑/↓ e Enter escolhem; Esc fecha. Ao escolher, a
+  linha é preenchida com tipo, unidade, preço, custo e margem e o cursor vai para a quantidade; uma linha em branco é
+  reaproveitada
+
 ## 1.15.0 — 2026-11-03
 - **Acesso do técnico** (Administração → Usuários → Opções, e no cadastro de novo usuário):
   - **Ver só os chamados atribuídos a ele(a)**: painel, busca, relatório, agenda e preventivas mostram apenas os

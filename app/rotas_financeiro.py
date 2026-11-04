@@ -125,7 +125,7 @@ def orc_lista(request: Request, status: str = "", cliente: str = "", q: str = ""
 def _editor(request, u, db, o, **extra):
     catalogo = db.scalars(select(ItemCatalogo).where(ItemCatalogo.ativo).order_by(ItemCatalogo.descricao)).all()
     unidades = db.scalars(select(Unidade).join(Cliente).where(Unidade.ativa).order_by(Cliente.nome, Unidade.nome)).all()
-    dados = {str(c.id): {"tipo": c.tipo, "descricao": c.descricao, "unidade": c.unidade,
+    dados = {str(c.id): {"tipo": c.tipo, "descricao": c.descricao, "unidade": c.unidade, "codigo": c.codigo or "",
                          "preco": brl(c.preco, simbolo=False),
                          "custo": brl(c.custo, simbolo=False) if c.custo is not None else "",
                          "margem": financeiro.qtd_fmt(c.margem) if c.margem is not None else ""} for c in catalogo}
