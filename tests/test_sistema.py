@@ -1956,3 +1956,63 @@ def entrar_em(email, destino="/"):
     r = c.post("/login", data={"email": email, "senha": "senha12345", "next": "/", "csrf": tok}, follow_redirects=False)
     assert r.status_code == 303
     return c
+
+
+# ------------------------------------------------------------------ validação pelo zelador com assinatura no local
+def _rubrica_png():
+    import base64
+    from io import BytesIO as B
+    from PIL import Image, ImageDraw
+    im = Image.new("RGBA", (600, 180), (0, 0, 0, 0))
+    ImageDraw.Draw(im).line([(40, 120), (200, 40), (380, 140), (560, 60)], fill=(20, 40, 80, 255), width=8)
+    buf = B(); im.save(buf, "PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def test_validado_pelo_zelador_com_assinatura():
+    import subprocess
+    from app import regras
+    from app.models import VALIDADO_LOCAL, Acao
+    c = entrar("tec@t.com")
+    tok = _csrf(c.get("/chamados/novo").text)
+    r = c.post("/chamados/novo", data={"assunto": "Interfone do bloco B", "problema": "Mudo", "csrf": tok,
+                                       "unidade_id": str(IDS["torre"])}, follow_redirects=False)
+    url = r.headers["location"]
+    pag = c.get(url).text
+    assert VALIDADO_LOCAL in pag and 'id="box-zelador"' in pag
+    c.post(f"{url}/acoes", data={"csrf": tok, "descricao": "Troca do módulo", "status": "Aguardando validação"})
+    c.post(f"{url}/acoes", data={"csrf": tok, "descricao": "Visita de hoje", "status": "Agendado",
+                                 "data": date.today().isoformat()})
+    # sem assinatura: recusa
+    r = c.post(f"{url}/acoes", data={"csrf": tok, "descricao": "Conferido", "status": VALIDADO_LOCAL,
+                                     "validador_nome": "José da Silva", "assinatura_local": ""})
+    assert "assinar no quadro" in r.text
+    r = c.post(f"{url}/acoes", data={"csrf": tok, "descricao": "Conferido", "status": VALIDADO_LOCAL,
+                                     "validador_nome": "Jo", "assinatura_local": _rubrica_png()})
+    assert "nome de quem está validando" in r.text
+    r = c.post(f"{url}/acoes", data={"csrf": tok, "descricao": "Serviço conferido e validado no local",
+                                     "status": VALIDADO_LOCAL, "validador_nome": "José da Silva",
+                                     "validador_funcao": "Zelador", "validador_documento": "12.345.678-9",
+                                     "assinatura_local": _rubrica_png(), "validacao_lat": "-23.45",
+                                     "validacao_lng": "-46.53", "data": "", "hora": ""})
+    assert "Ação registrada" in r.text and "José da Silva" in r.text and "ver no mapa" in r.text
+    numero = int(url.rsplit("/", 1)[1])
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == numero))
+        assert regras.status_geral(ch) == "concluido"
+        val = next(a for a in ch.acoes if a.status == VALIDADO_LOCAL)
+        assert val.validacao_assinatura.startswith("data:image/png;base64,") and val.data and val.validacao_lat == -23.45
+        assert not any(a.status == "Aguardando validação" for a in ch.acoes)
+        token, vid = ch.token_publico, val.id
+    pdf = c.get(f"{url}/pdf").content
+    txt = subprocess.run(["pdftotext", "-", "-"], input=pdf, capture_output=True).stdout.decode()
+    assert "Validação no local" in txt and "José da Silva" in txt and "12.345.678-9" in txt
+    pub = TestClient(app).get(f"/acompanhar/{token}").text
+    assert "José da Silva" in pub and "ver no mapa" not in pub
+    # editar para outro status descarta a assinatura; voltar exige nova assinatura
+    c.post(f"{url}/acoes/{vid}", data={"csrf": tok, "operacao": "salvar", "descricao": "x", "status": "Concluído"})
+    with SessionLocal() as db:
+        a = db.get(Acao, vid)
+        assert a.validacao_assinatura is None and a.validador_nome is None
+    r = c.post(f"{url}/acoes/{vid}", data={"csrf": tok, "operacao": "salvar", "descricao": "x", "status": VALIDADO_LOCAL})
+    assert "precisa da assinatura" in r.text

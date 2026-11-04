@@ -18,6 +18,16 @@
 <span class="selo" style="background:{{ cor(st) }}">{{ rotulo(st) }}</span>
 {%- endmacro %}
 
+{% macro bloco_validacao(a) -%}
+{% if a.validada_no_local %}
+<div class="val-local">
+  <img src="{{ a.validacao_assinatura }}" alt="Assinatura de {{ a.validador_nome }}">
+  <div><b>{{ a.validador_nome }}</b> · {{ a.validador_funcao }}{% if a.validador_documento %} · doc. {{ a.validador_documento }}{% endif %}
+    <div class="muted">Assinado no local{% if a.validacao_em %} em {{ a.validacao_em|local }}{% endif %}{% if a.validacao_mapa and u and u.equipe %} · <a href="{{ a.validacao_mapa }}" target="_blank" rel="noopener">ver no mapa</a>{% endif %}</div></div>
+</div>
+{% endif %}
+{%- endmacro %}
+
 {# Tabela de ações somente leitura (usada também na página pública) #}
 {% macro tabela_acoes(ch) -%}
 <table class="resp">
@@ -26,7 +36,7 @@
   {% for a in ch.acoes_ordenadas %}
   <tr>
     <td data-l="Data">{{ a.quando }}</td>
-    <td data-l="Ação">{{ a.descricao|fmt }}</td>
+    <td data-l="Ação">{{ a.descricao|fmt }}{{ bloco_validacao(a) }}</td>
     <td data-l="Status"><span class="st-acao" style="color:{{ COR_ACAO.get(a.status,'#2B2B2B') }}">{{ a.status }}</span></td>
   </tr>
   {% endfor %}

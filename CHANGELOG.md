@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 1.17.0 — 2026-11-04
+- **Novo status de ação: “Validado pelo zelador”.** Ao escolher, abre o quadro de **assinatura no local**: quem
+  recebeu o serviço (zelador, síndico, porteiro, gerente…) informa o nome, a função e, se quiser, o documento, e
+  assina com o dedo na tela do técnico
+  - grava data e hora, IP e a localização do aparelho; a assinatura aparece no chamado, na página de acompanhamento
+    do cliente e no **relatório em PDF** (seção “Validação no local”)
+  - a validação encerra a confirmação pendente (“Aguardando validação”) e as etapas agendadas/em andamento até hoje;
+    o chamado fica concluído se não houver outra etapa futura
+  - sem assinatura ou sem nome, não registra; trocar o status depois descarta a assinatura
+
 ## 1.16.0 — 2026-11-04
 - **Módulo de RH — controle de ponto** (menu RH → Controle de ponto)
   - **Meu ponto**: o funcionário registra entrada, intervalo e saída pelo celular ou computador; o horário é o do

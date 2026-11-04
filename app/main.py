@@ -22,7 +22,7 @@ from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocor
 from .auth import (PrecisaLogin, SoPonto, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
-from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
+from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, VALIDADO_LOCAL, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
                      Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
                      STATUS_OCORRENCIA, Agente, Ocorrencia, TipoChamado, Unidade, Usuario, nova_chave_agente,
                      novo_token)
@@ -56,7 +56,7 @@ async def _ajustes_atualizados(request, call_next):
     ajustes.atualizar_se_mudou()   # outro processo salvou as Configurações? recarrega (a cada 5 s no máximo)
     return await call_next(request)
 tpl = Jinja2Templates(directory=APP_DIR / "templates")
-tpl.env.globals.update(MODULOS_TECNICO=MODULOS_TECNICO, rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
+tpl.env.globals.update(MODULOS_TECNICO=MODULOS_TECNICO, VALIDADO_LOCAL=VALIDADO_LOCAL, rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
                        CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, EVENTOS_AVISO=EVENTOS_AVISO,
@@ -462,6 +462,8 @@ def baixar_pdf(numero: int, u: Usuario = Depends(usuario_atual), db: Session = D
 def nova_acao(request: Request, numero: int, descricao: str = Form(...), status: str = Form(...),
               data: str = Form(""), hora: str = Form(""), quando_texto: str = Form(""),
               fotos_enviadas: list[UploadFile] = File(default=[]),
+              validador_nome: str = Form(""), validador_funcao: str = Form(""), validador_documento: str = Form(""),
+              assinatura_local: str = Form(""), validacao_lat: str = Form(""), validacao_lng: str = Form(""),
               u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
     if status not in STATUS_ACAO or not descricao.strip():
@@ -469,6 +471,19 @@ def nova_acao(request: Request, numero: int, descricao: str = Form(...), status:
     antes = regras.status_geral(ch)
     acao = Acao(data=_data(data), hora=_hora(hora), descricao=descricao.strip(), status=status,
                 quando_texto=(quando_texto.strip() or None) if not data else None, autor_id=u.id)
+    if status == VALIDADO_LOCAL:
+        erro = _colher_validacao(request, acao, validador_nome, validador_funcao, validador_documento,
+                                 assinatura_local, validacao_lat, validacao_lng)
+        if erro:
+            flash(request, erro, "erro")
+            return voltar(f"/chamados/{numero}#nova-acao")
+        if not acao.data:
+            acao.data, acao.hora = agora().date(), agora().time().replace(second=0, microsecond=0)
+        hoje_ = agora().date()
+        for x in ch.acoes:          # a validação no local encerra a confirmação pendente e as etapas até hoje
+            if x.status == "Aguardando validação" or (x.status in ("Agendado", "Em andamento") and x.data
+                                                      and x.data <= hoje_):
+                x.status = "Concluído"
     ch.acoes.append(acao)
     _, erros = fotos.salvar_fotos(ch, fotos_enviadas, acao=acao, origem="equipe", autor_id=u.id)
     _apos_mudanca(ch, antes)
@@ -556,6 +571,12 @@ def editar_acao(request: Request, numero: int, acao_id: int, operacao: str = For
     else:
         if status not in STATUS_ACAO or not descricao.strip():
             raise HTTPException(400, "Preencha a ação e o status.")
+        if status == VALIDADO_LOCAL and not a.validacao_assinatura:
+            flash(request, "“Validado pelo zelador” precisa da assinatura no local: registre como nova ação.", "erro")
+            return voltar(f"/chamados/{numero}#nova-acao")
+        if status != VALIDADO_LOCAL and a.validacao_assinatura:
+            a.validacao_assinatura = a.validador_nome = a.validador_funcao = a.validador_documento = None
+            a.validacao_em = a.validacao_ip = a.validacao_lat = a.validacao_lng = None
         a.descricao, a.status = descricao.strip(), status
         a.data, a.hora = _data(data), _hora(hora)
         a.quando_texto = (quando_texto.strip() or None) if not data else None
@@ -565,6 +586,30 @@ def editar_acao(request: Request, numero: int, acao_id: int, operacao: str = For
     avisar_whatsapp(request, db, ch, antes)
     flash(request, msg)
     return voltar(f"/chamados/{numero}#acoes")
+
+
+def _colher_validacao(request, acao, nome, funcao, documento, imagem, lat, lng):
+    """Assinatura de quem recebeu o serviço no local (zelador, síndico…). Devolve mensagem de erro ou None."""
+    from .assinatura import ErroAssinatura, _validar_imagem
+    nome = " ".join(nome.split())
+    if len(nome) < 3:
+        return "Informe o nome de quem está validando o serviço."
+    try:
+        img = _validar_imagem(imagem)
+    except ErroAssinatura as e:
+        return str(e)
+    if not img:
+        return "Peça para a pessoa assinar no quadro antes de registrar."
+    acao.validador_nome, acao.validador_funcao = nome[:120], (" ".join(funcao.split()) or "Zelador")[:60]
+    acao.validador_documento = documento.strip()[:30] or None
+    acao.validacao_assinatura, acao.validacao_em, acao.validacao_ip = img, agora_utc(), _ip(request)
+    try:
+        la, lo = float(lat), float(lng)
+        if -90 <= la <= 90 and -180 <= lo <= 180:
+            acao.validacao_lat, acao.validacao_lng = la, lo
+    except ValueError:
+        pass
+    return None
 
 
 def _apos_mudanca(ch, antes):

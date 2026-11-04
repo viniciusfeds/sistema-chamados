@@ -425,3 +425,5 @@ tr.falta td{color:#B3261E}
 .jornada-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 .jornada-grid input{text-align:center}
 @media (max-width:700px){.jornada-grid{grid-template-columns:repeat(4,1fr)}.relogio-ponto .hora{font-size:2.6rem}.btn-ponto{min-width:0;width:100%}}
+.val-local{display:flex;gap:12px;align-items:center;margin-top:8px;padding:8px 10px;border:1px solid #BFE3D0;background:#F1FAF5;border-radius:10px;flex-wrap:wrap}
+.val-local img{height:54px;max-width:200px;object-fit:contain;background:#fff;border:1px solid #E2E2E2;border-radius:6px;padding:2px 6px}

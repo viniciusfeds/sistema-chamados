@@ -152,10 +152,15 @@ def pdf_chamado(ch) -> bytes:
         sSt = st("st2", fontName="Carlito-Bold", fontSize=10, leading=14)
         dados = [[Paragraph(c, sTh) for c in ("Data / Horário", "Ação", "Status")]]
         for a in ch.acoes_ordenadas:
-            dados.append([Paragraph(a.quando, sTd), Paragraph(para_pdf(a.descricao), sTd),
+            desc = para_pdf(a.descricao)
+            if a.validada_no_local:
+                desc += f"<br/><font size=8.5 color='#17694A'>Validado no local por {para_pdf(a.validador_nome)}" \
+                        f" ({para_pdf(a.validador_funcao or 'Zelador')}) — assinatura abaixo</font>"
+            dados.append([Paragraph(a.quando, sTd), Paragraph(desc, sTd),
                           Paragraph(f'<font color="{regras.COR_ACAO.get(a.status, "#2B2B2B")}">'
                                     f'{a.status}</font>', sSt)])
         E += [_tabela_laranja(dados, [36 * mm, LARG - 63 * mm, 27 * mm]), Spacer(1, 8)]
+        E += _bloco_validacoes(ch)
     else:
         E += [Paragraph("Nenhuma ação registrada ainda.", sCorpo), Spacer(1, 8)]
 
@@ -183,6 +188,49 @@ def pdf_chamado(ch) -> bytes:
                         Paragraph(f"Atenciosamente, <b>Equipe {config.EMPRESA_NOME}</b>", sCorpo)])]
     doc.build(E)
     return buf.getvalue()
+
+
+def _bloco_validacoes(ch):
+    """Assinaturas colhidas no local (status "Validado pelo zelador")."""
+    import base64
+    from datetime import timezone
+    from PIL import Image as PILImage
+    vals = [a for a in ch.acoes_ordenadas if a.validada_no_local]
+    if not vals:
+        return []
+    sN = st("vn", fontName="Carlito-Bold", fontSize=10.5, leading=13)
+    sI = st("vi", fontSize=9, leading=12, textColor=CINZA)
+    sD = st("vd", fontSize=9.5, leading=13, textColor=TEXTO)
+    out = []
+    for i, a in enumerate(vals):
+        try:
+            bruto = base64.b64decode(a.validacao_assinatura.split(",", 1)[1])
+            w, h = PILImage.open(BytesIO(bruto)).size
+            alt = 20 * mm
+            larg = min(70 * mm, alt * w / max(h, 1))
+            img = Image(BytesIO(bruto), width=larg, height=larg * h / max(w, 1))
+        except Exception:  # noqa: BLE001
+            img = Paragraph("(assinatura indisponível)", sI)
+        quando = a.validacao_em.replace(tzinfo=timezone.utc).astimezone(config.FUSO).strftime("%d/%m/%Y às %H:%M") \
+            if a.validacao_em else a.quando
+        info = [Paragraph(para_pdf(a.validador_nome), sN),
+                Paragraph(para_pdf(a.validador_funcao or "Zelador") +
+                          (f" · Documento {para_pdf(a.validador_documento)}" if a.validador_documento else ""), sI),
+                Spacer(1, 3),
+                Paragraph(f"Assinado no local em {quando}.", sI),
+                Spacer(1, 4),
+                Paragraph("“Conferi o serviço descrito neste relatório, realizado neste local, e confirmo que está "
+                          "funcionando.”", sD)]
+        t = Table([[img, info]], colWidths=[76 * mm, LARG - 76 * mm])
+        t.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#BFE3D0")),
+                               ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F4FBF7")),
+                               ("BACKGROUND", (0, 0), (0, 0), colors.white),
+                               ("LINEAFTER", (0, 0), (0, 0), 0.6, colors.HexColor("#BFE3D0")),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                               ("LEFTPADDING", (1, 0), (1, 0), 12)]))
+        out += [KeepTogether(([Paragraph("Validação no local", sSec)] if i == 0 else []) + [t]), Spacer(1, 6)]
+    return out + [Spacer(1, 4)]
 
 
 def _bloco_fotos(ch, maximo=9):

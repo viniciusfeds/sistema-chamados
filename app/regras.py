@@ -17,7 +17,8 @@ STATUS_GERAL = {
 ORDEM_STATUS = ["andamento", "pendente", "aberto", "agendado", "validacao", "concluido"]
 
 COR_ACAO = {"Concluído": "#2E7D4F", "Em andamento": "#B07A00", "Pendente": "#B3261E",
-            "Agendado": "#5B3A9E", "Aguardando": "#777777", "Aguardando validação": "#0E7C86"}
+            "Agendado": "#5B3A9E", "Aguardando": "#777777", "Aguardando validação": "#0E7C86",
+            "Validado pelo zelador": "#17694A"}
 
 TEXTO_PADRAO = {
     "andamento": "Atendimento em andamento. Avisaremos a cada etapa concluída.",
@@ -34,7 +35,7 @@ def status_geral(chamado) -> str:
     """Deriva o status geral a partir das ações:
     alguma em andamento -> andamento; alguma pendente -> pendente;
     alguma agendada -> agendado; alguma aguardando validação -> validacao; alguma aguardando -> aberto;
-    todas concluídas -> concluido."""
+    todas concluídas (ou validadas pelo zelador) -> concluido."""
     if getattr(chamado, "cancelado", False):
         return "cancelado"
     sts = [a.status for a in chamado.acoes]

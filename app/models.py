@@ -23,7 +23,9 @@ PRIORIDADES = {  # chave -> (rótulo, cor, ordem)
 }
 
 # Status de cada ação (linha da tabela "Ações")
-STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando", "Aguardando validação"]
+STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando", "Aguardando validação",
+               "Validado pelo zelador"]
+VALIDADO_LOCAL = "Validado pelo zelador"   # exige assinatura de quem recebeu o serviço, colhida no local
 VALIDACAO = "Aguardando validação"   # ação que espera o solicitante confirmar que ficou resolvido
 
 
@@ -216,13 +218,32 @@ class Acao(Base):
     hora: Mapped[time | None] = mapped_column(Time, nullable=True)
     quando_texto: Mapped[str | None] = mapped_column(String(60), nullable=True)  # ex.: "A agendar"
     descricao: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="Concluído")
+    status: Mapped[str] = mapped_column(String(30), default="Concluído")
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # validação no local (status "Validado pelo zelador")
+    validador_nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    validador_funcao: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    validador_documento: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    validacao_assinatura: Mapped[str | None] = mapped_column(Text, nullable=True)     # PNG em data URL
+    validacao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    validacao_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    validacao_lat: Mapped[float | None] = mapped_column(nullable=True)
+    validacao_lng: Mapped[float | None] = mapped_column(nullable=True)
 
     chamado = relationship("Chamado", back_populates="acoes")
     autor = relationship("Usuario")
     anexos = relationship("Anexo", back_populates="acao", order_by="Anexo.id")
+
+    @property
+    def validada_no_local(self):
+        return bool(self.status == VALIDADO_LOCAL and self.validacao_assinatura)
+
+    @property
+    def validacao_mapa(self):
+        if self.validacao_lat is None:
+            return ""
+        return f"https://www.google.com/maps?q={self.validacao_lat:.6f},{self.validacao_lng:.6f}"
 
     @property
     def quando(self):

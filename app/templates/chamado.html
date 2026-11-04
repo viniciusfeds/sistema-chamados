@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import bloco_validacao with context %}
 {% from "_macros.html" import select_unidades, caixa_status, copiar, prio, galeria, campo_fotos, tags, campo_tipos %}
 {% block titulo %}Ticket {{ ch.numero_fmt }}{% endblock %}
 {% block conteudo %}
@@ -127,7 +128,7 @@
     {% for a in ch.acoes_ordenadas %}
     <tr>
       <td data-l="Data">{{ a.quando }}</td>
-      <td data-l="Ação">{{ a.descricao|fmt }}</td>
+      <td data-l="Ação">{{ a.descricao|fmt }}{{ bloco_validacao(a) }}</td>
       <td data-l="Status"><span class="st-acao" style="color:{{ COR_ACAO.get(a.status,'#2B2B2B') }}">{{ a.status }}</span></td>
       {% if u.equipe %}<td><button type="button" class="btn peq sec" onclick="var r=document.getElementById('ed-{{ a.id }}');r.hidden=!r.hidden">Editar</button></td>{% endif %}
     </tr>
@@ -137,7 +138,8 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <div class="campo"><label>Ação</label><input name="descricao" value="{{ a.descricao }}" required></div>
         <div class="grid3">
-          <div class="campo"><label>Status</label><select name="status">{% for s in STATUS_ACAO %}<option {{ 'selected' if s == a.status }}>{{ s }}</option>{% endfor %}</select></div>
+          <div class="campo"><label>Status</label><select name="status">{% for s in STATUS_ACAO if s != VALIDADO_LOCAL or a.status == VALIDADO_LOCAL %}<option {{ 'selected' if s == a.status }}>{{ s }}</option>{% endfor %}</select>
+            {% if a.validada_no_local %}<div class="dica">Trocar o status descarta a assinatura colhida no local.</div>{% endif %}</div>
           <div class="campo"><label>Data</label><input type="date" name="data" value="{{ a.data.isoformat() if a.data }}"></div>
           <div class="campo"><label>Horário</label><input type="time" name="hora" value="{{ a.hora.strftime('%H:%M') if a.hora }}"></div>
         </div>
@@ -155,7 +157,7 @@
   {% else %}<p class="muted">Nenhuma ação registrada.</p>{% endif %}
 
   {% if u.equipe and not ch.cancelado %}
-  <form method="post" action="/chamados/{{ ch.numero }}/acoes" enctype="multipart/form-data" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:14px">
+  <form method="post" action="/chamados/{{ ch.numero }}/acoes" enctype="multipart/form-data" id="nova-acao" style="margin-top:16px;border-top:1px solid var(--linha);padding-top:14px">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <h3>Registrar nova ação</h3>
     <div class="campo"><label for="descricao">Ação realizada ou prevista</label>
@@ -168,9 +170,54 @@
     </div>
     <div class="dica" style="margin:-4px 0 10px">Para algo ainda sem data, apague a data e escreva, por exemplo, “A agendar”:
       <input name="quando_texto" placeholder="A agendar" style="max-width:220px;padding:5px 8px;margin-left:4px"></div>
+    <div class="card validar" id="box-zelador" hidden style="margin:6px 0 14px">
+      <h3 style="margin-top:0;color:#17694A">✍ Validação no local</h3>
+      <p class="muted" style="margin-top:0">Entregue o aparelho para quem recebeu o serviço conferir e assinar. Ao registrar, as etapas até hoje ficam <b>concluídas</b>
+        (só continua em aberto o que estiver agendado para outro dia) e a assinatura sai no relatório em PDF.</p>
+      <div class="grid3">
+        <div class="campo"><label>Nome de quem valida</label><input name="validador_nome" id="val-nome" autocomplete="off" placeholder="Nome completo"></div>
+        <div class="campo"><label>Função</label><input name="validador_funcao" list="funcoes-val" value="Zelador">
+          <datalist id="funcoes-val"><option>Zelador</option><option>Síndico</option><option>Porteiro</option><option>Gerente da unidade</option><option>Administrador do condomínio</option></datalist></div>
+        <div class="campo"><label>Documento <span class="muted">(opcional)</span></label><input name="validador_documento" placeholder="RG ou CPF"></div>
+      </div>
+      <label>Assinatura</label>
+      <canvas class="rubrica" width="600" height="180"></canvas>
+      <input type="hidden" name="assinatura_local" class="rubrica-dado">
+      <input type="hidden" name="validacao_lat"><input type="hidden" name="validacao_lng">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button type="button" class="btn peq sec limpar-rubrica">Limpar assinatura</button>
+        <span class="dica" id="val-gps"></span></div>
+      <p class="dica">Declaração: “Conferi o serviço descrito acima, realizado neste local, e confirmo que está funcionando.”</p>
+    </div>
     {{ campo_fotos(rotulo="Fotos desta ação") }}
-    <button class="btn">Registrar ação</button>
+    <button class="btn" id="btn-acao">Registrar ação</button>
   </form>
+  {% include "_rubrica.html" %}
+  <script>
+  (function () {
+    var f = document.getElementById('nova-acao'), st = document.getElementById('status'), box = document.getElementById('box-zelador'),
+        desc = document.getElementById('descricao'), btn = document.getElementById('btn-acao'), gps = document.getElementById('val-gps'), pediu = false;
+    var PADRAO = 'Serviço conferido e validado no local';
+    function mostrar() {
+      var z = st.value === '{{ VALIDADO_LOCAL }}';
+      box.hidden = !z; btn.textContent = z ? '✍ Registrar validação assinada' : 'Registrar ação';
+      document.getElementById('val-nome').required = z;
+      if (z) {
+        window.dispatchEvent(new Event('resize'));          // o quadro estava escondido: recalcula o tamanho
+        if (!desc.value.trim()) desc.value = PADRAO;
+        if (!pediu && navigator.geolocation) { pediu = true;
+          navigator.geolocation.getCurrentPosition(function (p) { f.validacao_lat.value = p.coords.latitude; f.validacao_lng.value = p.coords.longitude;
+            gps.textContent = '📍 Localização registrada'; }, function () { gps.textContent = ''; }, {enableHighAccuracy: true, timeout: 15000}); }
+      } else if (desc.value === PADRAO) desc.value = '';
+    }
+    st.addEventListener('change', mostrar); mostrar();
+    f.addEventListener('submit', function (e) {
+      if (st.value !== '{{ VALIDADO_LOCAL }}') return;
+      var cv = box.querySelector('canvas'), vazio = !cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data.some(function (v, i) { return i % 4 === 3 && v; });
+      if (vazio) { e.preventDefault(); e.stopImmediatePropagation(); alert('Peça para a pessoa assinar no quadro.'); }
+    }, true);
+  })();
+  </script>
   {% endif %}
 </div>
 
