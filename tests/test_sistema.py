@@ -1785,3 +1785,50 @@ def test_manutencao_preventiva_abre_chamado_agendado():
     tec_c = entrar("tec@t.com")
     assert tec_c.get("/agenda").status_code == 200 and tec_c.get("/preventivas").status_code == 200
     assert entrar("carrao@t.com").get("/agenda", follow_redirects=False).status_code == 403
+
+
+# ------------------------------------------------------------------ acesso do técnico (só atribuídos + módulos)
+def test_tecnico_restrito_ve_so_atribuidos_e_modulos_liberados():
+    with SessionLocal() as db:
+        db.add(Usuario(nome="Tec Restrito", email="tecr@t.com", senha_hash=hash_senha("senha12345"), papel="tecnico"))
+        db.commit()
+        tr = db.scalar(select(Usuario).where(Usuario.email == "tecr@t.com"))
+        un = db.get(Unidade, IDS["carrao"])
+        n = (db.scalar(select(func.max(Chamado.numero))) or 0)
+        meu = Chamado(numero=n + 1, unidade_id=un.id, titulo="Meu", assunto="Câmera do restrito", problema="x",
+                      abertura=date.today(), tecnico_id=tr.id)
+        outro = Chamado(numero=n + 2, unidade_id=un.id, titulo="Outro", assunto="Câmera de outro", problema="x",
+                        abertura=date.today())
+        db.add_all([meu, outro]); db.commit()
+        tr_id, n_meu, n_outro = tr.id, meu.numero, outro.numero
+    adm = entrar("admin@t.com")
+    tok = _csrf(adm.get("/admin").text)
+    r = adm.post(f"/admin/usuarios/{tr_id}", data={"operacao": "visibilidade", "so_atribuidos": "1",
+                                                    "modulos": ["abrir", "agenda"], "csrf": tok})
+    assert "Só chamados atribuídos" in adm.get("/admin").text
+    c = entrar("tecr@t.com")
+    painel = c.get("/").text
+    assert "Câmera do restrito" in painel and "Câmera de outro" not in painel
+    assert c.get(f"/chamados/{n_meu}").status_code == 200
+    assert c.get(f"/chamados/{n_outro}").status_code == 404
+    assert "Câmera de outro" not in c.get("/?q=Câmera").text
+    # módulos
+    assert 'href="/agenda"' in painel and 'href="/inventario"' not in painel and 'href="/relatorio"' not in painel
+    assert c.get("/agenda").status_code == 200
+    assert c.get("/relatorio").status_code == 403
+    assert c.get("/inventario").status_code == 403
+    assert c.get("/preventivas").status_code == 403
+    # abre chamado sem escolher técnico → fica com ele e continua visível
+    tok2 = _csrf(c.get("/chamados/novo").text)
+    r = c.post("/chamados/novo", data={"assunto": "Aberto pelo restrito", "problema": "teste", "unidade_id":
+                                       str(IDS["carrao"]), "csrf": tok2}, follow_redirects=False)
+    assert c.get(r.headers["location"]).status_code == 200
+    # técnico sem restrição continua vendo tudo
+    assert "Câmera de outro" in entrar("tec@t.com").get("/").text
+    # admin libera tudo de novo
+    adm.post(f"/admin/usuarios/{tr_id}", data={"operacao": "visibilidade", "modulos": list(
+        ["abrir", "relatorio", "agenda", "preventivas", "inventario"]), "csrf": tok})
+    with SessionLocal() as db:
+        u = db.get(Usuario, tr_id)
+        assert u.modulos is None and not u.so_atribuidos
+    assert "Câmera de outro" in c.get("/").text and c.get("/inventario").status_code == 200

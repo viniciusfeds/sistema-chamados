@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 1.15.0 — 2026-11-03
+- **Acesso do técnico** (Administração → Usuários → Opções, e no cadastro de novo usuário):
+  - **Ver só os chamados atribuídos a ele(a)**: painel, busca, relatório, agenda e preventivas mostram apenas os
+    chamados/planos dele; os demais chamados retornam “não encontrado”. Chamado aberto por ele sem técnico já fica com
+    ele; se ele repassar para outro técnico, o chamado sai da lista dele
+  - **Módulos liberados**: o administrador escolhe o que o técnico vê — Abrir chamado, Relatório, Agenda,
+    Preventivas, Inventário e monitoramento (o Painel de chamados é sempre visível). O menu esconde o que não está
+    liberado e o acesso direto pelo endereço é bloqueado
+- Lista de usuários mostra a restrição de cada técnico
+
 ## 1.14.0 — 2026-11-03
 - **Manutenção preventiva** (menu Chamados → Preventivas): planos por unidade com frequência (semanal a anual),
   data e horário da visita, técnico, prioridade, checklist e contrato

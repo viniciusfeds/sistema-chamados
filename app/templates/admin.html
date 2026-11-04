@@ -53,7 +53,9 @@
     <tr>
       <td data-l="Nome"><b>{{ x.nome }}</b></td>
       <td data-l="E-mail">{{ x.email }}</td>
-      <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}</td>
+      <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}
+        {% if x.restrito_atribuidos %}<br><span class="tag">Só chamados atribuídos</span>{% endif %}
+        {% if x.papel == 'tecnico' and x.modulos_bloqueados %}<br><small class="muted">Sem: {{ x.modulos_bloqueados|join(', ') }}</small>{% endif %}</td>
       <td data-l="Alertas">{% if x.equipe %}{% if x.recebe_alertas %}<span class="tag">WhatsApp +{{ x.telefone }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endif %}</td>
       <td data-l="Situação">{{ 'Ativo' if x.ativo else 'Inativo' }}</td>
       <td>
@@ -64,7 +66,19 @@
             <button class="btn peq" name="operacao" value="senha">Trocar senha</button>
             {% if x.id != u.id %}<button class="btn peq sec" name="operacao" value="alternar">{{ 'Desativar' if x.ativo else 'Ativar' }}</button>{% endif %}
           </form>
-          {% if x.equipe %}
+          {% if x.papel == 'tecnico' %}
+          <form method="post" action="/admin/usuarios/{{ x.id }}" style="margin-top:10px;border-top:1px solid var(--linha);padding-top:8px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <b style="font-size:13px">Acesso do técnico</b>
+            <label class="check" style="margin:6px 0"><input type="checkbox" name="so_atribuidos" value="1" style="width:auto" {{ 'checked' if x.so_atribuidos }}> Ver só os chamados atribuídos a ele(a)</label>
+            <div class="muted" style="font-size:12px;margin:4px 0">Módulos liberados (o Painel de chamados é sempre visível):</div>
+            {% for k, m in MODULOS_TECNICO.items() %}
+            <label class="check" style="margin:0 0 4px"><input type="checkbox" name="modulos" value="{{ k }}" style="width:auto" {{ 'checked' if x.pode(k) }}> {{ m[0] }}</label>
+            {% endfor %}
+            <button class="btn peq sec" name="operacao" value="visibilidade">Salvar acesso</button>
+          </form>
+          {% endif %}
+          {% if x.equipe and x.pode('inventario') %}
           <form method="post" action="/admin/usuarios/{{ x.id }}" style="margin-top:10px;border-top:1px solid var(--linha);padding-top:8px">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <input name="telefone" inputmode="tel" placeholder="WhatsApp, ex.: 11 91234-5678" value="{{ ('+' ~ x.telefone) if x.telefone else '' }}" style="margin-bottom:6px">
@@ -94,12 +108,19 @@
     <div class="campo" id="box-unidade"><label>Unidade</label><select name="unidade_id"><option value="">Selecione…</option>
       {% for c in clientes if c.ativo %}<optgroup label="{{ c.nome }}">
         {% for un in c.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</optgroup>{% endfor %}</select></div>
+    <div class="campo" id="box-tecnico" hidden><label>Acesso do técnico</label>
+      <input type="hidden" name="modulos_campo" value="1">
+      <label class="check" style="margin:4px 0 8px"><input type="checkbox" name="so_atribuidos" value="1" style="width:auto"> Ver só os chamados atribuídos a ele(a)</label>
+      <div class="muted" style="font-size:12px;margin-bottom:4px">Módulos liberados (o Painel de chamados é sempre visível):</div>
+      {% for k, m in MODULOS_TECNICO.items() %}
+      <label class="check" style="margin:0 0 4px"><input type="checkbox" name="modulos" value="{{ k }}" style="width:auto" checked> {{ m[0] }}</label>
+      {% endfor %}</div>
     <div class="campo" id="box-cliente" hidden><label>Cliente</label><select name="cliente_id"><option value="">Selecione…</option>
       {% for c in clientes if c.ativo %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
     <button class="btn">Criar usuário</button>
   </form></details>
   <script>
-  function mostrarEscopo(p){document.getElementById('box-unidade').hidden=p!=='unidade';document.getElementById('box-cliente').hidden=p!=='gestor';}
+  function mostrarEscopo(p){document.getElementById('box-unidade').hidden=p!=='unidade';document.getElementById('box-cliente').hidden=p!=='gestor';document.getElementById('box-tecnico').hidden=p!=='tecnico';}
   </script>
 </div>
 {% endblock %}

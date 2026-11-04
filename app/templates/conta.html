@@ -11,7 +11,7 @@
     <button class="btn">Trocar senha</button>
   </form>
 </div>
-{% if u.equipe %}
+{% if u.equipe and u.pode('inventario') %}
 <div class="card" style="max-width:480px" id="alertas">
   <h2>Alertas de monitoramento</h2>
   <p class="dica" style="margin-top:0">Quando um equipamento monitorado cair, o sistema abre um chamado automático e avisa no WhatsApp de quem estiver marcado aqui.</p>

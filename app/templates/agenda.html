@@ -7,8 +7,10 @@
 </div>
 <div class="card"><form method="get" class="acoes-orc">
   <input type="hidden" name="mes" value="{{ f.mes }}">
+{% if not u.restrito_atribuidos %}
   <select name="tecnico" onchange="this.form.submit()" style="max-width:240px"><option value="">Todos os técnicos</option>
     {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if f.tecnico == t.id }}>{{ t.nome }}</option>{% endfor %}</select>
+  {% endif %}
   <select name="cliente" onchange="this.form.submit()" style="max-width:280px"><option value="">Todos os clientes</option>
     {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id }}>{{ c.nome }}</option>{% endfor %}</select>
   <span class="leg-agenda"><i class="ev-chamado"></i>chamado agendado <i class="ev-preventiva"></i>preventiva agendada <i class="ev-prevista"></i>preventiva prevista</span>

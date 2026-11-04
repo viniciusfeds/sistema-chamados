@@ -37,6 +37,12 @@ def usuario_atual(request: Request, db: Session = Depends(get_db)) -> Usuario:
     if not u or not u.ativo:
         request.session.clear()
         raise PrecisaLogin()
+    if u.papel == "tecnico" and u.modulos is not None:
+        from .models import MODULOS_TECNICO
+        caminho = request.url.path
+        for chave, (rotulo, prefixos) in MODULOS_TECNICO.items():
+            if any(caminho == p or caminho.startswith(p + "/") for p in prefixos) and not u.pode(chave):
+                raise HTTPException(403, f"O módulo {rotulo} não está liberado para o seu usuário.")
     return u
 
 
@@ -54,7 +60,7 @@ def so_admin(u: Usuario = Depends(usuario_atual)) -> Usuario:
 
 def pode_ver(u: Usuario, ch: Chamado) -> bool:
     if u.equipe:
-        return True
+        return not u.restrito_atribuidos or ch.tecnico_id == u.id
     if u.papel == "gestor":
         return u.cliente_id is not None and ch.unidade.cliente_id == u.cliente_id
     return u.unidade_id is not None and u.unidade_id == ch.unidade_id

@@ -68,6 +68,16 @@ class Unidade(Base):
         return self.nome
 
 
+# Módulos que o administrador pode liberar ou esconder para cada técnico (o Painel de chamados é sempre visível)
+MODULOS_TECNICO = {
+    "abrir": ("Abrir chamado", ("/chamados/novo",)),
+    "relatorio": ("Relatório", ("/relatorio",)),
+    "agenda": ("Agenda", ("/agenda",)),
+    "preventivas": ("Preventivas", ("/preventivas",)),
+    "inventario": ("Inventário e monitoramento", ("/inventario",)),
+}
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -80,6 +90,8 @@ class Usuario(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     telefone: Mapped[str | None] = mapped_column(String(20), nullable=True)        # WhatsApp (só dígitos, com 55)
     recebe_alertas: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # alertas de monitoramento
+    so_atribuidos: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # técnico: só os seus chamados
+    modulos: Mapped[list | None] = mapped_column(JSON, nullable=True)  # técnico: módulos liberados (None = todos)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     unidade = relationship("Unidade")
     cliente = relationship("Cliente")
@@ -88,6 +100,21 @@ class Usuario(Base):
     def equipe(self):
         """True para quem é da TecnosIT (admin ou técnico): vê todos os clientes."""
         return self.papel in ("admin", "tecnico")
+
+    def pode(self, modulo: str) -> bool:
+        """Se o usuário enxerga o módulo. Só o técnico tem módulos configuráveis; os outros perfis seguem as regras fixas."""
+        if self.papel != "tecnico" or self.modulos is None:
+            return True
+        return modulo in self.modulos
+
+    @property
+    def modulos_bloqueados(self):
+        return [r for k, (r, _) in MODULOS_TECNICO.items() if not self.pode(k)]
+
+    @property
+    def restrito_atribuidos(self):
+        """Técnico que só enxerga os chamados atribuídos a ele."""
+        return self.papel == "tecnico" and bool(self.so_atribuidos)
 
     @property
     def cliente_escopo_id(self):

@@ -5,11 +5,11 @@
 <div class="cab">
   <div>
     <h1>Painel de chamados</h1>
-    <div class="muted">{% if u.equipe %}Todos os clientes{% else %}{{ u.descricao_escopo }}{% endif %}</div>
+    <div class="muted">{% if u.restrito_atribuidos %}Chamados atribuídos a você{% elif u.equipe %}Todos os clientes{% else %}{{ u.descricao_escopo }}{% endif %}</div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
-    {% if u.equipe %}<a class="btn sec" href="/?tecnico=eu">Meus chamados</a>{% endif %}
-    <a class="btn" href="/chamados/novo">+ Abrir chamado</a>
+    {% if u.equipe and not u.restrito_atribuidos %}<a class="btn sec" href="/?tecnico=eu">Meus chamados</a>{% endif %}
+    {% if u.pode('abrir') %}<a class="btn" href="/chamados/novo">+ Abrir chamado</a>{% endif %}
   </div>
 </div>
 
@@ -54,7 +54,7 @@
     <div><label for="prioridade">Prioridade</label>
       <select id="prioridade" name="prioridade"><option value="">Todas</option>
       {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if f.prioridade == k }}>{{ p[0] }}</option>{% endfor %}</select></div>
-    {% if u.equipe %}
+    {% if u.equipe and not u.restrito_atribuidos %}
     <div><label for="tecnico">Técnico</label>
       <select id="tecnico" name="tecnico"><option value="">Todos</option>
       <option value="eu" {{ 'selected' if f.tecnico == 'eu' }}>Eu</option>

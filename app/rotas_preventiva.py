@@ -27,6 +27,8 @@ def preventivas(request: Request, editar: str = "", cliente: str = "", unidade: 
         .join(Unidade).join(Cliente).order_by(PlanoPreventiva.ativo.desc(), PlanoPreventiva.proxima_data)
     if _int(cliente):
         st = st.where(Unidade.cliente_id == _int(cliente))
+    if u.restrito_atribuidos:
+        st = st.where(PlanoPreventiva.tecnico_id == u.id)
     lista = db.scalars(st).all()
     ed = db.get(PlanoPreventiva, _int(editar)) if _int(editar) else None
     if not ed and _int(unidade):
@@ -108,7 +110,7 @@ def agenda(request: Request, mes: str = "", tecnico: str = "", cliente: str = ""
     except ValueError:
         ini = date(hoje.year, hoje.month, 1)
     fim = date(ini.year, ini.month, calendar.monthrange(ini.year, ini.month)[1])
-    tec_id, cli_id = _int(tecnico), _int(cliente)
+    tec_id, cli_id = (u.id if u.restrito_atribuidos else _int(tecnico)), _int(cliente)
     eventos = {}
 
     def add(d, ev):
@@ -145,6 +147,7 @@ def agenda(request: Request, mes: str = "", tecnico: str = "", cliente: str = ""
     prox = fim + timedelta(days=1)
     return render(request, "agenda.html", u=u, semanas=semanas, eventos=eventos, ini=ini, hoje=hoje,
                   titulo_mes=f"{MESES[ini.month - 1]} de {ini.year}", ant=f"{ant:%Y-%m}", prox=f"{prox:%Y-%m}",
-                  tecnicos=tecnicos(db), clientes=db.scalars(select(Cliente).where(Cliente.ativo).order_by(Cliente.nome)).all(),
+                  tecnicos=[] if u.restrito_atribuidos else tecnicos(db),
+                  clientes=db.scalars(select(Cliente).where(Cliente.ativo).order_by(Cliente.nome)).all(),
                   f={"tecnico": tec_id, "cliente": cli_id, "mes": f"{ini:%Y-%m}"},
                   lista=[(d, e) for d in sorted(eventos) for e in eventos[d]])

@@ -40,13 +40,13 @@
   <nav class="lat-nav">
     <div class="lat-grupo">Chamados</div>
     <a href="/" class="{{ 'ativo' if p == '/' or p.startswith('/chamados/') and p != '/chamados/novo' }}" title="Painel">{{ ico('painel') }}<span>Painel</span></a>
-    <a href="/chamados/novo" class="{{ 'ativo' if p == '/chamados/novo' }}" title="Abrir chamado">{{ ico('novo') }}<span>Abrir chamado</span></a>
-    <a href="/relatorio" class="{{ 'ativo' if p == '/relatorio' }}" title="Relatório">{{ ico('relatorio') }}<span>Relatório</span></a>
-    {% if u.equipe %}<a href="/agenda" class="{{ 'ativo' if p.startswith('/agenda') }}" title="Agenda">{{ ico('agenda') }}<span>Agenda</span></a>
-    <a href="/preventivas" class="{{ 'ativo' if p.startswith('/preventivas') }}" title="Manutenção preventiva">{{ ico('preventiva') }}<span>Preventivas</span></a>{% endif %}
-    {% if u.equipe %}
+    {% if u.pode('abrir') %}<a href="/chamados/novo" class="{{ 'ativo' if p == '/chamados/novo' }}" title="Abrir chamado">{{ ico('novo') }}<span>Abrir chamado</span></a>{% endif %}
+    {% if u.pode('relatorio') %}<a href="/relatorio" class="{{ 'ativo' if p == '/relatorio' }}" title="Relatório">{{ ico('relatorio') }}<span>Relatório</span></a>{% endif %}
+    {% if u.equipe and u.pode('agenda') %}<a href="/agenda" class="{{ 'ativo' if p.startswith('/agenda') }}" title="Agenda">{{ ico('agenda') }}<span>Agenda</span></a>{% endif %}
+    {% if u.equipe and u.pode('preventivas') %}<a href="/preventivas" class="{{ 'ativo' if p.startswith('/preventivas') }}" title="Manutenção preventiva">{{ ico('preventiva') }}<span>Preventivas</span></a>{% endif %}
+    {% if u.equipe and (u.pode('inventario') or u.papel == 'admin') %}
     <div class="lat-grupo">Operação</div>
-    <a href="/inventario" class="{{ 'ativo' if p.startswith('/inventario') }}" title="Inventário">{{ ico('inventario') }}<span>Inventário</span>{% if alerta_oc and alerta_oc[0] %}<b class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</b>{% endif %}</a>
+    {% if u.pode('inventario') %}<a href="/inventario" class="{{ 'ativo' if p.startswith('/inventario') }}" title="Inventário">{{ ico('inventario') }}<span>Inventário</span>{% if alerta_oc and alerta_oc[0] %}<b class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</b>{% endif %}</a>{% endif %}
     {% if u.papel == 'admin' %}<a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}" title="Clientes">{{ ico('clientes') }}<span>Clientes</span></a>{% endif %}
     {% endif %}
     {% if u.papel == 'admin' %}
@@ -83,7 +83,7 @@ function recolherMenu() {
 </script>
 {% endif %}
 <main>
-{% if u and u.equipe %}
+{% if u and u.equipe and u.pode('inventario') %}
 <div class="alerta-oc" id="alerta-oc" {{ 'hidden' if not (alerta_oc and alerta_oc[0]) }}>
   <span>⚠ <b id="alerta-oc-n">{{ alerta_oc[0] if alerta_oc else 0 }}</b> equipamento(s) offline
     <span id="alerta-oc-sem">{% if alerta_oc and alerta_oc[1] %}· {{ alerta_oc[1] }} sem responsável{% endif %}</span></span>
@@ -95,7 +95,7 @@ function recolherMenu() {
 {% block conteudo %}{% endblock %}
 <footer class="rodape-versao">{{ config.SISTEMA_NOME }} · por {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
 </main>
-{% if u and u.equipe %}
+{% if u and u.equipe and u.pode('inventario') %}
 <script>
 (function () {
   var CHAVE = 'nexus_oc_n', titulo = document.title;

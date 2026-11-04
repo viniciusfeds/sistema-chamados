@@ -22,7 +22,7 @@ from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocor
 from .auth import (PrecisaLogin, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
-from .models import (EVENTOS_AVISO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
+from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
                      Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
                      STATUS_OCORRENCIA, Agente, Ocorrencia, TipoChamado, Unidade, Usuario, nova_chave_agente,
                      novo_token)
@@ -56,7 +56,7 @@ async def _ajustes_atualizados(request, call_next):
     ajustes.atualizar_se_mudou()   # outro processo salvou as Configurações? recarrega (a cada 5 s no máximo)
     return await call_next(request)
 tpl = Jinja2Templates(directory=APP_DIR / "templates")
-tpl.env.globals.update(rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
+tpl.env.globals.update(MODULOS_TECNICO=MODULOS_TECNICO, rotulo=regras.rotulo, cor=regras.cor, status_geral=regras.status_geral,
                        COR_ACAO=regras.COR_ACAO, STATUS_ACAO=STATUS_ACAO, PAPEIS=PAPEIS,
                        ORDEM_STATUS=regras.ORDEM_STATUS, STATUS_GERAL=regras.STATUS_GERAL,
                        CAIXAS=pdf.CAIXA, PRIORIDADES=PRIORIDADES, EVENTOS_AVISO=EVENTOS_AVISO,
@@ -87,7 +87,7 @@ def agora_utc():
 
 def render(request, nome, **ctx):
     ctx.setdefault("u", None)
-    if ctx["u"] is not None and ctx["u"].equipe:
+    if ctx["u"] is not None and ctx["u"].equipe and ctx["u"].pode("inventario"):
         from .db import SessionLocal
         with SessionLocal() as _db:
             ctx["alerta_oc"] = ocorrencias.contagem(_db)
@@ -275,6 +275,8 @@ def _filtrar(db, u, cliente_id=None, unidade_id=None, de=None, ate=None, q=None,
         if unidade_id:
             sel = sel.where(Chamado.unidade_id == unidade_id)
     else:
+        if u.restrito_atribuidos:
+            sel = sel.where(Chamado.tecnico_id == u.id)
         if cliente_id:
             sel = sel.where(Unidade.cliente_id == cliente_id)
         if unidade_id:
@@ -364,7 +366,7 @@ def painel(request: Request, cliente: str = "", unidade: str = "", status: str =
     grupos = unidades_permitidas(db, u) if u.papel != "unidade" else []
     return render(request, "painel.html", u=u, chamados=lista, sits=sits, contagem=contagem,
                   grupos=grupos, clientes=clientes_ativos(db) if u.equipe else [],
-                  tecnicos=tecnicos(db) if u.equipe else [], novos_link=novos_link,
+                  tecnicos=tecnicos(db) if u.equipe and not u.restrito_atribuidos else [], novos_link=novos_link,
                   parados=parados, horas_parado=horas_parado, tipos=tipos_chamado(db, False),
                   f=dict(cliente=cliente, unidade=unidade, status=status, q=q, de=de, ate=ate,
                          prioridade=prioridade, tecnico=tecnico, parado=parado, tipo=tipo_id))
@@ -395,7 +397,8 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
     ch = Chamado(unidade_id=un.id, assunto=assunto.strip()[:200],
                  titulo=((titulo.strip() if u.equipe else "") or assunto.strip())[:200],
                  problema=problema.strip(), origem="sistema", prioridade=_prioridade(prioridade),
-                 tecnico_id=_tecnico_valido(db, _int(tecnico_id)) if u.equipe else None,
+                 tecnico_id=(_tecnico_valido(db, _int(tecnico_id)) or (u.id if u.restrito_atribuidos else None))
+                 if u.equipe else None,
                  abertura=_data(abertura, hoje) if u.equipe else hoje, criado_por_id=u.id,
                  solicitante_nome=None if u.equipe else u.nome)
     ch.tipos = _tipos_escolhidos(db, tipo_ids)
@@ -480,6 +483,9 @@ def classificar(request: Request, numero: int, prioridade: str = Form("normal"),
     inativos = [t for t in ch.tipos if not t.ativo]   # tipos desativados continuam no chamado
     ch.tipos = inativos + [t for t in _tipos_escolhidos(db, tipo_ids) if t.ativo]
     db.commit()
+    if not pode_ver(u, ch):
+        flash(request, f"Chamado {ch.numero_fmt} passado para outro técnico; ele sai da sua lista.")
+        return voltar("/")
     flash(request, "Classificação atualizada.")
     return voltar(f"/chamados/{numero}")
 
@@ -1360,9 +1366,16 @@ def admin_unidade_alt(request: Request, uid: int, nome: str = Form(""), voltar_p
     return voltar(_destino(voltar_para, f"/clientes/{un.cliente_id}#unidades"))
 
 
+def _modulos_escolhidos(lista):
+    """Lista de módulos marcados; None quando todos estão liberados."""
+    escolhidos = [k for k in MODULOS_TECNICO if k in set(lista)]
+    return None if len(escolhidos) == len(MODULOS_TECNICO) else escolhidos
+
+
 @app.post("/admin/usuarios", dependencies=[Depends(checar_csrf)])
 def admin_usuario(request: Request, nome: str = Form(...), email: str = Form(...), senha: str = Form(...),
                   papel: str = Form(...), unidade_id: str = Form(""), cliente_id: str = Form(""),
+                  so_atribuidos: str = Form(""), modulos: list[str] = Form(default=[]), modulos_campo: str = Form(""),
                   u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     email = email.strip().lower()
     unidade_id, cliente_id = _int(unidade_id), _int(cliente_id)
@@ -1378,7 +1391,9 @@ def admin_usuario(request: Request, nome: str = Form(...), email: str = Form(...
         flash(request, "Já existe um usuário com esse e-mail.", "erro"); return voltar("/admin#usuarios")
     db.add(Usuario(nome=nome.strip(), email=email, senha_hash=hash_senha(senha), papel=papel,
                    unidade_id=unidade_id if papel == "unidade" else None,
-                   cliente_id=cliente_id if papel == "gestor" else None))
+                   cliente_id=cliente_id if papel == "gestor" else None,
+                   so_atribuidos=bool(so_atribuidos) and papel == "tecnico",
+                   modulos=_modulos_escolhidos(modulos) if papel == "tecnico" and modulos_campo else None))
     db.commit()
     flash(request, f"Usuário {nome} criado.")
     return voltar("/admin#usuarios")
@@ -1386,8 +1401,8 @@ def admin_usuario(request: Request, nome: str = Form(...), email: str = Form(...
 
 @app.post("/admin/usuarios/{uid}", dependencies=[Depends(checar_csrf)])
 def admin_usuario_op(request: Request, uid: int, operacao: str = Form(...), senha: str = Form(""),
-                     telefone: str = Form(""), recebe_alertas: str = Form(""),
-                     u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+                     telefone: str = Form(""), recebe_alertas: str = Form(""), so_atribuidos: str = Form(""),
+                     modulos: list[str] = Form(default=[]), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     alvo = db.get(Usuario, uid)
     if not alvo:
         raise HTTPException(404)
@@ -1403,6 +1418,17 @@ def admin_usuario_op(request: Request, uid: int, operacao: str = Form(...), senh
             flash(request, "Informe um WhatsApp válido (DDD + número).", "erro"); return voltar("/admin#usuarios")
         alvo.telefone, alvo.recebe_alertas = tel, bool(recebe_alertas) and alvo.equipe
         flash(request, f"Alertas de {alvo.nome} atualizados.")
+    elif operacao == "visibilidade":
+        if alvo.papel != "tecnico":
+            flash(request, "Essa opção vale só para o perfil Técnico.", "erro"); return voltar("/admin#usuarios")
+        alvo.so_atribuidos = bool(so_atribuidos)
+        alvo.modulos = _modulos_escolhidos(modulos)
+        if not alvo.pode("inventario"):
+            alvo.recebe_alertas = False          # alertas de equipamento são do módulo de inventário
+        bloq = alvo.modulos_bloqueados
+        flash(request, f"Acesso de {alvo.nome} salvo: "
+                       f"{'só os chamados atribuídos a ele(a)' if alvo.so_atribuidos else 'todos os chamados'}"
+                       f"{' · sem ' + ', '.join(bloq) if bloq else ' · todos os módulos'}.")
     elif operacao == "senha":
         if len(senha) < 8:
             flash(request, "A senha precisa ter pelo menos 8 caracteres.", "erro"); return voltar("/admin#usuarios")
@@ -1625,6 +1651,8 @@ def conta_alertas(request: Request, telefone: str = Form(""), recebe_alertas: st
     if telefone.strip() and not tel:
         flash(request, "WhatsApp inválido. Use DDD + número, ex.: 11 91234-5678.", "erro")
         return voltar("/conta")
+    if not u.pode("inventario"):
+        raise HTTPException(403, "O módulo de inventário não está liberado para o seu usuário.")
     if recebe_alertas and not tel:
         flash(request, "Informe seu WhatsApp para receber os alertas.", "erro")
         return voltar("/conta")
