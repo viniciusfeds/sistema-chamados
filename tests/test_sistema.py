@@ -1341,7 +1341,7 @@ def test_catalogo_e_chamado_vira_orcamento():
         assert it.ncm == "85258929" and it.preco == 28990 and it.unidade == "UN"
         ch = db.scalar(select(Chamado).where(Chamado.unidade_id == IDS["torre"])) or None
     r = adm.get("/financeiro/orcamentos/novo")
-    assert "Câmera 2MP" in r.text
+    assert 'id="add-busca"' in r.text and "C\\u00e2mera 2MP" in r.text   # busca no catálogo enquanto digita
     if ch:
         r = adm.get(f"/financeiro/orcamentos/novo?chamado={ch.numero}")
         assert f"chamado {ch.numero_fmt}" in r.text
