@@ -2016,3 +2016,25 @@ def test_validado_pelo_zelador_com_assinatura():
         assert a.validacao_assinatura is None and a.validador_nome is None
     r = c.post(f"{url}/acoes/{vid}", data={"csrf": tok, "operacao": "salvar", "descricao": "x", "status": VALIDADO_LOCAL})
     assert "precisa da assinatura" in r.text
+
+
+# ------------------------------------------------------------------ LGPD na tela
+def test_lgpd_mascara_e_valores_ocultos():
+    from app.lgpd import parcial, sens
+    assert parcial("529.982.247-25", "cpf") == "529.•••.•••-••"
+    assert parcial("32.402.010/0001-40", "cnpj") == "32.402.•••/••••-••"
+    assert parcial("32402010000140", "documento") == "32.402.•••/••••-••"
+    assert parcial("viniciusfeds@icloud.com", "email") == "vin•••@icloud.com"
+    assert parcial("(11) 96153-8947", "telefone") == "(11) 96•••-••••"
+    assert parcial("5511961538947", "telefone") == "551196•••••••"
+    h = str(sens("529.982.247-25", "cpf"))
+    assert 'class="sens"' in h and "529.•••.•••-••" in h and "529.982.247-25" in h
+    assert sens("") == "" and sens(None) == ""
+    assert "&lt;b&gt;" in str(sens("<b>x@y.com", "email"))
+    adm = entrar("admin@t.com")
+    pg = adm.get("/financeiro").text
+    assert "ocultar-valores" in pg and 'class="rs"' in pg and 'id="btn-valores"' in pg and "area-fin" in pg
+    adm_pg = adm.get("/admin").text
+    assert 'class="sens"' in adm_pg and "adm•••@t.com" in adm_pg
+    # técnico não vê o botão (não tem financeiro)
+    assert 'id="btn-valores"' not in entrar("tec@t.com").get("/").text

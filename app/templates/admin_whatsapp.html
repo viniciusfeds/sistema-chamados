@@ -50,7 +50,7 @@
     {% for c in contatos %}
     <tr style="{{ 'opacity:.55' if not c.ativo }}">
       <td data-l="Nome"><b>{{ c.nome }}</b>{% if not c.ativo %} <span class="tag cinza">pausado</span>{% endif %}</td>
-      <td data-l="Telefone">+{{ c.telefone }}</td>
+      <td data-l="Telefone">{{ c.telefone|sens("telefone", "+") }}</td>
       <td data-l="Cliente / unidade">{{ c.cliente.nome }} · {{ c.unidade.nome_curto if c.unidade else 'todas as unidades' }}</td>
       <td data-l="Recebe">{% for e in (c.eventos or EVENTOS_AVISO.keys()) %}<span class="tag cinza">{{ EVENTOS_AVISO[e] }}</span> {% endfor %}</td>
       <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" style="display:flex;gap:6px">
@@ -90,7 +90,7 @@
     <tr>
       <td data-l="Quando" class="muted">{{ e.criado_em.strftime('%d/%m %H:%M') if e.criado_em }} UTC</td>
       <td data-l="Ticket">{% if e.chamado %}<a class="num" href="/chamados/{{ e.chamado.numero }}">{{ e.chamado.numero_fmt }}</a>{% endif %}</td>
-      <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
+      <td data-l="Para">{{ e.destino_nome }} <span class="muted">{{ e.telefone|sens("telefone", "+") }}</span></td>
       <td data-l="Evento">{{ EVENTOS_ENVIO.get(e.evento, e.evento) }}</td>
       <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
         {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>

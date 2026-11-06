@@ -65,7 +65,7 @@
   </div>
   <div class="campo" style="max-width:300px"><label>Entrada (valor da 1ª parcela, opcional)</label><input name="entrada" inputmode="decimal" placeholder="Ex.: {{ (o.total // 2)|brl_num }}"></div>
   {% if inter_configurado() %}<label class="check"><input type="checkbox" name="gerar_boleto" value="1" checked> Gerar boleto com PIX no Inter para cada parcela</label>{% endif %}
-  <button class="btn">Faturar {{ o.total|brl }}</button>
+  <button class="btn">Faturar {{ o.total|rs }}</button>
 </form>
 {% endif %}
 
@@ -74,7 +74,7 @@
   <h2>Parcelas</h2>
   <table class="resp"><thead><tr><th>Parcela</th><th>Vencimento</th><th class="valor">Valor</th><th>Situação</th></tr></thead><tbody>
   {% for t in o.titulos %}<tr><td data-l="Parcela">{{ t.parcela_fmt }}</td><td data-l="Vencimento">{{ t.vencimento|data }}</td>
-    <td data-l="Valor" class="valor">{{ t.valor|brl }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.pago_em %} <span class="muted">em {{ t.pago_em|data }}</span>{% endif %}</td></tr>{% endfor %}
+    <td data-l="Valor" class="valor">{{ t.valor|rs }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.pago_em %} <span class="muted">em {{ t.pago_em|data }}</span>{% endif %}</td></tr>{% endfor %}
   </tbody></table>
   <a class="btn peq sec" href="/financeiro/receber?situacao=todos&q={{ ('Orçamento ' ~ o.numero_fmt)|urlencode }}">Ver em Contas a receber</a>
 </div>
@@ -114,7 +114,7 @@
       <td class="c-custo interno"><input name="item_custo" value="{{ i.custo_unitario|brl_num if i.custo_unitario is not none else '' }}" inputmode="decimal" placeholder="—"></td>
       <td class="c-marg interno"><input name="item_margem" value="{{ i.margem|qtd if i.margem is not none else '' }}" inputmode="decimal" placeholder="—"></td>
       <td class="c-val"><input name="item_valor" value="{{ i.valor_unitario|brl_num }}" inputmode="decimal"></td>
-      <td class="c-tot valor">{{ i.total|brl }}</td>
+      <td class="c-tot valor">{{ i.total|rs }}</td>
       <td class="c-x"><button type="button" class="btn-x" title="Remover">×</button></td></tr>
     {% endfor %}
     </tbody>

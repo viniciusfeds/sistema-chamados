@@ -40,7 +40,7 @@ main{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
   border-radius:var(--raio);padding:10px 14px;text-decoration:none;color:var(--texto)}
 .cards a.ativo{outline:2px solid var(--c)}
 .cards b{display:block;font-size:1.8rem;color:var(--c);line-height:1.1}
-.cards span{font-size:.75rem;font-weight:700;color:var(--cinza);text-transform:uppercase}
+.cards span:not(.rs){font-size:.75rem;font-weight:700;color:var(--cinza);text-transform:uppercase}
 form.filtros{display:grid;grid-template-columns:2fr 1.3fr 1fr 1fr auto;gap:8px;align-items:end}
 label{display:block;font-weight:700;font-size:.85rem;color:var(--cinza);margin-bottom:4px}
 input,select,textarea{width:100%;font:inherit;padding:9px 10px;border:1px solid #CFCFCF;border-radius:8px;background:#fff;color:var(--texto)}
@@ -427,3 +427,25 @@ tr.falta td{color:#B3261E}
 @media (max-width:700px){.jornada-grid{grid-template-columns:repeat(4,1fr)}.relogio-ponto .hora{font-size:2.6rem}.btn-ponto{min-width:0;width:100%}}
 .val-local{display:flex;gap:12px;align-items:center;margin-top:8px;padding:8px 10px;border:1px solid #BFE3D0;background:#F1FAF5;border-radius:10px;flex-wrap:wrap}
 .val-local img{height:54px;max-width:200px;object-fit:contain;background:#fff;border:1px solid #E2E2E2;border-radius:6px;padding:2px 6px}
+
+/* ---------- LGPD: dados pessoais mascarados e valores ocultos */
+.sens{cursor:help;border-bottom:1px dotted currentColor;white-space:nowrap;outline:none}
+.sens .sens-c{display:none}
+.sens:hover .sens-c,.sens:focus .sens-c{display:inline}
+.sens:hover .sens-p,.sens:focus .sens-p{display:none}
+body.logado main input:is([name*=cpf],[name*=cnpj],[name=documento],[name*=email],[name*=telefone],[name*=whatsapp],[name=pis],[name*=celular],[name=solicitante_contato],[name=validador_documento]):not(:focus):not(:hover):not(:placeholder-shown){color:transparent;text-shadow:0 0 7px rgba(40,40,40,.75)}
+.rs{transition:filter .15s}
+body.ocultar-valores .rs,
+body.ocultar-valores td.c-tot,
+body.ocultar-valores #totais div>span:last-child,
+body.ocultar-valores #analise,
+body.ocultar-valores #cat-lucro{filter:blur(7px);user-select:none;-webkit-user-select:none}
+body.ocultar-valores.area-fin input[inputmode=decimal]:not(:focus):not([name$=_pct]):not([name$=margem]):not([name=item_qtd]){color:transparent;text-shadow:0 0 7px rgba(40,40,40,.8)}
+.barra-topo{position:sticky;top:0;z-index:20;display:flex;justify-content:flex-end;margin:-6px 0 8px;pointer-events:none}
+.btn-olho{pointer-events:auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--linha);background:var(--card,#fff);
+  color:var(--texto,#2B2B2B);font:inherit;font-size:.86rem;font-weight:600;padding:7px 13px;border-radius:999px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.btn-olho:hover{border-color:var(--laranja,#F2560C);color:var(--laranja,#F2560C)}
+.btn-olho .risco{display:none}
+.btn-olho[aria-pressed=true] .risco{display:inline}
+@media (max-width:900px){.barra-topo{top:58px}}

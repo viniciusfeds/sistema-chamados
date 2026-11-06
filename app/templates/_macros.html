@@ -22,7 +22,7 @@
 {% if a.validada_no_local %}
 <div class="val-local">
   <img src="{{ a.validacao_assinatura }}" alt="Assinatura de {{ a.validador_nome }}">
-  <div><b>{{ a.validador_nome }}</b> · {{ a.validador_funcao }}{% if a.validador_documento %} · doc. {{ a.validador_documento }}{% endif %}
+  <div><b>{{ a.validador_nome }}</b> · {{ a.validador_funcao }}{% if a.validador_documento %} · doc. {{ a.validador_documento|sens('documento') }}{% endif %}
     <div class="muted">Assinado no local{% if a.validacao_em %} em {{ a.validacao_em|local }}{% endif %}{% if a.validacao_mapa and u and u.equipe %} · <a href="{{ a.validacao_mapa }}" target="_blank" rel="noopener">ver no mapa</a>{% endif %}</div></div>
 </div>
 {% endif %}

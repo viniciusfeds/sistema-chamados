@@ -24,6 +24,8 @@ from .models import (FORMAS_PAGAMENTO, STATUS_ORCAMENTO, TIPOS_ITEM, Chamado, Cl
 from .pdf_orcamento import pdf_orcamento
 
 tpl.env.filters["brl"] = brl
+from . import lgpd  # noqa: E402
+lgpd.instalar(tpl, brl)
 tpl.env.filters["brl_num"] = lambda c: brl(c, simbolo=False)
 tpl.env.filters["qtd"] = financeiro.qtd_fmt
 tpl.env.globals.update(STATUS_ORCAMENTO=STATUS_ORCAMENTO, TIPOS_ITEM=TIPOS_ITEM, FORMAS_PAGAMENTO=FORMAS_PAGAMENTO)

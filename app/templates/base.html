@@ -7,7 +7,8 @@
 <link rel="icon" href="/static/logo.png">
 <link rel="stylesheet" href="/static/style.css?v={{ config.VERSAO }}">
 </head>
-<body class="{{ 'com-menu' if u }}">
+{% set p = request.url.path %}
+<body class="{{ 'com-menu logado' if u }}{{ ' area-fin' if u and (p.startswith('/financeiro') or p.startswith('/clientes') or p.startswith('/admin/integracao-bancaria')) }} ocultar-valores">
 {% macro ico(n) -%}
 <svg class="ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ {
  'painel': '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
@@ -97,6 +98,11 @@ function recolherMenu() {
 </script>
 {% endif %}
 <main>
+{% if u and u.papel == 'admin' %}<div class="barra-topo" id="barra-valores" hidden>
+  <button type="button" class="btn-olho" id="btn-valores" aria-pressed="false" onclick="alternarValores()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="risco" d="M3 3l18 18"/></svg>
+    <span id="btn-valores-txt">Exibir valores</span></button>
+</div>{% endif %}
 {% if u and u.equipe and u.pode('inventario') %}
 <div class="alerta-oc" id="alerta-oc" {{ 'hidden' if not (alerta_oc and alerta_oc[0]) }}>
   <span>⚠ <b id="alerta-oc-n">{{ alerta_oc[0] if alerta_oc else 0 }}</b> equipamento(s) offline
@@ -107,6 +113,22 @@ function recolherMenu() {
 {% endif %}
 {% if flash %}<div class="flash {{ flash.tipo }}">{{ flash.msg }}</div>{% endif %}
 {% block conteudo %}{% endblock %}
+<script>
+(function () {
+  var CH = 'nexus_valores_visiveis';
+  function visiveis() { try { return sessionStorage.getItem(CH) === '1'; } catch (e) { return false; } }
+  function aplicar(v) {
+    document.body.classList.toggle('ocultar-valores', !v);
+    document.querySelectorAll('[data-titulo-rs]').forEach(function (el) { el.title = v ? el.dataset.tituloRs : 'Valores ocultos'; });
+    var b = document.getElementById('btn-valores');
+    if (b) { b.setAttribute('aria-pressed', v ? 'true' : 'false'); document.getElementById('btn-valores-txt').textContent = v ? 'Ocultar valores' : 'Exibir valores'; }
+  }
+  window.alternarValores = function () { var v = !visiveis(); try { sessionStorage.setItem(CH, v ? '1' : '0'); } catch (e) {} aplicar(v); };
+  aplicar(visiveis());
+  var barra = document.getElementById('barra-valores');
+  if (barra && (document.body.classList.contains('area-fin') || document.querySelector('.rs'))) barra.hidden = false;
+})();
+</script>
 <footer class="rodape-versao">{{ config.SISTEMA_NOME }} · por {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
 </main>
 {% if u and u.equipe and u.pode('inventario') %}

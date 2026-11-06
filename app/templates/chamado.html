@@ -73,8 +73,8 @@
     <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% elif ch.origem == 'monitor' %} <span class="tag alerta">automático</span>{% endif %}</dd>
     {% if u.equipe and (ch.solicitante_contato or ch.solicitante_email) %}
     <dt>Contato</dt><dd>{% if ch.solicitante_contato %}{% set fone = ch.solicitante_contato|replace(' ','')|replace('(','')|replace(')','')|replace('-','')|replace('+','') %}
-      <a href="https://wa.me/{{ '55' ~ fone if fone|length <= 11 else fone }}" target="_blank" rel="noopener">{{ ch.solicitante_contato }}</a>{% endif %}
-      {% if ch.solicitante_email %} · <a href="mailto:{{ ch.solicitante_email }}">{{ ch.solicitante_email }}</a>{% endif %}</dd>
+      <a href="https://wa.me/{{ '55' ~ fone if fone|length <= 11 else fone }}" target="_blank" rel="noopener">{{ ch.solicitante_contato|sens("telefone") }}</a>{% endif %}
+      {% if ch.solicitante_email %} · <a href="mailto:{{ ch.solicitante_email }}">{{ ch.solicitante_email|sens("email") }}</a>{% endif %}</dd>
     {% endif %}
     {% endif %}
     <dt>Responsável técnico</dt><dd>{{ ch.responsavel or config.RESPONSAVEL_PADRAO }}</dd>
@@ -244,7 +244,7 @@
     <tbody>
     {% for e in ch.envios|reverse %}
     <tr><td data-l="Evento">{{ EVENTOS_ENVIO.get(e.evento, e.evento) }}</td>
-      <td data-l="Para">{{ e.destino_nome }} <span class="muted">+{{ e.telefone }}</span></td>
+      <td data-l="Para">{{ e.destino_nome }} <span class="muted">{{ e.telefone|sens("telefone", "+") }}</span></td>
       <td data-l="Status"><span class="envio envio-{{ e.status }}">{{ ROTULO_ENVIO.get(e.status, e.status) }}</span>
         {% if e.erro %}<div class="dica" style="color:#8E1C16">{{ e.erro }}</div>{% endif %}</td>
       <td>{% if e.status == 'falhou' %}<form method="post" action="/whatsapp/envios/{{ e.id }}/reenviar">

@@ -15,11 +15,11 @@
 {% endif %}
 
 <div class="cards fin">
-  <a href="/financeiro/receber?situacao=abertos" style="--c:#1F5FA8"><b>{{ ind.a_receber|brl }}</b><span>A receber (total)</span></a>
-  <a href="/financeiro/receber?situacao=vencido" style="--c:#B3261E" class="{{ 'ativo' if ind.n_vencidos }}"><b>{{ ind.vencido|brl }}</b><span>Vencido · {{ ind.n_vencidos }} conta(s)</span></a>
-  <a href="/financeiro/receber?situacao=aberto" style="--c:#B07000"><b>{{ ind.proximos30|brl }}</b><span>Vence em 30 dias</span></a>
-  <a href="/financeiro/receber?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#1E7B45"><b>{{ ind.recebido_mes|brl }}</b><span>Recebido no mês</span></a>
-  <a href="/financeiro/orcamentos?status=enviado" style="--c:#5B3A9E"><b>{{ ind.orc_abertos|brl }}</b><span>Orçamentos aguardando · {{ ind.n_orc_abertos }}</span></a>
+  <a href="/financeiro/receber?situacao=abertos" style="--c:#1F5FA8"><b>{{ ind.a_receber|rs }}</b><span>A receber (total)</span></a>
+  <a href="/financeiro/receber?situacao=vencido" style="--c:#B3261E" class="{{ 'ativo' if ind.n_vencidos }}"><b>{{ ind.vencido|rs }}</b><span>Vencido · {{ ind.n_vencidos }} conta(s)</span></a>
+  <a href="/financeiro/receber?situacao=aberto" style="--c:#B07000"><b>{{ ind.proximos30|rs }}</b><span>Vence em 30 dias</span></a>
+  <a href="/financeiro/receber?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#1E7B45"><b>{{ ind.recebido_mes|rs }}</b><span>Recebido no mês</span></a>
+  <a href="/financeiro/orcamentos?status=enviado" style="--c:#5B3A9E"><b>{{ ind.orc_abertos|rs }}</b><span>Orçamentos aguardando · {{ ind.n_orc_abertos }}</span></a>
   <a href="/financeiro/orcamentos" style="--c:#2B2B2B"><b>{{ ind.conversao ~ '%' if ind.conversao is not none else '—' }}</b><span>Aprovação (90 dias)</span></a>
 </div>
 
@@ -28,7 +28,7 @@
     <h2>Previsto × recebido</h2>
     <div class="grafico-meses">
       {% for m in ind.meses %}
-      <div class="gm-col" title="{{ m.mes.strftime('%m/%Y') }} · previsto {{ m.previsto|brl }} · recebido {{ m.recebido|brl }}">
+      <div class="gm-col" data-titulo-rs="{{ m.mes.strftime('%m/%Y') }} · previsto {{ m.previsto|brl }} · recebido {{ m.recebido|brl }}">
         <div class="gm-barras">
           <i class="prev" style="height:{{ (100 * m.previsto / ind.max_mes)|round(1) }}%"></i>
           <i class="rec" style="height:{{ (100 * m.recebido / ind.max_mes)|round(1) }}%"></i>
@@ -44,7 +44,7 @@
     {% for o in orcs %}
     <a class="linha-lista" href="/financeiro/orcamentos/{{ o.numero }}"><span><b>{{ o.numero_fmt }}</b> · {{ o.titulo }}<br>
       <span class="muted">{{ o.cliente_fiscal.nome if o.cliente_fiscal else (o.cliente.nome if o.cliente else '—') }}</span></span>
-      <span style="text-align:right">{{ o.total|brl }}<br>{{ selo_orc(o, hoje) }}</span></a>
+      <span style="text-align:right">{{ o.total|rs }}<br>{{ selo_orc(o, hoje) }}</span></a>
     {% else %}<p class="muted">Nenhum orçamento enviado ou aprovado aguardando.</p>{% endfor %}
   </div>
 </div>
@@ -54,14 +54,14 @@
     <h2>{% if vencidos %}⚠ {% endif %}Vencidos</h2>
     {% for t in vencidos %}
     <a class="linha-lista" href="/financeiro/receber?situacao=vencido"><span><b>{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}</b><br><span class="muted">{{ t.descricao }} · {{ t.parcela_fmt }}</span></span>
-      <span style="text-align:right"><b>{{ t.valor|brl }}</b><br><span style="color:#B3261E;font-weight:700">{{ t.dias_atraso(hoje) }} dia(s)</span></span></a>
+      <span style="text-align:right"><b>{{ t.valor|rs }}</b><br><span style="color:#B3261E;font-weight:700">{{ t.dias_atraso(hoje) }} dia(s)</span></span></a>
     {% else %}<p class="ok-tudo">✔ Nenhuma conta vencida.</p>{% endfor %}
   </div>
   <div class="card">
     <h2>Próximos vencimentos</h2>
     {% for t in proximos %}
     <a class="linha-lista" href="/financeiro/receber"><span><b>{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}</b><br><span class="muted">{{ t.descricao }} · {{ t.parcela_fmt }}</span></span>
-      <span style="text-align:right"><b>{{ t.valor|brl }}</b><br><span class="muted">{{ t.vencimento|data }}</span></span></a>
+      <span style="text-align:right"><b>{{ t.valor|rs }}</b><br><span class="muted">{{ t.vencimento|data }}</span></span></a>
     {% else %}<p class="muted">Nada a vencer.</p>{% endfor %}
   </div>
 </div>

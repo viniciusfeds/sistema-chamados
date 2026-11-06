@@ -20,11 +20,11 @@
       {% if not c.ativo %}<span class="tag cinza">inativo</span>{% endif %}
       {% if not cf or not cf.documento %}<span class="tag cinza" title="Necessário para orçamento, cobrança e nota">sem dados de faturamento</span>
       {% elif not cf.endereco_completo %}<span class="tag alerta">endereço incompleto</span>{% endif %}</td>
-    <td data-l="CNPJ/CPF" class="mono">{{ cf.documento_fmt if cf and cf.documento else '—' }}</td>
+    <td data-l="CNPJ/CPF" class="mono">{{ cf.documento_fmt|sens('documento') if cf and cf.documento else '—' }}</td>
     <td data-l="Cidade">{{ (cf.municipio ~ '/' ~ cf.uf) if cf and cf.municipio else '—' }}</td>
     <td data-l="Unidades">{{ c.unidades|selectattr('ativa')|list|length }}</td>
     <td data-l="Chamados">{{ chamados.get(c.id, 0) }}</td>
-    <td data-l="Vencido" class="valor">{% if vencido.get(c.id) %}<b style="color:#B3261E">{{ vencido[c.id]|brl }}</b>{% else %}—{% endif %}</td>
+    <td data-l="Vencido" class="valor">{% if vencido.get(c.id) %}<b style="color:#B3261E">{{ vencido[c.id]|rs }}</b>{% else %}—{% endif %}</td>
   </tr>{% endfor %}</tbody>
 </table>
 {% else %}<p class="vazio">Nenhum cliente encontrado.</p>{% endif %}

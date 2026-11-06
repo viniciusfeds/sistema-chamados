@@ -4,7 +4,7 @@
 {% block conteudo %}
 {{ abas_financeiro('receber') }}
 <div class="cab">
-  <div><h1>Contas a receber</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|brl }}{% if tot.aberto %} · em aberto {{ tot.aberto|brl }}{% endif %}{% if tot.pago %} · recebido {{ tot.pago|brl }}{% endif %}</div></div>
+  <div><h1>Contas a receber</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|rs }}{% if tot.aberto %} · em aberto {{ tot.aberto|rs }}{% endif %}{% if tot.pago %} · recebido {{ tot.pago|rs }}{% endif %}</div></div>
   <div class="acoes-orc">{% if inter_configurado() %}<form method="post" action="/admin/integracao-bancaria/sincronizar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" title="Consultar no Inter os boletos em aberto">↻ Conferir pagamentos</button></form>{% endif %}
     <a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
     <a class="btn" href="#novo" onclick="document.getElementById('novo').open=true">+ Nova conta</a></div>
@@ -30,12 +30,12 @@
   <tbody>{% for t in lista %}{% set sit = t.situacao(hoje) %}
   <tr class="{{ 'parado' if sit == 'vencido' }} {{ 'inativo' if sit == 'cancelado' }}">
     <td data-l="Vencimento"><b>{{ t.vencimento|data }}</b>{% if sit == 'vencido' %}<div style="color:#B3261E;font-size:.85rem;font-weight:700">{{ t.dias_atraso(hoje) }} dia(s) de atraso</div>{% endif %}</td>
-    <td data-l="Cliente">{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}{% if t.cliente_fiscal %}<div class="muted">{{ t.cliente_fiscal.documento_fmt }}</div>{% endif %}</td>
+    <td data-l="Cliente">{{ t.cliente_fiscal.nome if t.cliente_fiscal else '—' }}{% if t.cliente_fiscal %}<div class="muted">{{ t.cliente_fiscal.documento_fmt|sens("documento") }}</div>{% endif %}</td>
     <td data-l="Descrição">{% if t.orcamento %}<a href="/financeiro/orcamentos/{{ t.orcamento.numero }}">{{ t.descricao }}</a>{% else %}{{ t.descricao }}{% endif %}
       <div class="muted">Parcela {{ t.parcela_fmt }}{% if t.contrato %} · contrato{% endif %}</div></td>
-    <td data-l="Valor" class="valor"><b>{{ t.valor|brl }}</b>
-      {% if sit == 'vencido' %}{% set m, j = encargos(t, hoje) %}{% if m or j %}<div class="muted" title="Multa {{ m|brl }} + juros {{ j|brl }}">c/ encargos {{ (t.valor + m + j)|brl }}</div>{% endif %}{% endif %}
-      {% if t.status == 'pago' %}<div class="muted">pago {{ t.valor_pago|brl }}</div>{% endif %}</td>
+    <td data-l="Valor" class="valor"><b>{{ t.valor|rs }}</b>
+      {% if sit == 'vencido' %}{% set m, j = encargos(t, hoje) %}{% if m or j %}<div class="muted" data-titulo-rs="Multa {{ m|brl }} + juros {{ j|brl }}">c/ encargos {{ (t.valor + m + j)|rs }}</div>{% endif %}{% endif %}
+      {% if t.status == 'pago' %}<div class="muted">pago {{ t.valor_pago|rs }}</div>{% endif %}</td>
     <td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.status == 'pago' %}<div class="muted">{{ t.pago_em|data }} · {{ FORMAS_PAGAMENTO.get(t.forma or '', '') }}</div>{% endif %}
       {% if t.inter_codigo %}<div class="boleto-info"><span class="tag {{ 'alerta' if t.inter_situacao in ('FALHA_EMISSAO', 'EXPIRADO') else '' }}">Inter: {{ SITUACOES_INTER.get(t.inter_situacao, t.inter_situacao) }}</span>
         {% if t.inter_erro %}<div style="color:#B3261E">{{ t.inter_erro }}</div>{% endif %}</div>{% endif %}</td>

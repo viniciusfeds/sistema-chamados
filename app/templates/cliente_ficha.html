@@ -6,7 +6,7 @@
 <a href="/clientes" class="muted">← Clientes</a>
 <div class="cab">
   <div><h1>{{ cli.nome }} {% if not cli.ativo %}<span class="selo" style="background:#8A94A3">Inativo</span>{% endif %}</h1>
-    <div class="muted">{% if cf.id %}{{ cf.razao_social }} · {{ cf.documento_fmt or 'sem CNPJ/CPF' }}{% else %}Sem dados de faturamento{% endif %}</div></div>
+    <div class="muted">{% if cf.id %}{{ cf.razao_social }} · {{ cf.documento_fmt|sens('documento') if cf.documento else 'sem CNPJ/CPF' }}{% else %}Sem dados de faturamento{% endif %}</div></div>
   <div class="acoes-orc">
     <a class="btn sec" href="/?cliente={{ cli.id }}">Chamados</a>
     {% if cf.id %}<a class="btn" href="/financeiro/orcamentos/novo?cliente={{ cf.id }}">+ Orçamento</a>{% endif %}
@@ -21,8 +21,8 @@
 <div class="cards fin">
   <a href="/?cliente={{ cli.id }}" style="--c:#1F5FA8"><b>{{ resumo.abertos }}</b><span>Chamados em aberto</span></a>
   <a href="/financeiro/orcamentos{{ '?cliente=' ~ cf.id if cf.id }}" style="--c:#5B3A9E"><b>{{ resumo.orc_abertos }}</b><span>Orçamentos em andamento</span></a>
-  <a href="/financeiro/receber{{ '?cliente=' ~ cf.id if cf.id }}" style="--c:#B07000"><b>{{ resumo.a_receber|brl }}</b><span>A receber</span></a>
-  <a href="/financeiro/receber?situacao=vencido{{ '&cliente=' ~ cf.id if cf.id }}" style="--c:#B3261E" class="{{ 'ativo' if resumo.vencido }}"><b>{{ resumo.vencido|brl }}</b><span>Vencido</span></a>
+  <a href="/financeiro/receber{{ '?cliente=' ~ cf.id if cf.id }}" style="--c:#B07000"><b>{{ resumo.a_receber|rs }}</b><span>A receber</span></a>
+  <a href="/financeiro/receber?situacao=vencido{{ '&cliente=' ~ cf.id if cf.id }}" style="--c:#B3261E" class="{{ 'ativo' if resumo.vencido }}"><b>{{ resumo.vencido|rs }}</b><span>Vencido</span></a>
 </div>
 
 <form class="card" method="post" action="/financeiro/clientes/salvar" id="faturamento">
@@ -42,7 +42,7 @@
     <tr class="{{ 'inativo' if not un.ativa }}">
       <td data-l="Unidade"><b>{{ un.nome }}</b>{% if not un.ativa %} <span class="tag cinza">inativa</span>{% endif %}</td>
       <td data-l="Chamados">{{ tot_un.get(un.id, 0) }}{% if por_un_abertos.get(un.id) %} <span class="muted">· {{ por_un_abertos[un.id] }} em aberto</span>{% endif %}</td>
-      <td data-l="Faturamento">{% if fu %}<a href="/financeiro/clientes/{{ fu.id }}">CNPJ próprio · {{ fu.documento_fmt }}</a>
+      <td data-l="Faturamento">{% if fu %}<a href="/financeiro/clientes/{{ fu.id }}">CNPJ próprio · {{ fu.documento_fmt|sens('documento') }}</a>
         {% else %}<span class="muted">o do cliente</span> · <a class="dica" href="/financeiro/clientes/novo?unidade={{ un.id }}">usar CNPJ próprio</a>{% endif %}</td>
       <td><div class="acoes-orc">
         <details><summary class="btn peq sec">Renomear</summary>
@@ -92,7 +92,7 @@
     <tbody>{% for c in contatos %}
     <tr class="{{ 'inativo' if not c.ativo }}">
       <td data-l="Nome"><b>{{ c.nome }}</b>{% if not c.ativo %} <span class="tag cinza">pausado</span>{% endif %}</td>
-      <td data-l="WhatsApp">+{{ c.telefone }}</td>
+      <td data-l="WhatsApp">{{ c.telefone|sens("telefone", "+") }}</td>
       <td data-l="Unidade">{{ c.unidade.nome_curto if c.unidade else 'todas' }}</td>
       <td data-l="Recebe">{% for e in (c.eventos or EVENTOS_AVISO.keys()) %}<span class="tag cinza">{{ EVENTOS_AVISO[e] }}</span> {% endfor %}</td>
       <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
@@ -120,7 +120,7 @@
 <div class="card" id="usuarios">
   <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Usuários do cliente</h2><a class="btn peq sec" href="/admin#usuarios">Gerenciar usuários</a></div>
   {% for us in usuarios %}
-  <div class="linha-lista"><span><b>{{ us.nome }}</b> <span class="muted">· {{ us.email }}</span>{% if not us.ativo %} <span class="tag cinza">inativo</span>{% endif %}</span>
+  <div class="linha-lista"><span><b>{{ us.nome }}</b> <span class="muted">· {{ us.email|sens("email") }}</span>{% if not us.ativo %} <span class="tag cinza">inativo</span>{% endif %}</span>
     <span class="muted">{{ PAPEIS[us.papel] }}{% if us.unidade %} · {{ us.unidade.nome }}{% endif %}</span></div>
   {% else %}<p class="muted">Nenhum usuário de acesso para este cliente (gestor ou unidade).</p>{% endfor %}
 </div>
@@ -130,7 +130,7 @@
   <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Últimos orçamentos</h2></div>
   {% for o in orcs %}
   <a class="linha-lista" href="/financeiro/orcamentos/{{ o.numero }}"><span><b>{{ o.numero_fmt }}</b> · {{ o.titulo }}<br><span class="muted">{{ o.emissao|data }}</span></span>
-    <span style="text-align:right">{{ o.total|brl }}<br>{{ selo_orc(o, hoje) }}</span></a>
+    <span style="text-align:right">{{ o.total|rs }}<br>{{ selo_orc(o, hoje) }}</span></a>
   {% endfor %}
 </div>
 {% endif %}

@@ -7,7 +7,7 @@
 <a href="/financeiro/contratos" class="muted">← Contratos</a>
 <div class="cab">
   <div><h1>{{ c.descricao }} <span class="selo" style="background:{{ sd[1] }}">{{ sd[0] }}</span></h1>
-    <div class="muted">{{ c.cliente_fiscal.razao_social }} · {{ c.valor|brl }}/mês · vence dia {{ c.dia_vencimento }} ·
+    <div class="muted">{{ c.cliente_fiscal.razao_social }} · {{ c.valor|rs }}/mês · vence dia {{ c.dia_vencimento }} ·
       {{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}{% if not c.ativo %} · <b>encerrado</b>{% endif %}</div></div>
   <div class="acoes-orc"><a class="btn sec" href="/financeiro/contratos?editar={{ c.id }}#form">Editar dados</a>
     {% if c.doc_texto %}<a class="btn sec" href="/financeiro/contratos/{{ c.id }}/documento.pdf" target="_blank">📄 PDF</a>{% endif %}</div>
@@ -43,8 +43,8 @@
   <table class="resp" style="margin-bottom:12px">
     <thead><tr><th>Signatário</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
     <tbody>{% for a in c.assinaturas %}
-    <tr><td data-l="Signatário"><b>{{ a.nome }}</b>{% if a.email or a.telefone %}<div class="muted">{{ a.email or '' }} {{ a.telefone or '' }}</div>{% endif %}
-        {% if a.cpf %}<div class="muted">CPF {{ a.cpf_fmt }}</div>{% endif %}</td>
+    <tr><td data-l="Signatário"><b>{{ a.nome }}</b>{% if a.email or a.telefone %}<div class="muted">{{ a.email|sens('email') }} {{ a.telefone|sens('telefone') }}</div>{% endif %}
+        {% if a.cpf %}<div class="muted">CPF {{ a.cpf_fmt|sens("cpf") }}</div>{% endif %}</td>
       <td data-l="Papel">{{ PAPEIS_ASSINATURA[a.papel] }}</td>
       <td data-l="Situação">{% if a.status == 'assinado' %}<span class="selo" style="background:#2E7D4F">Assinou</span> <span class="muted">{{ a.assinado_em|local }} · IP {{ a.ip }}</span>
         {% elif a.status == 'recusado' %}<span class="selo" style="background:#B3261E">Recusou</span> <span class="muted">{{ a.motivo or '' }}</span>
@@ -112,7 +112,7 @@
   <h2>Cobranças deste contrato</h2>
   <table class="resp"><thead><tr><th>Competência</th><th>Vencimento</th><th class="valor">Valor</th><th>Situação</th></tr></thead><tbody>
   {% for t in titulos %}<tr><td data-l="Competência">{{ t.competencia or '—' }}</td><td data-l="Vencimento">{{ t.vencimento|data }}</td>
-    <td data-l="Valor" class="valor">{{ t.valor|brl }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}</td></tr>{% endfor %}
+    <td data-l="Valor" class="valor">{{ t.valor|rs }}</td><td data-l="Situação">{{ selo_titulo(t, hoje) }}</td></tr>{% endfor %}
   </tbody></table>
 </div>
 {% endif %}

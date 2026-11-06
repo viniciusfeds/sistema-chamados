@@ -52,11 +52,11 @@
     {% for x in usuarios %}
     <tr>
       <td data-l="Nome"><b>{{ x.nome }}</b></td>
-      <td data-l="E-mail">{{ x.email }}</td>
+      <td data-l="E-mail">{{ x.email|sens("email") }}</td>
       <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}
         {% if x.restrito_atribuidos %}<br><span class="tag">Só chamados atribuídos</span>{% endif %}
         {% if x.papel == 'tecnico' and x.modulos_bloqueados %}<br><small class="muted">Sem: {{ x.modulos_bloqueados|join(', ') }}</small>{% endif %}</td>
-      <td data-l="Alertas">{% if x.equipe %}{% if x.recebe_alertas %}<span class="tag">WhatsApp +{{ x.telefone }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endif %}</td>
+      <td data-l="Alertas">{% if x.equipe %}{% if x.recebe_alertas %}<span class="tag">WhatsApp {{ x.telefone|sens("telefone", "+") }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endif %}</td>
       <td data-l="Situação">{{ 'Ativo' if x.ativo else 'Inativo' }}</td>
       <td>
         <details style="margin:0;padding:4px 8px"><summary>Opções</summary>

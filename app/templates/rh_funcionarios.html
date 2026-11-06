@@ -13,10 +13,10 @@
   <thead><tr><th>Nome</th><th>Cargo</th><th>Jornada</th><th>Acesso</th><th>Situação</th><th></th></tr></thead>
   <tbody>{% for f in lista %}
   <tr class="{{ 'inativo' if not f.ativo }}">
-    <td data-l="Nome"><b>{{ f.nome }}</b>{% if f.cpf %}<div class="muted">CPF {{ f.cpf_fmt }}</div>{% endif %}</td>
+    <td data-l="Nome"><b>{{ f.nome }}</b>{% if f.cpf %}<div class="muted">CPF {{ f.cpf_fmt|sens("cpf") }}</div>{% endif %}</td>
     <td data-l="Cargo">{{ f.cargo or '—' }}{% if f.admissao %}<div class="muted">desde {{ f.admissao|data }}</div>{% endif %}</td>
     <td data-l="Jornada">{{ fmt_min(f.carga_semanal) }} semanais<div class="muted">{% for m in f.jornada_ok %}{% if m %}{{ DIAS_SEMANA[loop.index0][:3] }} {{ fmt_min(m) }}{% if not loop.last %} · {% endif %}{% endif %}{% endfor %}</div></td>
-    <td data-l="Acesso">{% if f.usuario %}{{ f.usuario.email }}<div class="muted">{{ PAPEIS[f.usuario.papel] }}</div>{% else %}<span class="muted">sem login</span>{% endif %}</td>
+    <td data-l="Acesso">{% if f.usuario %}{{ f.usuario.email|sens("email") }}<div class="muted">{{ PAPEIS[f.usuario.papel] }}</div>{% else %}<span class="muted">sem login</span>{% endif %}</td>
     <td data-l="Situação">{{ 'Ativo' if f.ativo else 'Inativo' }}</td>
     <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ f.id }}#form">Editar</a><a class="btn peq sec" href="/rh/ponto?funcionario={{ f.id }}">Espelho</a></div></td>
   </tr>{% endfor %}</tbody>

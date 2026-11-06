@@ -29,7 +29,7 @@
     <td data-l="Cliente">{{ o.cliente_fiscal.nome if o.cliente_fiscal else (o.cliente.nome if o.cliente else '—') }}</td>
     <td data-l="Emissão">{{ o.emissao|data }}</td>
     <td data-l="Validade">{{ o.valido_ate|data }}</td>
-    <td data-l="Total" class="valor"><b>{{ o.total|brl }}</b></td>
+    <td data-l="Total" class="valor"><b>{{ o.total|rs }}</b></td>
     <td data-l="Situação">{{ selo_orc(o, hoje) }}</td>
   </tr>{% endfor %}</tbody>
 </table>

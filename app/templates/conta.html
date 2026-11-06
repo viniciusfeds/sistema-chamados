@@ -3,7 +3,7 @@
 {% block conteudo %}
 <h1>Minha conta</h1>
 <div class="card" style="max-width:480px">
-  <p><b>{{ u.nome }}</b><br><span class="muted">{{ u.email }} · {{ PAPEIS[u.papel] }}{% if u.unidade %} · {{ u.unidade.nome }}{% endif %}</span></p>
+  <p><b>{{ u.nome }}</b><br><span class="muted">{{ u.email|sens("email") }} · {{ PAPEIS[u.papel] }}{% if u.unidade %} · {{ u.unidade.nome }}{% endif %}</span></p>
   <form method="post" action="/conta">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="campo"><label>Senha atual</label><input type="password" name="atual" required autocomplete="current-password"></div>

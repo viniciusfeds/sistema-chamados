@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.18.0 — 2026-11-06
+- **LGPD na tela — dados pessoais mascarados.** CPF, CNPJ, e-mail e telefone/WhatsApp aparecem só pelo começo
+  (ex.: `529.•••.•••-••`, `32.402.•••/••••-••`, `vin•••@icloud.com`, `(11) 96•••-••••`) nas listas de clientes,
+  ficha do cliente, chamados, usuários, contatos de WhatsApp, contas a receber, contratos/signatários, RH e Minha
+  conta; o dado completo aparece ao **passar o mouse** (ou tocar, no celular). Nos formulários, esses campos ficam
+  desfocados até passar o mouse ou clicar para editar
+- **Valores financeiros ocultos.** Em Financeiro, Clientes e Integração bancária todos os valores (cartões, listas,
+  orçamento, totais, campos de valor) ficam desfocados; o botão **Exibir valores** no topo da página mostra tudo e
+  vale até fechar o navegador (o botão vira *Ocultar valores*). Documentos do cliente (PDFs, orçamento e boleto
+  públicos) não mudam
+
 ## 1.17.0 — 2026-11-04
 - **Novo status de ação: “Validado pelo zelador”.** Ao escolher, abre o quadro de **assinatura no local**: quem
   recebeu o serviço (zelador, síndico, porteiro, gerente…) informa o nome, a função e, se quiser, o documento, e
