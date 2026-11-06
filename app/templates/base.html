@@ -129,6 +129,36 @@ function recolherMenu() {
   if (barra && (document.body.classList.contains('area-fin') || document.querySelector('.rs'))) barra.hidden = false;
 })();
 </script>
+<script>
+/* Tabelas: no computador cada linha fica numa linha só; o texto que não cabe ganha "…" e o completo vai no mouse. */
+(function () {
+  function preparar() {
+    document.querySelectorAll('table.resp:not(.quebra) > tbody > tr:not(.edicao) > td').forEach(function (td) {
+      if (td.dataset.cel || !td.textContent.trim()) return;
+      td.dataset.cel = '1';
+      if (td.querySelector('button, form, input, select, textarea, details, canvas')) { td.classList.add('acoes'); return; }   // ações: lado a lado
+      if (td.querySelector('.rs') && td.textContent.trim().length < 30) return;                // valores: curtos
+      var d = document.createElement('div'); d.className = 'cel'; td.classList.add('tc');
+      while (td.firstChild) d.appendChild(td.firstChild);
+      // selos (Assinado, encerrado…) vão para o começo da linha, para não sumirem no "…"
+      Array.prototype.slice.call(d.children).filter(function (el) { return el.matches('.selo, .tag'); })
+        .reverse().forEach(function (el) { d.insertBefore(document.createTextNode(' '), d.firstChild); d.insertBefore(el, d.firstChild); });
+      td.appendChild(d);
+    });
+    dicas();
+  }
+  function dicas() {
+    document.querySelectorAll('.cel').forEach(function (d) {
+      var corta = d.scrollWidth > d.clientWidth + 1;
+      if (!corta) d.querySelectorAll(':scope > *').forEach(function (f) { if (f.scrollWidth > f.clientWidth + 1) corta = true; });
+      if (corta && !d.querySelector('.rs')) d.title = d.innerText.replace(/\s+/g, ' ').trim();   // innerText: respeita o mascaramento
+      else d.removeAttribute('title');
+    });
+  }
+  preparar();
+  var t; window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(dicas, 150); });
+})();
+</script>
 <footer class="rodape-versao">{{ config.SISTEMA_NOME }} · por {{ config.EMPRESA_NOME }} · v{{ config.VERSAO }}</footer>
 </main>
 {% if u and u.equipe and u.pode('inventario') %}

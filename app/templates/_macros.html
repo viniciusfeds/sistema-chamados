@@ -30,7 +30,7 @@
 
 {# Tabela de ações somente leitura (usada também na página pública) #}
 {% macro tabela_acoes(ch) -%}
-<table class="resp">
+<table class="resp quebra">
   <thead><tr><th style="width:170px">Data / Horário</th><th>Ação</th><th style="width:130px">Status</th></tr></thead>
   <tbody>
   {% for a in ch.acoes_ordenadas %}

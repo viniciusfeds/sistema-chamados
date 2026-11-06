@@ -449,3 +449,18 @@ body.ocultar-valores.area-fin input[inputmode=decimal]:not(:focus):not([name$=_p
 .btn-olho .risco{display:none}
 .btn-olho[aria-pressed=true] .risco{display:inline}
 @media (max-width:900px){.barra-topo{top:58px}}
+
+/* ---------- tabelas em uma linha (computador): sem quebra; texto longo vira "…" com o texto inteiro no mouse */
+body.com-menu main{max-width:1600px}
+@media (min-width:1100px){
+  table.resp:not(.quebra) th,table.resp:not(.quebra) td{white-space:nowrap}
+  table.resp:not(.quebra) tr.edicao td,table.resp td details form{white-space:normal}
+  table.resp:not(.quebra) td .acoes-orc{flex-wrap:nowrap}
+  table.resp:not(.quebra) td.acoes>:not(.acoes-orc):not(input[type=hidden]){display:inline-block;vertical-align:middle;margin:2px 2px 2px 0}
+  table.resp:not(.quebra) td.acoes details[open]{display:block}
+  table.resp:not(.quebra) td.acoes>.acoes-orc{display:inline-flex;vertical-align:middle;margin-top:0!important}
+  table.resp:not(.quebra) td .acoes-orc input{min-width:160px}
+  .cel{max-width:40ch;overflow:hidden;text-overflow:ellipsis}
+  .cel>*{overflow:hidden;text-overflow:ellipsis}
+  .card:has(>table.resp),.card:has(>.tabela-rolagem){overflow-x:auto!important}
+}

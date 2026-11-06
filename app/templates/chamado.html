@@ -122,7 +122,7 @@
 <div class="card" id="acoes">
   <h2>Ações</h2>
   {% if ch.acoes %}
-  <table class="resp">
+  <table class="resp quebra">
     <thead><tr><th style="width:170px">Data / Horário</th><th>Ação</th><th style="width:130px">Status</th>{% if u.equipe %}<th style="width:80px"></th>{% endif %}</tr></thead>
     <tbody>
     {% for a in ch.acoes_ordenadas %}

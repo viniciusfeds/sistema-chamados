@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.18.1 — 2026-11-06
+- **Listas em uma linha só.** Nas telas de lista (contratos, contas a receber, orçamentos, chamados, clientes, RH,
+  inventário…) cada registro ocupa uma linha: botões lado a lado, datas e valores sem quebrar; texto longo é cortado
+  com “…” e aparece inteiro ao passar o mouse. Selos como *Assinado* e *encerrado* vão para o começo do texto
+- A área de conteúdo usa a largura da tela até 1600 px (antes parava em 1180 px, sobrando espaço dos lados)
+- Em telas menores que 1100 px o texto volta a quebrar normalmente, e no celular as listas continuam em cartões.
+  As ações do chamado continuam mostrando o texto completo
+
 ## 1.18.0 — 2026-11-06
 - **LGPD na tela — dados pessoais mascarados.** CPF, CNPJ, e-mail e telefone/WhatsApp aparecem só pelo começo
   (ex.: `529.•••.•••-••`, `32.402.•••/••••-••`, `vin•••@icloud.com`, `(11) 96•••-••••`) nas listas de clientes,
