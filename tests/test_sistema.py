@@ -2267,3 +2267,161 @@ def test_seguranca_revisao_2():
     m["Subject"] = " ".join("Assunto\r\nBcc: x@y.com".split())
     assert "\n" not in m["Subject"]
     seguranca.PUBLICO.limpar("testclient")
+
+
+# ------------------------------------------------------------------ dupla etapa e reconhecimento (passkey)
+class _AutenticadorFalso:
+    """Imita o Face ID / Windows Hello: chave EC P-256, atestado 'none', verificação do usuário ligada."""
+    def __init__(self, rp_id="testserver", origem="http://testserver"):
+        import os
+        from cryptography.hazmat.primitives.asymmetric import ec
+        self.rp_id, self.origem = rp_id, origem
+        self.chave = ec.generate_private_key(ec.SECP256R1())
+        self.cred_id = os.urandom(16)
+        self.contador = 0
+
+    @staticmethod
+    def b64u(b):
+        import base64
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+    def _client_data(self, tipo, desafio):
+        import json as J
+        return J.dumps({"type": tipo, "challenge": desafio, "origin": self.origem, "crossOrigin": False}).encode()
+
+    def criar(self, opcoes):
+        import cbor2, hashlib
+        nums = self.chave.public_key().public_numbers()
+        cose = cbor2.dumps({1: 2, 3: -7, -1: 1, -2: nums.x.to_bytes(32, "big"), -3: nums.y.to_bytes(32, "big")})
+        auth = (hashlib.sha256(self.rp_id.encode()).digest() + bytes([0x45]) + (0).to_bytes(4, "big") + bytes(16)
+                + len(self.cred_id).to_bytes(2, "big") + self.cred_id + cose)
+        att = cbor2.dumps({"fmt": "none", "attStmt": {}, "authData": auth})
+        cd = self._client_data("webauthn.create", opcoes["challenge"])
+        return {"id": self.b64u(self.cred_id), "rawId": self.b64u(self.cred_id), "type": "public-key",
+                "response": {"clientDataJSON": self.b64u(cd), "attestationObject": self.b64u(att), "transports": ["internal"]},
+                "clientExtensionResults": {}}
+
+    def obter(self, opcoes, user_id=b"1"):
+        import hashlib
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        self.contador += 1
+        auth = hashlib.sha256(self.rp_id.encode()).digest() + bytes([0x05]) + self.contador.to_bytes(4, "big")
+        cd = self._client_data("webauthn.get", opcoes["challenge"])
+        sig = self.chave.sign(auth + hashlib.sha256(cd).digest(), ec.ECDSA(hashes.SHA256()))
+        return {"id": self.b64u(self.cred_id), "rawId": self.b64u(self.cred_id), "type": "public-key",
+                "response": {"clientDataJSON": self.b64u(cd), "authenticatorData": self.b64u(auth),
+                             "signature": self.b64u(sig), "userHandle": self.b64u(user_id)},
+                "clientExtensionResults": {}}
+
+
+def test_dupla_etapa_codigo_e_reconhecimento():
+    import json as J
+    import re as R
+    from app import config, doisfatores as df, seguranca
+    from app.models import ChaveAcesso
+    with SessionLocal() as db:
+        db.add(Usuario(nome="Ana Segura", email="ana2f@t.com", senha_hash=hash_senha("senha12345"), papel="admin"))
+        db.commit()
+    a = entrar("ana2f@t.com")
+    pg = a.get("/conta").text
+    assert 'id="seguranca"' in pg and "Só senha" in pg
+    tok = _csrf(pg)
+    # ativa o código do aplicativo
+    a.post("/conta/2fa/iniciar", data={"csrf": tok})
+    pg = a.get("/conta?configurar=totp").text
+    seg = R.search(r'user-select:all">([A-Z2-7]+)<', pg).group(1)
+    assert "<svg" in pg
+    r = a.post("/conta/2fa/confirmar", data={"csrf": tok, "codigo": "000000" if df.codigo_atual(seg) != "000000" else "111111"})
+    assert "não confere" in r.text
+    r = a.post("/conta/2fa/confirmar", data={"csrf": tok, "codigo": df.codigo_atual(seg)})
+    codigos = R.findall(r"<code>([A-Z2-9]{5}-[A-Z2-9]{5})</code>", r.text)
+    assert "Dupla etapa ativada" in r.text and len(codigos) == 10
+    with SessionLocal() as db:
+        u = db.scalar(select(Usuario).where(Usuario.email == "ana2f@t.com"))
+        assert u.totp_ativo and seg not in (u.totp_segredo or "") and len(u.recuperacao) == 10
+        uid = u.id
+    # login agora pede o código; senha sozinha não entra
+    c = TestClient(app)
+    t = _csrf(c.get("/login").text)
+    r = c.post("/login", data={"email": "ana2f@t.com", "senha": "senha12345", "next": "/financeiro", "csrf": t},
+               follow_redirects=False)
+    assert r.headers["location"] == "/login/codigo"
+    assert c.get("/", follow_redirects=False).status_code in (302, 303, 307)
+    t = _csrf(c.get("/login/codigo").text)
+    r = c.post("/login/codigo", data={"csrf": t, "codigo": "123"}, follow_redirects=True)
+    assert "Código inválido" in r.text
+    import time as T
+    passo_atual = int(T.time() // 30)
+    with SessionLocal() as db:                       # o código atual já foi usado na ativação: usa o próximo
+        prox = df._codigo(seg, passo_atual + 1)
+    r = c.post("/login/codigo", data={"csrf": t, "codigo": prox}, follow_redirects=False)
+    assert r.headers["location"] == "/financeiro"
+    assert c.get("/financeiro").status_code == 200
+    # mesmo código não serve duas vezes
+    c2 = TestClient(app)
+    t2 = _csrf(c2.get("/login").text)
+    c2.post("/login", data={"email": "ana2f@t.com", "senha": "senha12345", "next": "/", "csrf": t2})
+    t2 = _csrf(c2.get("/login/codigo").text)
+    r = c2.post("/login/codigo", data={"csrf": t2, "codigo": prox})
+    assert "Código inválido" in r.text
+    # código de recuperação entra uma vez só
+    r = c2.post("/login/codigo", data={"csrf": t2, "recuperacao": codigos[0].lower()}, follow_redirects=True)
+    assert "Restam 9" in r.text
+    c3 = TestClient(app)
+    t3 = _csrf(c3.get("/login").text)
+    c3.post("/login", data={"email": "ana2f@t.com", "senha": "senha12345", "next": "/", "csrf": t3})
+    t3 = _csrf(c3.get("/login/codigo?rec=1").text)
+    assert "Código inválido" in c3.post("/login/codigo", data={"csrf": t3, "recuperacao": codigos[0]}).text
+    seguranca.LOGIN_CONTA.limpar(f"2fa:{uid}")
+    # cadastra reconhecimento facial (aparelho simulado) e entra só com ele
+    falso = _AutenticadorFalso()
+    tk = _csrf(c.get("/conta").text)
+    op = c.post("/conta/chaves/opcoes", data={"csrf": tk}).json()
+    assert op["authenticatorSelection"]["userVerification"] == "required"
+    r = c.post("/conta/chaves/registrar", data={"csrf": tk, "nome": "iPhone da Ana", "credencial": J.dumps(falso.criar(op))})
+    assert r.json()["ok"], r.text
+    assert "iPhone da Ana" in c.get("/conta").text
+    c4 = TestClient(app)
+    t4 = _csrf(c4.get("/login").text)
+    op = c4.post("/login/chave/opcoes", data={"csrf": t4}).json()
+    r = c4.post("/login/chave", data={"csrf": t4, "next": "/financeiro", "credencial": J.dumps(falso.obter(op, str(uid).encode()))})
+    assert r.json() == {"ok": True, "ir": "/financeiro"}
+    assert c4.get("/financeiro").status_code == 200
+    # desafio reaproveitado é recusado
+    r = c4.post("/login/chave", data={"csrf": t4, "credencial": J.dumps(falso.obter(op, str(uid).encode()))})
+    assert r.status_code == 400
+    # aparelho desconhecido
+    c5 = TestClient(app)
+    t5 = _csrf(c5.get("/login").text)
+    op = c5.post("/login/chave/opcoes", data={"csrf": t5}).json()
+    r = c5.post("/login/chave", data={"csrf": t5, "credencial": J.dumps(_AutenticadorFalso().obter(op))})
+    assert r.status_code == 400 and "não está cadastrado" in r.json()["erro"]
+    # senha salva do equipamento exige o reconhecimento
+    with SessionLocal() as db:
+        from app.models import Equipamento
+        from app import inventario
+        un = db.get(Unidade, IDS["carrao"])
+        eq = Equipamento(unidade_id=un.id, tipo="dvr", nome="DVR biometria", senha_cifrada=inventario.cifrar("Adm!n123"))
+        db.add(eq); db.commit(); eid = eq.id
+    d = c.post(f"/inventario/{eid}/senha", data={"csrf": tk}).json()
+    assert d.get("precisa_biometria") and "senha" not in d
+    d = c.post(f"/inventario/{eid}/senha", data={"csrf": tk, "credencial": J.dumps(falso.obter(d["opcoes"], str(uid).encode()))}).json()
+    assert d.get("senha") == "Adm!n123"
+    assert c.post(f"/inventario/{eid}/senha", data={"csrf": tk}).json().get("senha") == "Adm!n123"   # 2 min de folga
+    # exigência: técnico sem dupla etapa fica preso em Minha conta
+    config.EXIGIR_DUPLA_ETAPA = "equipe"
+    try:
+        tec = entrar("tec@t.com")
+        r = tec.get("/", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"].startswith("/conta")
+        assert tec.get("/conta").status_code == 200
+        assert c.get("/").status_code == 200                      # quem já tem segue normal
+    finally:
+        config.EXIGIR_DUPLA_ETAPA = "nao"
+    # admin zera a dupla etapa de quem perdeu o celular
+    adm = entrar("admin@t.com")
+    adm.post(f"/admin/usuarios/{uid}/2fa", data={"csrf": _csrf(adm.get("/admin").text)})
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        assert not u.totp_ativo and not u.chaves and not db.scalar(select(ChaveAcesso).where(ChaveAcesso.usuario_id == uid))

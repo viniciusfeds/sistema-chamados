@@ -55,6 +55,7 @@
       <td data-l="E-mail">{{ x.email|sens("email") }}</td>
       <td data-l="Perfil">{{ PAPEIS[x.papel] }}{% if x.descricao_escopo %} · {{ x.descricao_escopo }}{% endif %}
         {% if x.restrito_atribuidos %}<br><span class="tag">Só chamados atribuídos</span>{% endif %}
+        <br>{% if x.totp_ativo or x.chaves %}<span class="tag verde" title="Dupla etapa">🔐 {{ 'código' if x.totp_ativo }}{{ ' + ' if x.totp_ativo and x.chaves }}{{ ('facial (' ~ x.chaves|length ~ ')') if x.chaves }}</span>{% else %}<span class="muted" style="font-size:.8rem">só senha</span>{% endif %}
         {% if x.papel == 'tecnico' and x.modulos_bloqueados %}<br><small class="muted">Sem: {{ x.modulos_bloqueados|join(', ') }}</small>{% endif %}</td>
       <td data-l="Alertas">{% if x.equipe %}{% if x.recebe_alertas %}<span class="tag">WhatsApp {{ x.telefone|sens("telefone", "+") }}</span>{% else %}<span class="muted">—</span>{% endif %}{% endif %}</td>
       <td data-l="Situação">{{ 'Ativo' if x.ativo else 'Inativo' }}</td>
@@ -66,6 +67,11 @@
             <button class="btn peq" name="operacao" value="senha">Trocar senha</button>
             {% if x.id != u.id %}<button class="btn peq sec" name="operacao" value="alternar">{{ 'Desativar' if x.ativo else 'Ativar' }}</button>{% endif %}
           </form>
+          {% if x.totp_ativo or x.chaves %}
+          <form method="post" action="/admin/usuarios/{{ x.id }}/2fa" style="margin-top:10px;border-top:1px solid var(--linha);padding-top:8px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn peq sec" onclick='return confirm({{ ("Remover a dupla etapa e o reconhecimento de " ~ x.nome ~ "? Use quando a pessoa perder o celular.")|tojson }})'>Zerar dupla etapa (perdeu o celular)</button></form>
+          {% endif %}
           {% if x.papel == 'tecnico' %}
           <form method="post" action="/admin/usuarios/{{ x.id }}" style="margin-top:10px;border-top:1px solid var(--linha);padding-top:8px">
             <input type="hidden" name="csrf" value="{{ csrf }}">

@@ -44,6 +44,12 @@ SECOES = [
         Campo("URL_PUBLICA", "Endereço público do sistema", "url",
               "Ex.: https://chamados.tecnosit.com.br — usado nos links enviados por WhatsApp e e-mail."),
     ]),
+    ("seguranca", "Segurança do acesso", "Dupla etapa: código do aplicativo autenticador ou reconhecimento facial / "
+     "digital (chave de acesso). Cada pessoa configura em Minha conta → Segurança.", [
+        Campo("EXIGIR_DUPLA_ETAPA", "Exigir dupla etapa de", "escolha",
+              "Quem estiver nesse grupo e ainda não configurou só consegue abrir Minha conta até configurar.",
+              opcoes={"nao": "Ninguém (opcional)", "admin": "Administradores", "equipe": "Administradores e técnicos"}),
+    ]),
     ("chamados", "Chamados", "Prazo sem nova ação para o chamado aparecer como parado, e limites de fotos.", [
         Campo("ALERTA_HORAS_URGENTE", "Parado após (h) — Urgente", "int", minimo=1, maximo=720),
         Campo("ALERTA_HORAS_ALTA", "Parado após (h) — Alta", "int", minimo=1, maximo=720),

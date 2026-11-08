@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
-from .auth import (PrecisaLogin, SoPonto, limite_publico, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
+from .auth import (Precisa2FA, PrecisaLogin, SoPonto, limite_publico, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, VALIDADO_LOCAL, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
@@ -72,6 +72,13 @@ tpl.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else ""
 tpl.env.filters["iso"] = lambda d: d.isoformat() if isinstance(d, date) else (str(d) if d else "")
 tpl.env.filters["local"] = lambda d: (d.replace(tzinfo=timezone.utc).astimezone(config.FUSO).strftime("%d/%m/%Y %H:%M")
                                       if d else "")
+
+
+@app.exception_handler(Precisa2FA)
+async def _precisa_2fa(request: Request, exc):
+    request.session["flash"] = {"msg": "Por segurança, configure a dupla etapa (código do aplicativo ou reconhecimento "
+                                       "facial) para continuar usando o sistema.", "tipo": "aviso"}
+    return RedirectResponse("/conta#seguranca", 303)
 
 
 @app.exception_handler(SoPonto)
@@ -347,6 +354,10 @@ def login(request: Request, email: str = Form(...), senha: str = Form(...), next
               "E-mail ou senha incorretos.", "erro")
         return voltar(f"/login?next={quote(next)}")
     LOGIN_CONTA.limpar(conta)
+    from . import doisfatores
+    if doisfatores.tem_segundo_fator(u):          # segunda etapa: código do app ou reconhecimento facial
+        from .rotas_seguranca import iniciar_segunda_etapa
+        return iniciar_segunda_etapa(request, u, next)
     request.session.clear()                       # sessão nova a cada login (evita fixação de sessão)
     request.session.update(uid=u.id, sv=u.senha_hash[-12:])
     return voltar(_destino(next, "/"))
@@ -1011,11 +1022,17 @@ def inventario_salvar(request: Request, eid: int, unidade_id: str = Form(""), ti
 
 
 @app.post("/inventario/{eid}/senha", dependencies=[Depends(checar_csrf)])
-def inventario_ver_senha(request: Request, eid: int, u: Usuario = Depends(so_equipe),
+def inventario_ver_senha(request: Request, eid: int, credencial: str = Form(""), u: Usuario = Depends(so_equipe),
                          db: Session = Depends(get_db)):
     eq = db.get(Equipamento, eid)
     if not eq or not eq.senha_cifrada:
         raise HTTPException(404, "Sem senha cadastrada.")
+    from .rotas_seguranca import confirmacao_biometrica
+    falta = confirmacao_biometrica(request, db, u, credencial)
+    if falta:
+        db.commit()
+        return Response(json.dumps(falta), media_type="application/json", headers={"Cache-Control": "no-store"},
+                        status_code=200 if falta.get("precisa_biometria") else 403)
     try:
         senha = inventario.decifrar(eq.senha_cifrada)
     except inventario.DadoInvalido as e:
@@ -1736,8 +1753,16 @@ def admin_agente_download(request: Request, so: str, u: Usuario = Depends(so_adm
 
 
 @app.get("/conta", response_class=HTMLResponse)
-def conta(request: Request, u: Usuario = Depends(usuario_atual)):
-    return render(request, "conta.html", u=u)
+def conta(request: Request, configurar: str = "", codigos: int = 0, u: Usuario = Depends(usuario_atual)):
+    from . import doisfatores
+    novo = request.session.get("totp_novo") if configurar == "totp" else None
+    qr = None
+    if novo:
+        from .rotas_financeiro import qr_svg
+        qr = qr_svg(doisfatores.uri_autenticador(novo, u.email), 200)
+    lista_codigos = request.session.pop("codigos_rec", None) if codigos else None
+    return render(request, "conta.html", u=u, totp_novo=novo, qr=qr, codigos_rec=lista_codigos,
+                  exigido=doisfatores.exigido_para(u), tem_2f=doisfatores.tem_segundo_fator(u))
 
 
 @app.post("/conta/alertas", dependencies=[Depends(checar_csrf)])
@@ -1788,3 +1813,4 @@ from . import rotas_clientes, rotas_financeiro  # noqa: E402,F401
 from . import rotas_assinatura, rotas_preventiva  # noqa: E402,F401
 from . import rotas_rh  # noqa: E402,F401
 from . import rotas_pagar  # noqa: E402,F401
+from . import rotas_seguranca  # noqa: E402,F401

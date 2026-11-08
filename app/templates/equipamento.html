@@ -188,16 +188,25 @@
 
 <script>if (location.hash === '#editar') document.getElementById('editar').open = true;</script>
 {% if eq.tem_senha %}
+<script src="/static/chave.js?v={{ config.VERSAO }}"></script>
 <script>
 var _senha = null;
+function _pedirSenha(credencial) {
+  var fd = new FormData(); fd.append('csrf', '{{ csrf }}'); if (credencial) fd.append('credencial', JSON.stringify(credencial));
+  return fetch('/inventario/{{ eq.id }}/senha', {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.precisa_biometria) return d;
+      document.getElementById('senha-valor').textContent = 'Confirme com o reconhecimento…';
+      if (!Chave.suportado()) return {erro: 'Confirme pelo aparelho cadastrado (reconhecimento facial/digital).'};
+      return Chave.obter(d.opcoes).then(_pedirSenha);
+    });
+}
 function verSenha() {
   var b = document.getElementById('btn-senha'), v = document.getElementById('senha-valor');
   if (_senha !== null) { _senha = null; v.textContent = '••••••••'; b.textContent = 'Mostrar';
     document.getElementById('btn-copiar').hidden = true; return; }
-  var fd = new FormData(); fd.append('csrf', '{{ csrf }}');
   b.disabled = true;
-  fetch('/inventario/{{ eq.id }}/senha', {method: 'POST', body: fd, credentials: 'same-origin'})
-    .then(function (r) { return r.json(); })
+  _pedirSenha(null)
     .then(function (d) {
       b.disabled = false;
       if (d.erro || d.senha === undefined) { v.textContent = d.erro || 'Erro ao carregar'; return; }
@@ -205,7 +214,7 @@ function verSenha() {
       document.getElementById('btn-copiar').hidden = false;
       setTimeout(function () { if (_senha !== null) verSenha(); }, 30000);
     })
-    .catch(function () { b.disabled = false; v.textContent = 'Erro ao carregar'; });
+    .catch(function (e) { b.disabled = false; v.textContent = (window.Chave && e && e.name) ? Chave.mensagemErro(e) : 'Erro ao carregar'; });
 }
 function copiarSenha(btn) {
   if (_senha === null) return;

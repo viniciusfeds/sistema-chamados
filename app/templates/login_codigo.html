@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Confirmar acesso{% endblock %}
+{% block conteudo %}
+<div class="login card">
+  <img src="/static/logo.png" alt="{{ config.EMPRESA_NOME }}">
+  <h1 class="login-nome" style="font-size:1.35rem">Confirme que é você</h1>
+  <p class="muted" style="text-align:center;margin-top:0">{{ pu.nome }} · dupla etapa</p>
+  {% if tem_chave %}
+  <button type="button" class="btn btn-bio" id="btn-chave" style="width:100%;justify-content:center;margin-bottom:6px">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 10v1M15 10v1M12 10v3h-1M9.5 15.5c1.4 1 3.6 1 5 0"/></svg>
+    Confirmar com reconhecimento facial</button>
+  <p class="dica" id="erro-chave" style="color:#B3261E;text-align:center" hidden></p>
+  {% if tem_totp or not rec %}<div class="ou"><span>ou</span></div>{% endif %}
+  {% endif %}
+  {% if tem_totp and not rec %}
+  <form method="post" action="/login/codigo" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label for="codigo">Código de 6 dígitos do aplicativo autenticador</label>
+      <input id="codigo" name="codigo" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code"
+             required {{ 'autofocus' if not tem_chave }} style="font-size:1.5rem;letter-spacing:.3em;text-align:center"></div>
+    <button class="btn" style="width:100%;justify-content:center">Confirmar</button>
+  </form>
+  {% endif %}
+  {% if rec %}
+  <form method="post" action="/login/codigo" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label for="recuperacao">Código de recuperação</label>
+      <input id="recuperacao" name="recuperacao" required placeholder="XXXXX-XXXXX" style="text-transform:uppercase;text-align:center"></div>
+    <button class="btn sec" style="width:100%;justify-content:center">Usar código de recuperação</button>
+  </form>
+  {% endif %}
+  <p class="dica" style="text-align:center;margin-top:14px">
+    {% if not rec %}<a href="/login/codigo?rec=1">Perdeu o celular? Use um código de recuperação</a> · {% elif tem_totp %}<a href="/login/codigo">Voltar ao código do aplicativo</a> · {% endif %}<a href="/login">Cancelar</a></p>
+</div>
+{% if tem_chave %}
+<script src="/static/chave.js?v={{ config.VERSAO }}"></script>
+<script>
+(function () {
+  var b = document.getElementById('btn-chave'), err = document.getElementById('erro-chave');
+  if (!Chave.suportado()) { b.hidden = true; return; }
+  b.onclick = function () {
+    err.hidden = true; b.disabled = true;
+    fetch('/login/chave/opcoes', {method: 'POST', body: new URLSearchParams({csrf: '{{ csrf }}'}), credentials: 'same-origin'})
+      .then(function (r) { return r.json(); }).then(Chave.obter)
+      .then(function (cred) { return Chave.postar('/login/chave', {csrf: '{{ csrf }}', credencial: JSON.stringify(cred)}); })
+      .then(function (j) { if (j.ok) location.href = j.ir; else { err.textContent = j.erro; err.hidden = false; b.disabled = false; } })
+      .catch(function (e) { err.textContent = Chave.mensagemErro(e); err.hidden = false; b.disabled = false; });
+  };
+})();
+</script>
+{% endif %}
+{% endblock %}

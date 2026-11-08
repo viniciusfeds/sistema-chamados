@@ -95,6 +95,10 @@ class Usuario(Base):
     recebe_alertas: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # alertas de monitoramento
     so_atribuidos: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)  # técnico: só os seus chamados
     modulos: Mapped[list | None] = mapped_column(JSON, nullable=True)  # técnico: módulos liberados (None = todos)
+    totp_segredo: Mapped[str | None] = mapped_column(Text, nullable=True)       # cifrado
+    totp_ativo: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    totp_passo: Mapped[int | None] = mapped_column(Integer, nullable=True)      # último código usado (anti-repetição)
+    recuperacao: Mapped[list | None] = mapped_column(JSON, nullable=True)       # hashes dos códigos de recuperação
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     unidade = relationship("Unidade")
     cliente = relationship("Cliente")
@@ -1181,3 +1185,19 @@ class ContaPagar(Base):
         if self.competencia:
             return f"mensal {self.competencia[5:]}/{self.competencia[:4]}"
         return "parcela única" if self.total_parcelas <= 1 else f"parcela {self.parcela}/{self.total_parcelas}"
+
+
+class ChaveAcesso(Base):
+    """Chave de acesso (passkey / WebAuthn): entrar com reconhecimento facial, digital ou Windows Hello."""
+    __tablename__ = "chaves_acesso"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    credencial_id: Mapped[str] = mapped_column(String(400), unique=True, index=True)   # base64url
+    chave_publica: Mapped[str] = mapped_column(Text)                                   # base64url (COSE)
+    contador: Mapped[int] = mapped_column(Integer, default=0)
+    nome: Mapped[str] = mapped_column(String(80))
+    transportes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    ultimo_uso: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    usuario = relationship("Usuario", backref=backref("chaves", cascade="all, delete-orphan",
+                                                      order_by="ChaveAcesso.id"))

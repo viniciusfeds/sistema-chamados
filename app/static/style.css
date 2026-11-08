@@ -468,3 +468,15 @@ body.com-menu main{max-width:1600px}
 .cert-info span.dica{display:block;margin:0 0 2px}
 .cert-form{display:grid;grid-template-columns:2fr 1.3fr auto;gap:12px;align-items:end}
 @media (max-width:700px){.cert-form{grid-template-columns:1fr}}
+
+/* ---------- dupla etapa */
+.ou{display:flex;align-items:center;gap:10px;color:var(--cinza);font-size:.85rem;margin:14px 0}
+.ou::before,.ou::after{content:"";flex:1;height:1px;background:var(--linha)}
+.btn-bio{gap:8px}
+.totp-config{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start;padding:12px;border:1px solid var(--linha);border-radius:10px;background:#FAFAF8}
+.qr-totp svg{width:200px;height:200px;background:#fff;padding:6px;border-radius:8px}
+.codigos-rec{border:1px solid #F2C94C;background:#FFFBEA;border-radius:10px;padding:12px 14px;margin:10px 0 14px}
+.grade-codigos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-bottom:10px}
+.grade-codigos code{background:#fff;border:1px solid var(--linha);border-radius:6px;padding:5px 8px;text-align:center;font-size:.95rem;letter-spacing:.05em}
+#seguranca h3{margin:18px 0 6px;font-size:1.02rem}
+@media (max-width:600px){.totp-config{grid-template-columns:1fr}.qr-totp{text-align:center}}

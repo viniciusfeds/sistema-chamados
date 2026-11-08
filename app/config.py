@@ -66,6 +66,7 @@ MONITOR_AVISAR_CLIENTE = os.environ.get("MONITOR_AVISAR_CLIENTE", "0") == "1"   
 # Fotos
 FOTO_MAX_MB = int(os.environ.get("FOTO_MAX_MB", "15"))
 FOTO_MAX_POR_ENVIO = int(os.environ.get("FOTO_MAX_POR_ENVIO", "6"))
+EXIGIR_DUPLA_ETAPA = os.environ.get("EXIGIR_DUPLA_ETAPA", "nao")   # nao / admin / equipe
 LIMITE_PUBLICO_DIA = int(os.environ.get("LIMITE_PUBLICO_DIA", "60"))  # teto diário de chamados pelo link público
 # Sem resposta do solicitante em X dias, o chamado "Aguardando validação" é concluído sozinho (0 = nunca)
 CHAMADO_VALIDACAO_DIAS = int(os.environ.get("CHAMADO_VALIDACAO_DIAS", "3"))

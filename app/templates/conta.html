@@ -2,7 +2,7 @@
 {% block titulo %}Minha conta{% endblock %}
 {% block conteudo %}
 <h1>Minha conta</h1>
-<div class="card" style="max-width:480px">
+<div class="card" style="max-width:720px">
   <p><b>{{ u.nome }}</b><br><span class="muted">{{ u.email|sens("email") }} · {{ PAPEIS[u.papel] }}{% if u.unidade %} · {{ u.unidade.nome }}{% endif %}</span></p>
   <form method="post" action="/conta">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -11,8 +11,86 @@
     <button class="btn">Trocar senha</button>
   </form>
 </div>
+<div class="card" style="max-width:720px" id="seguranca">
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Segurança do acesso</h2>
+    <span class="situ {{ 'verde' if tem_2f else ('vermelho' if exigido else 'cinza') }}">{{ 'Dupla etapa ativa' if tem_2f else ('Obrigatório configurar' if exigido else 'Só senha') }}</span></div>
+  <p class="dica" style="margin-top:0">Com a dupla etapa, além da senha o sistema pede o código do aplicativo ou o reconhecimento facial/digital. Quem descobrir sua senha não consegue entrar.</p>
+
+  {% if codigos_rec %}
+  <div class="codigos-rec">
+    <b>Códigos de recuperação — guarde em lugar seguro (aparecem só agora)</b>
+    <p class="dica" style="margin:4px 0 8px">Se perder o celular, cada código permite entrar uma vez.</p>
+    <div class="grade-codigos">{% for c in codigos_rec %}<code>{{ c }}</code>{% endfor %}</div>
+    <button type="button" class="btn peq sec" onclick="navigator.clipboard.writeText({{ codigos_rec|join('\n')|tojson }});this.textContent='Copiados ✔'">Copiar todos</button>
+  </div>
+  {% endif %}
+
+  <h3>Reconhecimento facial / digital</h3>
+  <p class="dica" style="margin-top:0">Entre com Face ID, digital ou Windows Hello, sem digitar a senha. Também é pedido antes de mostrar as senhas salvas dos equipamentos.</p>
+  {% for c in u.chaves %}
+  <div class="linha-lista"><span>🔐 <b>{{ c.nome }}</b> <span class="muted">· cadastrado {{ c.criado_em|local }}{% if c.ultimo_uso %} · último uso {{ c.ultimo_uso|local }}{% endif %}</span></span>
+    <form method="post" action="/conta/chaves/{{ c.id }}/remover"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn peq sec" onclick='return confirm({{ ("Remover " ~ c.nome ~ "?")|tojson }})'>Remover</button></form></div>
+  {% endfor %}
+  <div id="bloco-cad-chave" style="margin:8px 0 4px">
+    <div class="acoes-orc"><input id="nome-chave" placeholder="Nome do aparelho (ex.: iPhone do Vinicius)" style="max-width:280px">
+      <button type="button" class="btn sec" id="btn-cad-chave">+ Cadastrar este aparelho</button></div>
+    <p class="dica" id="msg-chave" hidden></p>
+  </div>
+  <p class="dica" id="sem-suporte" hidden>Este navegador não oferece reconhecimento facial/digital (ou o sistema não está aberto pelo endereço https oficial).</p>
+
+  <h3>Código do aplicativo autenticador</h3>
+  {% if u.totp_ativo %}
+  <p>✔ Ativo. A cada acesso o sistema pede o código de 6 dígitos do aplicativo.</p>
+  <details><summary class="btn peq sec">Desativar ou gerar novos códigos de recuperação</summary>
+    <div class="grid2" style="margin-top:10px">
+      <form method="post" action="/conta/2fa/desativar" autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="campo"><label>Senha</label><input type="password" name="senha" required autocomplete="current-password"></div>
+        <div class="campo"><label>Código do aplicativo</label><input name="codigo" inputmode="numeric" required autocomplete="one-time-code"></div>
+        <button class="btn peq perigo">Desativar código do aplicativo</button></form>
+      <form method="post" action="/conta/2fa/codigos" autocomplete="off"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="campo"><label>Senha</label><input type="password" name="senha" required autocomplete="current-password"></div>
+        <button class="btn peq sec">Gerar novos códigos de recuperação</button>
+        <p class="dica">Restam {{ (u.recuperacao or [])|length }} código(s).</p></form>
+    </div>
+  </details>
+  {% elif totp_novo %}
+  <div class="totp-config">
+    <div class="qr-totp">{{ qr|safe }}</div>
+    <div>
+      <ol class="dica" style="padding-left:18px;margin-top:0">
+        <li>Abra o <b>Google Authenticator</b>, <b>Microsoft Authenticator</b> ou similar.</li>
+        <li>Toque em <b>+</b> e escaneie o QR (ou digite a chave abaixo).</li>
+        <li>Digite o código de 6 dígitos que aparecer.</li></ol>
+      <div class="dica">Chave: <code style="user-select:all">{{ totp_novo }}</code></div>
+      <form method="post" action="/conta/2fa/confirmar" autocomplete="off" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="acoes-orc"><input name="codigo" inputmode="numeric" maxlength="7" required autocomplete="one-time-code" placeholder="000000" style="max-width:140px;font-size:1.2rem;letter-spacing:.2em;text-align:center">
+          <button class="btn">Ativar</button></div></form>
+    </div>
+  </div>
+  {% else %}
+  <form method="post" action="/conta/2fa/iniciar"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sec">Ativar código do aplicativo</button></form>
+  {% endif %}
+</div>
+<script src="/static/chave.js?v={{ config.VERSAO }}"></script>
+<script>
+(function () {
+  if (!Chave.suportado()) { document.getElementById('bloco-cad-chave').hidden = true; document.getElementById('sem-suporte').hidden = false; return; }
+  var b = document.getElementById('btn-cad-chave'), msg = document.getElementById('msg-chave');
+  b.onclick = function () {
+    msg.hidden = true; b.disabled = true;
+    fetch('/conta/chaves/opcoes', {method: 'POST', body: new URLSearchParams({csrf: '{{ csrf }}'}), credentials: 'same-origin'})
+      .then(function (r) { return r.json(); }).then(Chave.criar)
+      .then(function (cred) { return Chave.postar('/conta/chaves/registrar', {csrf: '{{ csrf }}', nome: document.getElementById('nome-chave').value, credencial: JSON.stringify(cred)}); })
+      .then(function (j) { if (j.ok) location.href = j.ir; else { msg.textContent = j.erro; msg.style.color = '#B3261E'; msg.hidden = false; b.disabled = false; } })
+      .catch(function (e) { msg.textContent = Chave.mensagemErro(e); msg.style.color = '#B3261E'; msg.hidden = false; b.disabled = false; });
+  };
+})();
+</script>
+
 {% if u.equipe and u.pode('inventario') %}
-<div class="card" style="max-width:480px" id="alertas">
+<div class="card" style="max-width:720px" id="alertas">
   <h2>Alertas de monitoramento</h2>
   <p class="dica" style="margin-top:0">Quando um equipamento monitorado cair, o sistema abre um chamado automático e avisa no WhatsApp de quem estiver marcado aqui.</p>
   <form method="post" action="/conta/alertas">

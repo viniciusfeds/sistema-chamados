@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## 1.21.0 — 2026-11-08
+- **Dupla etapa** (Minha conta → Segurança do acesso)
+  - **Código do aplicativo autenticador** (Google Authenticator, Microsoft Authenticator…): QR para escanear,
+    confirmação na ativação; no login, depois da senha, pede o código de 6 dígitos (cada código vale uma vez)
+  - **10 códigos de recuperação** para quem perder o celular (cada um entra uma vez; gerar novos com a senha)
+  - 5 códigos errados bloqueiam por 15 minutos
+- **Entrar com reconhecimento facial** (chave de acesso / passkey): Face ID, digital ou Windows Hello. Cadastre o
+  aparelho em Minha conta e entre com o botão *Entrar com reconhecimento facial*, sem digitar senha; também serve como
+  segunda etapa depois da senha. Vários aparelhos por pessoa, com nome, último uso e remover
+- **Senhas salvas dos equipamentos** (inventário): quem tem reconhecimento cadastrado confirma com o rosto/digital
+  antes de ver a senha (vale por 2 minutos)
+- **Configurações → Segurança do acesso**: exigir dupla etapa de ninguém, dos administradores ou de administradores e
+  técnicos; quem ainda não configurou só consegue abrir Minha conta até configurar
+- **Administração → Usuários**: mostra quem tem dupla etapa e o botão *Zerar dupla etapa* (perdeu o celular)
+- Requer o endereço oficial em https (URL_PUBLICA, ex.: https://app.tecnosit.com.br) para o reconhecimento facial
+
 ## 1.20.2 — 2026-11-08 · segunda revisão de segurança
 - **Tamanho máximo de envio**: uploads gigantes são recusados (413) antes de ocupar o disco — páginas públicas até
   3 fotos, telas internas até o limite de fotos por envio

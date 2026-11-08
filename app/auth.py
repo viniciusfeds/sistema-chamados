@@ -31,6 +31,10 @@ class PrecisaLogin(Exception):
     pass
 
 
+class Precisa2FA(Exception):
+    """A regra de segurança exige dupla etapa e a pessoa ainda não configurou: só Minha conta fica liberada."""
+
+
 class SoPonto(Exception):
     """Usuário com perfil Funcionário tentou abrir algo além do ponto: volta para /ponto."""
 
@@ -42,7 +46,8 @@ def usuario_atual(request: Request, db: Session = Depends(get_db)) -> Usuario:
     uid = request.session.get("uid")
     u = db.get(Usuario, uid) if uid else None
     if not u or not u.ativo:
-        request.session.clear()
+        request.session.pop("uid", None)         # mantém uma segunda etapa em andamento (pre_uid)
+        request.session.pop("sv", None)
         raise PrecisaLogin()
     sv = request.session.get("sv")               # senha trocada (por ele ou pelo admin): derruba as outras sessões
     if sv is None:
@@ -50,6 +55,11 @@ def usuario_atual(request: Request, db: Session = Depends(get_db)) -> Usuario:
     elif not hmac.compare_digest(sv, u.senha_hash[-12:]):
         request.session.clear()
         raise PrecisaLogin()
+    from . import doisfatores
+    if doisfatores.exigido_para(u) and not doisfatores.tem_segundo_fator(u):
+        caminho = request.url.path
+        if not (caminho == "/sair" or caminho == "/conta" or caminho.startswith("/conta/")):
+            raise Precisa2FA()
     if u.papel == "funcionario":
         caminho = request.url.path
         if not any(caminho == p or caminho.startswith(p + "/") for p in LIVRE_FUNCIONARIO):
