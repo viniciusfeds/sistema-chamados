@@ -48,6 +48,7 @@ def email_configurado():
 def _enviar(assunto, corpo):
     try:
         msg = EmailMessage()
+        assunto = " ".join(str(assunto).split())[:200]          # quebra de linha no assunto derrubaria o envio
         msg["Subject"], msg["From"] = assunto, config.SMTP_REMETENTE or config.SMTP_USUARIO
         msg["To"] = ", ".join(config.AVISO_EMAILS)
         msg.set_content(corpo)

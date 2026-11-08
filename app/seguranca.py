@@ -103,3 +103,61 @@ def celula_csv(v):
     """Evita injeção de fórmula ao abrir o CSV no Excel (=, +, -, @ no começo)."""
     s = "" if v is None else str(v)
     return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+# ------------------------------------------------------------------ tamanho máximo do envio
+PUBLICOS = ("/abrir/", "/acompanhar/", "/orcamento/", "/assinar/", "/api/agente/", "/webhook/")
+
+
+class LimiteCorpo:
+    """Recusa envios grandes demais antes de gravar em disco (o upload de fotos é o maior caso legítimo)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    @staticmethod
+    def limite(caminho):
+        fotos = config.FOTO_MAX_MB * 1024 * 1024
+        if caminho.startswith(PUBLICOS):
+            return fotos * 3 + 5 * 1024 * 1024                     # até 3 fotos no formulário público
+        return fotos * config.FOTO_MAX_POR_ENVIO + 10 * 1024 * 1024
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") in ("GET", "HEAD", "OPTIONS"):
+            return await self.app(scope, receive, send)
+        maximo = self.limite(scope.get("path", ""))
+        tam = dict(scope.get("headers") or []).get(b"content-length")
+        if tam and tam.isdigit() and int(tam) > maximo:
+            return await _413(send, maximo)
+        estado = {"lidos": 0, "estourou": False, "iniciou": False}
+
+        async def receber():
+            msg = await receive()
+            if msg["type"] == "http.request":
+                estado["lidos"] += len(msg.get("body", b""))
+                if estado["lidos"] > maximo:
+                    estado["estourou"] = True
+                    return {"type": "http.disconnect"}
+            return msg
+
+        async def enviar(msg):
+            if estado["estourou"]:                 # o app respondeu ao "desconectou": troca pela resposta 413
+                return
+            if msg["type"] == "http.response.start":
+                estado["iniciou"] = True
+            await send(msg)
+
+        try:
+            await self.app(scope, receber, enviar)
+        except Exception:
+            if not estado["estourou"]:
+                raise
+        if estado["estourou"] and not estado["iniciou"]:
+            await _413(send, maximo)
+
+
+async def _413(send, maximo):
+    corpo = f"Envio grande demais (máximo {maximo // (1024 * 1024)} MB).".encode()
+    await send({"type": "http.response.start", "status": 413,
+                "headers": [(b"content-type", b"text/plain; charset=utf-8"), (b"content-length", str(len(corpo)).encode())]})
+    await send({"type": "http.response.body", "body": corpo})

@@ -292,7 +292,7 @@ def assinar_pdf(token: str, db: Session = Depends(get_db)):
     return _anexo_pdf(assinatura.pdf(a.contrato), f"Contrato {a.contrato.doc_codigo}.pdf")
 
 
-@app.get("/verificar/{codigo}", response_class=HTMLResponse)
+@app.get("/verificar/{codigo}", response_class=HTMLResponse, dependencies=[Depends(limite_publico)])
 def verificar(request: Request, codigo: str, db: Session = Depends(get_db)):
     c = db.scalar(select(Contrato).where(Contrato.doc_codigo == codigo.strip().upper())
                   .options(selectinload(Contrato.assinaturas))) if codigo else None

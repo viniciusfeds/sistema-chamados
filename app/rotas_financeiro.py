@@ -70,6 +70,7 @@ def enviar_email(para, assunto, corpo, anexos=()):
     if not config.SMTP_HOST:
         raise ValueError("Configure o e-mail (SMTP) em Administração → Configurações.")
     msg = EmailMessage()
+    assunto = " ".join(str(assunto).split())[:200]
     msg["Subject"], msg["From"], msg["To"] = assunto, config.SMTP_REMETENTE or config.SMTP_USUARIO, para
     if config.EMPRESA_EMAIL:
         msg["Reply-To"] = config.EMPRESA_EMAIL

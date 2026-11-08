@@ -2243,3 +2243,27 @@ def test_seguranca_revisao():
         assert False, "BMP deveria ser recusado"
     except fotos.FotoInvalida:
         pass
+
+
+def test_seguranca_revisao_2():
+    from app import seguranca
+    from app.seguranca import LimiteCorpo
+    c = TestClient(app)
+    # envio gigante é recusado antes de ir para o disco (cabeçalho e fluxo sem tamanho)
+    lim = LimiteCorpo.limite("/abrir/x")
+    r = c.post("/abrir/x", content=b"0" * 10, headers={"content-length": str(lim + 1), "content-type": "text/plain"})
+    assert r.status_code == 413
+    def gerador():
+        yield b'--b\r\nContent-Disposition: form-data; name="fotos_enviadas"; filename="a.jpg"\r\n\r\n'
+        for _ in range(lim // (1024 * 1024) + 2):
+            yield b"0" * (1024 * 1024)
+    r = c.post("/abrir/x", content=gerador(), headers={"content-type": "multipart/form-data; boundary=b"})
+    assert r.status_code == 413
+    # envio normal segue funcionando
+    assert TestClient(app).get("/login").status_code == 200
+    # assunto com quebra de linha não derruba o e-mail
+    from email.message import EmailMessage
+    m = EmailMessage()
+    m["Subject"] = " ".join("Assunto\r\nBcc: x@y.com".split())
+    assert "\n" not in m["Subject"]
+    seguranca.PUBLICO.limpar("testclient")

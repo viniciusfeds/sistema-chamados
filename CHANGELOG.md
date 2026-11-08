@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.20.2 — 2026-11-08 · segunda revisão de segurança
+- **Tamanho máximo de envio**: uploads gigantes são recusados (413) antes de ocupar o disco — páginas públicas até
+  3 fotos, telas internas até o limite de fotos por envio
+- **Teto diário de chamados pelo link público** (`LIMITE_PUBLICO_DIA`, padrão 60 por dia somando todos os IPs):
+  impede que um robô use o formulário para abrir chamados em massa e disparar WhatsApp para números quaisquer
+- Assunto de e-mail sem quebras de linha (texto vindo do formulário público não derruba mais o aviso)
+- Página de verificação de contrato (`/verificar/…`) com limite de consultas por IP
+
 ## 1.20.1 — 2026-11-08 · revisão de segurança
 - **Pillow 13.0.0** (a 12.3.0 tinha 39 falhas conhecidas em decodificadores de imagem) e as fotos enviadas — inclusive
   pelo formulário público — só passam pelos decodificadores JPEG/PNG/WEBP; BMP e GIF deixam de ser aceitos

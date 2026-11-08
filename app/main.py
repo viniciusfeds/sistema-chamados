@@ -32,6 +32,7 @@ APP_DIR = Path(__file__).resolve().parent
 # Limite da página pública: chamados por IP na janela de tempo
 LIMITE_PUBLICO = 5
 JANELA_PUBLICO = timedelta(minutes=30)
+LIMITE_PUBLICO_DIA = config.LIMITE_PUBLICO_DIA
 
 
 @asynccontextmanager
@@ -46,7 +47,8 @@ async def _vida(app):
 
 
 app = FastAPI(title=config.SISTEMA_NOME, docs_url=None, redoc_url=None, openapi_url=None, lifespan=_vida)
-from .seguranca import CabecalhosSeguranca  # noqa: E402
+from .seguranca import CabecalhosSeguranca, LimiteCorpo  # noqa: E402
+app.add_middleware(LimiteCorpo)
 app.add_middleware(CabecalhosSeguranca)
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY, session_cookie="chamados",
                    max_age=60 * 60 * 24 * 14, same_site="lax", https_only=config.COOKIE_SEGURO)
@@ -1116,6 +1118,11 @@ def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome:
         Chamado.criado_em >= agora_utc() - JANELA_PUBLICO))
     if not erro and recentes >= LIMITE_PUBLICO:
         erro = "Muitos chamados enviados em pouco tempo. Aguarde alguns minutos ou fale com a TecnosIT pelo WhatsApp."
+    if not erro and db.scalar(select(func.count(Chamado.id)).where(
+            Chamado.origem == "link", Chamado.criado_em >= agora_utc() - timedelta(days=1))) >= LIMITE_PUBLICO_DIA:
+        logging.getLogger("chamados").warning("Teto diário de chamados pelo link atingido (%s) — possível abuso",
+                                              LIMITE_PUBLICO_DIA)
+        erro = "Não foi possível registrar agora. Fale com a TecnosIT pelo WhatsApp."
     if erro:
         request.session["flash"] = {"msg": erro, "tipo": "erro"}
         return render(request, "publico_abrir.html", cli=cli, unidades=unidades, v=v, max_fotos=FOTOS_PUBLICO)
