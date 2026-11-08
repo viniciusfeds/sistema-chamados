@@ -70,7 +70,7 @@
     <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
     <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
     {% if ch.solicitante_nome %}
-    <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% elif ch.origem == 'monitor' %} <span class="tag alerta">automático</span>{% endif %}</dd>
+    <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% elif ch.origem == 'whatsapp' %} <span class="tag verde">via WhatsApp</span>{% elif ch.origem == 'monitor' %} <span class="tag alerta">automático</span>{% endif %}</dd>
     {% if u.equipe and (ch.solicitante_contato or ch.solicitante_email) %}
     <dt>Contato</dt><dd>{% if ch.solicitante_contato %}{% set fone = ch.solicitante_contato|replace(' ','')|replace('(','')|replace(')','')|replace('-','')|replace('+','') %}
       <a href="https://wa.me/{{ '55' ~ fone if fone|length <= 11 else fone }}" target="_blank" rel="noopener">{{ ch.solicitante_contato|sens("telefone") }}</a>{% endif %}

@@ -2425,3 +2425,127 @@ def test_dupla_etapa_codigo_e_reconhecimento():
     with SessionLocal() as db:
         u = db.get(Usuario, uid)
         assert not u.totp_ativo and not u.chaves and not db.scalar(select(ChaveAcesso).where(ChaveAcesso.usuario_id == uid))
+
+
+# ------------------------------------------------------------------ v1.22: URA do WhatsApp e integração n8n
+def _webhook_msg(c, tel, texto, mid, nome="Gestora"):
+    import hashlib, hmac as H, json
+    corpo = json.dumps({"entry": [{"changes": [{"value": {
+        "contacts": [{"wa_id": tel, "profile": {"name": nome}}],
+        "messages": [{"from": tel, "id": mid, "type": "text", "text": {"body": texto}}]}}]}]}).encode()
+    sig = "sha256=" + H.new(b"segredo", corpo, hashlib.sha256).hexdigest()
+    return c.post("/webhook/whatsapp", content=corpo, headers={"x-hub-signature-256": sig,
+                                                                "content-type": "application/json"})
+
+
+def test_ura_whatsapp_modo_meta(wa, monkeypatch):
+    import threading as TH
+    from app import rotas_integracao
+    enviados, _ = wa
+    class _Sync:
+        def __init__(self, target, args=(), daemon=None): self.t, self.a = target, args
+        def start(self): self.t(*self.a)
+    monkeypatch.setattr(rotas_integracao.threading, "Thread", _Sync)
+    _cadastrar_contatos_wa()
+    c = TestClient(app)
+    textos = lambda: [p["text"]["body"] for p in enviados if p.get("type") == "text"]
+    enviados.clear()
+    _webhook_msg(c, "5511955550001", "Oi", "m1")
+    assert "*1* – Abrir chamado" in textos()[-1] and "Gestora" in textos()[-1]
+    _webhook_msg(c, "5511955550001", "Oi", "m1")                     # reenvio da Meta: ignora
+    assert len(textos()) == 1
+    _webhook_msg(c, "5511955550001", "1", "m2")
+    assert "Para qual unidade" in textos()[-1] and "SkyFit Carrão" in textos()[-1]
+    linhas = textos()[-1].split("\n")
+    n = next(l for l in linhas if "SkyFit Carrão" in l).split("*")[1]
+    _webhook_msg(c, "5511955550001", n, "m3")
+    assert "Descreva o problema" in textos()[-1]
+    enviados.clear()
+    _webhook_msg(c, "5511955550001", "Câmera da recepção sem imagem desde ontem", "m4")
+    resp = textos()[-1]
+    assert "✅ Chamado" in resp and "/acompanhar/" in resp
+    templates_para = [p["to"] for p in enviados if p.get("type") == "template"]
+    assert "5511955550001" not in templates_para                      # quem pediu já recebeu pela URA
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.origem == "whatsapp").order_by(Chamado.id.desc()))
+        assert ch.unidade.nome == "SkyFit Carrão" and "Câmera da recepção" in ch.problema
+        assert ch.solicitante_nome == "Gestora Geral" and ch.solicitante_aceita_whatsapp
+        num = ch.numero_fmt
+    assert "via WhatsApp" in entrar("admin@t.com").get("/").text
+    # consultar
+    _webhook_msg(c, "5511955550001", "menu", "m5")
+    _webhook_msg(c, "5511955550001", "2", "m6")
+    assert num in textos()[-1]
+    _webhook_msg(c, "5511955550001", num, "m7")
+    assert f"*Chamado {num}*" in textos()[-1] and "Situação" in textos()[-1]
+    # número desconhecido
+    _webhook_msg(c, "5511911112222", "1", "x1", nome="Fulano")
+    assert "Não encontrei seu número" in textos()[-1]
+    _webhook_msg(c, "5511911112222", "Condomínio Azul, João, portão travado", "x2", nome="Fulano")
+    assert "Recebido" in textos()[-1]
+    # desconhecido não consulta chamado dos outros
+    _webhook_msg(c, "5511911112222", "2", "x3")
+    assert "não tem chamados em aberto" in textos()[-1]
+
+
+def test_integracao_n8n(monkeypatch):
+    import json
+    import threading as TH
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from app import config, whatsapp
+    recebidos = []
+
+    class N8nFalso(BaseHTTPRequestHandler):
+        def do_POST(self):
+            corpo = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            recebidos.append((self.headers.get("x-nexus-token"), corpo))
+            r = json.dumps({"id": f"evo-{len(recebidos)}"}).encode()
+            self.send_response(200); self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(r))); self.end_headers(); self.wfile.write(r)
+        def log_message(self, *a): pass
+    srv = HTTPServer(("127.0.0.1", 0), N8nFalso)
+    TH.Thread(target=srv.serve_forever, daemon=True).start()
+    tok = "t" * 32
+    monkeypatch.setattr(config, "WHATSAPP_MODO", "n8n")
+    monkeypatch.setattr(config, "N8N_URL_ENVIO", f"http://127.0.0.1:{srv.server_port}/webhook/nexus-enviar")
+    monkeypatch.setattr(config, "N8N_TOKEN", tok)
+    monkeypatch.setattr(whatsapp, "_em_segundo_plano", lambda fn, *a: fn(*a))
+    try:
+        c = TestClient(app)
+        H = {"X-Nexus-Token": tok}
+        assert c.post("/api/integracao/whatsapp/mensagem", json={"telefone": "11955550001", "texto": "oi"}).status_code == 401
+        assert c.post("/api/integracao/whatsapp/mensagem", json={"telefone": "11955550001", "texto": "oi"},
+                      headers={"X-Nexus-Token": "errado"}).status_code == 401
+        r = c.post("/api/integracao/whatsapp/mensagem", json={"telefone": "11955550001", "texto": "menu", "id": "n1"}, headers=H)
+        assert r.json()["responder"] and "Abrir chamado" in r.json()["texto"] and r.json()["telefone"] == "5511955550001"
+        # abrir pela API (sem unidade: cliente tem várias → 409 com a lista)
+        r = c.post("/api/integracao/chamados", json={"telefone": "11955550001", "texto": "Interfone mudo"}, headers=H)
+        assert r.status_code == 409 and r.json()["unidades"]
+        assert any(u["nome"] == "SkyFit Carrão" for u in r.json()["unidades"])
+        # contato de uma unidade só (Cisper): abre direto
+        recebidos.clear()
+        r = c.post("/api/integracao/chamados", json={"telefone": "11955550003", "texto": "Interfone mudo da portaria",
+                                                     "nome": "Portaria Cisper"},
+                   headers={"Authorization": f"Bearer {tok}"})
+        assert r.status_code == 201 and r.json()["link"].count("/acompanhar/") == 1 and r.json()["unidade"] == "SkyFit Cisper"
+        numero = r.json()["numero"]
+        # aviso de abertura saiu pelo n8n, com texto pronto e o token
+        assert recebidos and all(t == tok for t, _ in recebidos)
+        avisos = [b for _, b in recebidos if b.get("tipo") == "aviso"]
+        assert avisos and "Novo chamado" in avisos[0]["texto"] and avisos[0]["evento"] == "abertura"
+        assert any(b["telefone"] == "5511955550001" for b in avisos)          # gestora geral avisada
+        assert all(b["telefone"] != "5511955550003" for b in avisos)          # quem abriu não recebe o aviso
+        # consultar: só quem é do cliente
+        r = c.get(f"/api/integracao/chamados/{numero}?telefone=11955550003", headers=H)
+        assert r.status_code == 200 and r.json()["unidade"] == "SkyFit Cisper" and r.json()["situacao"]
+        assert c.get(f"/api/integracao/chamados/{numero}?telefone=11955550001", headers=H).status_code == 200
+        assert c.get(f"/api/integracao/chamados/{numero}?telefone=11900001111", headers=H).status_code == 404
+        # status de entrega informado pelo n8n
+        r = c.post("/api/integracao/whatsapp/status", json={"envio_id": avisos[0]["envio_id"], "status": "read"}, headers=H)
+        assert r.json()["ok"]
+        with SessionLocal() as db:
+            assert db.get(EnvioWhatsApp, avisos[0]["envio_id"]).status == "lido"
+        pag = entrar("admin@t.com").get("/admin/whatsapp").text
+        assert "Pelo n8n" in pag and "/api/integracao/whatsapp/mensagem" in pag
+    finally:
+        srv.shutdown()

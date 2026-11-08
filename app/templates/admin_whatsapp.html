@@ -5,33 +5,50 @@
 <div class="cab"><div>
   <div class="muted"><a href="/admin">← Administração</a></div>
   <h1>Avisos automáticos por WhatsApp</h1>
-  <div class="muted">API oficial da Meta (WhatsApp Cloud API)</div>
+  <div class="muted">Integração: <b>{{ {'meta': 'Oficial (Meta Cloud API)', 'n8n': 'Pelo n8n', 'desligado': 'Desligado'}[modo] }}</b>
+    · URA {{ 'ligada' if config.WHATSAPP_URA else 'desligada' }} · <a href="/admin/configuracoes#whatsapp">mudar</a></div>
 </div></div>
 
 <div class="card">
   <h2>Situação</h2>
   {% if configurado %}
   <p><span class="selo" style="background:#2E7D4F">Conectado</span>
-    Número (Phone ID) <code>…{{ config.WHATSAPP_PHONE_ID[-4:] }}</code> · API {{ config.WHATSAPP_API_VERSAO }} · idioma {{ config.WHATSAPP_IDIOMA }}</p>
+    {% if modo == 'n8n' %}Enviando pelo n8n: <code>{{ config.N8N_URL_ENVIO }}</code>
+    {% else %}Número (Phone ID) <code>…{{ config.WHATSAPP_PHONE_ID[-4:] }}</code> · API {{ config.WHATSAPP_API_VERSAO }} · idioma {{ config.WHATSAPP_IDIOMA }}{% endif %}</p>
   <form method="post" action="/admin/whatsapp/teste" class="classif">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div style="min-width:220px"><label>Enviar mensagem de teste para</label><input name="telefone" required placeholder="11 91234-5678" inputmode="tel"></div>
     <div style="min-width:0"><button class="btn sec">Enviar teste</button></div>
   </form>
-  <p class="dica">O teste usa o modelo <b>{{ nome_modelo('status') }}</b> com dados de exemplo.</p>
+  <p class="dica">O teste usa {{ 'o texto do' if modo == 'n8n' else 'o' }} modelo <b>{{ nome_modelo('status') }}</b> com dados de exemplo.</p>
+  {% elif modo == 'desligado' %}
+  <p><span class="selo" style="background:#7A7A7A">Desligado</span> O WhatsApp está desligado em <a href="/admin/configuracoes#whatsapp">Configurações → WhatsApp</a>.</p>
+  {% elif modo == 'n8n' %}
+  <p><span class="selo" style="background:#7A7A7A">Não configurado</span> Informe o <b>webhook de envio do n8n</b> e o <b>token de integração</b> em
+    <a href="/admin/configuracoes#whatsapp">Configurações → WhatsApp</a>. Passo a passo em <code>docs/N8N.md</code>.</p>
   {% else %}
   <p><span class="selo" style="background:#7A7A7A">Não configurado</span>
     Os avisos automáticos ficam desligados até você preencher o <b>token</b> e o <b>Phone number ID</b> em <a href="/admin/configuracoes#whatsapp">Administração → Configurações</a>.
     O passo a passo está em <code>docs/WHATSAPP.md</code>.</p>
   {% endif %}
-  <details style="margin-top:10px"><summary>Modelos que precisam estar aprovados na Meta</summary>
+  {% if modo == 'n8n' %}
+  <details style="margin-top:10px" open><summary>Integração com o n8n</summary>
+    <p class="dica">No fluxo do n8n (modelo pronto em <code>n8n/fluxo-ura-nexus.json</code>):</p>
+    <label>Mensagem recebida → POST para o Nexus (resposta da URA)</label>{{ copiar(api_mensagem, "Copiar") }}
+    <label style="margin-top:8px">Status de entrega (opcional)</label>{{ copiar(api_status, "Copiar") }}
+    <p class="dica">Em todas as chamadas, envie o cabeçalho <code>X-Nexus-Token</code> com o token de integração. O Nexus manda os avisos
+      para o webhook de envio com o mesmo cabeçalho e o JSON <code>{"telefone", "texto", "tipo", "evento", "envio_id", "chamado"}</code>.
+      {% if not token_ok %}<b style="color:#B3261E">O token de integração ainda não foi definido (mínimo 16 caracteres).</b>{% endif %}</p>
+  </details>
+  {% endif %}
+  <details style="margin-top:10px" {{ 'hidden' if modo == 'n8n' }}><summary>Modelos que precisam estar aprovados na Meta</summary>
     <p class="dica">Categoria <b>Utilidade</b>, idioma <b>Português (BR)</b>. Copie o texto exatamente como está.</p>
     {% for ev, txt in textos.items() %}
     <div style="margin:10px 0"><b>{{ nome_modelo(ev) }}</b> <span class="muted">· {{ EVENTOS_ENVIO[ev] }}{% if ev.startswith('alerta') %} · enviado à equipe TecnosIT{% endif %}</span>
       <textarea readonly style="min-height:110px;margin-top:4px" onclick="this.select()">{{ txt }}</textarea></div>
     {% endfor %}
   </details>
-  <details style="margin-top:8px"><summary>Webhook (status entregue/lido) — opcional</summary>
+  <details style="margin-top:8px" {{ 'hidden' if modo == 'n8n' }}><summary>Webhook (status entregue/lido e mensagens da URA)</summary>
     <p class="dica">No app da Meta → WhatsApp → Configuração → Webhook, informe:</p>
     <label>URL de retorno</label>{{ copiar(webhook, "Copiar") }}
     <p class="dica">Token de verificação: o mesmo de <a href="/admin/configuracoes#whatsapp">Configurações → WhatsApp</a>. Assine o campo <b>messages</b>.

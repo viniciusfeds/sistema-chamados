@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## 1.22.0 — 2026-11-08
+- **Integração do WhatsApp com lista de opções** (Configurações → WhatsApp): **Oficial (Meta Cloud API)**,
+  **Pelo n8n** ou **Desligado**
+  - no modo n8n os avisos de chamado (aberto, atualizado, concluído, alertas) vão para um webhook do n8n já com o
+    texto pronto, e o n8n envia pelo provedor ligado nele (Evolution API, Z-API, Meta…); o n8n pode informar
+    entregue/lido de volta
+- **URA de atendimento no WhatsApp** (nos dois modos): menu *1 – Abrir chamado · 2 – Consultar meus chamados ·
+  3 – Falar com um atendente*
+  - reconhece o cliente pelo telefone (contatos de WhatsApp, usuários do cliente ou quem já abriu chamado), pergunta a
+    unidade quando há mais de uma, abre o chamado (origem *via WhatsApp*) e **responde com o número e o link de
+    acompanhamento**; a equipe recebe o aviso de sempre
+  - consulta mostra os chamados em aberto e, pelo número, a situação e a última ação
+  - número não cadastrado ou "falar com atendente": a equipe é avisada por e-mail com o link do WhatsApp da pessoa
+  - saudação editável; *menu* ou *0* volta ao início; conversa expira em 30 minutos
+- **API de integração** com token (`X-Nexus-Token`): mensagem da URA, abrir chamado, consultar chamado e status de
+  entrega — ver `docs/N8N.md`
+- **n8n na porta 9600**: `n8n/docker-compose.yml`, `n8n/.env.example` e o fluxo pronto para importar
+  `n8n/fluxo-ura-nexus.json` (entrada de mensagens → URA do Nexus → resposta; e envio dos avisos), configurado para
+  Evolution API
+
 ## 1.21.0 — 2026-11-08
 - **Dupla etapa** (Minha conta → Segurança do acesso)
   - **Código do aplicativo autenticador** (Google Authenticator, Microsoft Authenticator…): QR para escanear,

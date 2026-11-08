@@ -136,9 +136,22 @@ SECOES = [
         Campo("INTER_DIAS_AGENDA", "Boleto expira após o vencimento (dias)", "int",
               "Depois desse prazo o boleto não pode mais ser pago (máx. 60).", minimo=0, maximo=60),
     ]),
-    ("whatsapp", "WhatsApp (API oficial da Meta)", "Dados do app na Meta. Passo a passo em docs/WHATSAPP.md.", [
-        Campo("WHATSAPP_TOKEN", "Token permanente", "senha"),
-        Campo("WHATSAPP_PHONE_ID", "Identificação do número (Phone number ID)"),
+    ("whatsapp", "WhatsApp", "Como o sistema envia os avisos e atende pelo WhatsApp. Passo a passo em docs/WHATSAPP.md "
+     "(Meta) e docs/N8N.md (n8n).", [
+        Campo("WHATSAPP_MODO", "Integração do WhatsApp", "escolha",
+              "Oficial (Meta): o Nexus fala direto com a API da Meta. Pelo n8n: o Nexus manda as mensagens para um "
+              "fluxo do n8n, que envia pelo provedor que você ligar nele (Evolution, Z-API, Meta…).",
+              opcoes={"meta": "Oficial (Meta Cloud API)", "n8n": "Pelo n8n", "desligado": "Desligado"}),
+        Campo("WHATSAPP_URA", "Atendimento automático (URA)", "bool",
+              "Responde quem manda mensagem: abrir chamado, consultar chamado ou falar com atendente."),
+        Campo("URA_SAUDACAO", "Saudação da URA", ajuda="{nome} e {empresa} são trocados automaticamente."),
+        Campo("N8N_URL_ENVIO", "n8n: webhook de envio", ajuda="Ex.: http://host.docker.internal:9600/webhook/nexus-enviar (só no modo n8n)."),
+        Campo("N8N_URL_ENTRADA", "n8n: repassar mensagens recebidas", avancado=True,
+              ajuda="Opcional, no modo Meta: além da URA, envia cada mensagem recebida para este webhook do n8n."),
+        Campo("N8N_TOKEN", "n8n: token de integração", "senha",
+              "Senha que o n8n manda no cabeçalho X-Nexus-Token (e que o Nexus manda para o n8n). Mínimo 24 caracteres."),
+        Campo("WHATSAPP_TOKEN", "Meta: token permanente", "senha"),
+        Campo("WHATSAPP_PHONE_ID", "Meta: identificação do número (Phone number ID)"),
         Campo("WHATSAPP_VERIFY_TOKEN", "Token de verificação do webhook", "senha", "Uma senha que você inventa."),
         Campo("WHATSAPP_APP_SECRET", "Chave secreta do app (webhook)", "senha"),
         Campo("WHATSAPP_API_VERSAO", "Versão da API", avancado=True),

@@ -1,0 +1,31 @@
+# n8n para a URA do WhatsApp integrada ao Nexus Desk — porta 9600
+# Subir:  cd n8n && docker compose up -d     →   abrir http://IP-DO-SERVIDOR:9600 e criar o usuário dono
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "9600:5678"
+    environment:
+      - TZ=America/Sao_Paulo
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - N8N_PORT=5678
+      - N8N_SECURE_COOKIE=false            # deixe true se acessar o n8n só por HTTPS
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false # o fluxo lê as variáveis abaixo
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:9600/}
+      # ---- Nexus Desk
+      - NEXUS_URL=${NEXUS_URL:-http://host.docker.internal:9000}
+      - NEXUS_TOKEN=${NEXUS_TOKEN}         # o mesmo "token de integração" de Configurações → WhatsApp
+      # ---- provedor de WhatsApp ligado no n8n (padrão do fluxo: Evolution API)
+      - EVOLUTION_URL=${EVOLUTION_URL:-http://host.docker.internal:8080}
+      - EVOLUTION_APIKEY=${EVOLUTION_APIKEY}
+      - EVOLUTION_INSTANCIA=${EVOLUTION_INSTANCIA:-tecnosit}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_dados:/home/node/.n8n
+
+volumes:
+  n8n_dados:

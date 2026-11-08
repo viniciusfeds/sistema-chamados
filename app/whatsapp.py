@@ -56,8 +56,26 @@ EVENTOS_ENVIO = {"abertura": "Chamado aberto", "status": "Mudança de status", "
                  "alerta_offline": "Alerta: equipamento offline", "alerta_online": "Equipamento normalizado"}
 
 
+def modo() -> str:
+    m = (config.WHATSAPP_MODO or "meta").lower()
+    return m if m in ("meta", "n8n", "desligado") else "meta"
+
+
 def configurado() -> bool:
-    return bool(config.WHATSAPP_TOKEN and config.WHATSAPP_PHONE_ID)
+    m = modo()
+    if m == "n8n":
+        return bool(config.N8N_URL_ENVIO)
+    if m == "meta":
+        return bool(config.WHATSAPP_TOKEN and config.WHATSAPP_PHONE_ID)
+    return False
+
+
+def texto_evento(evento: str, params) -> str:
+    """Mensagem pronta (texto livre) a partir do modelo do evento — usada no modo n8n."""
+    t = textos_modelos().get(evento, "{{1}}")
+    for i, p in enumerate(params or [], 1):
+        t = t.replace("{{%d}}" % i, str(p))
+    return t
 
 
 def nome_modelo(evento):
@@ -116,12 +134,15 @@ def _em_segundo_plano(fn, *args):
     threading.Thread(target=fn, args=args, daemon=True).start()
 
 
-def disparar(db, ch: Chamado, evento: str, link: str) -> list[int]:
-    """Registra e envia (em segundo plano) os avisos de um evento. Não faz nada se a API não estiver configurada."""
+def disparar(db, ch: Chamado, evento: str, link: str, excluir=None) -> list[int]:
+    """Registra e envia (em segundo plano) os avisos de um evento. Não faz nada se a API não estiver configurada.
+    `excluir`: telefone que já foi avisado por outro caminho (ex.: quem abriu pela URA)."""
     if not configurado():
         return []
     ids = []
     for nome, tel in destinatarios(db, ch, evento):
+        if excluir and tel == excluir:
+            continue
         env = EnvioWhatsApp(chamado_id=ch.id, evento=evento, destino_nome=nome, telefone=tel,
                             modelo=nome_modelo(evento), parametros=parametros(ch, evento, link))
         db.add(env); db.flush(); ids.append(env.id)
@@ -200,14 +221,53 @@ def enviar(envio_id: int):
             return
         env.tentativas = (env.tentativas or 0) + 1
         try:
-            resp = _post(payload_modelo(env.telefone, env.modelo, env.parametros or []))
-            env.wamid = (resp.get("messages") or [{}])[0].get("id")
+            if modo() == "n8n":
+                ch = db.get(Chamado, env.chamado_id) if env.chamado_id else None
+                resp = enviar_n8n({"tipo": "aviso", "evento": env.evento, "envio_id": env.id, "telefone": env.telefone,
+                                   "nome": env.destino_nome, "texto": texto_evento(env.evento, env.parametros),
+                                   "modelo": env.modelo, "parametros": env.parametros or [],
+                                   "chamado": ch.numero_fmt if ch else None})
+                env.wamid = str(resp.get("id") or resp.get("messageId") or f"n8n-{env.id}")[:160]
+            else:
+                resp = _post(payload_modelo(env.telefone, env.modelo, env.parametros or []))
+                env.wamid = (resp.get("messages") or [{}])[0].get("id")
             env.status, env.erro = "enviado", None
         except ErroAPI as e:
             env.status, env.erro = "falhou", str(e)[:1000]
             log.warning("WhatsApp falhou (envio %s): %s", env.id, e)
         env.atualizado_em = _agora()
         db.commit()
+
+
+def enviar_n8n(dados: dict) -> dict:
+    """Entrega uma mensagem ao fluxo do n8n (que envia pelo provedor ligado nele)."""
+    if not config.N8N_URL_ENVIO:
+        raise ErroAPI("Webhook de envio do n8n não configurado.")
+    req = urllib.request.Request(config.N8N_URL_ENVIO, data=json.dumps(dados, ensure_ascii=False).encode(),
+                                 method="POST", headers={"Content-Type": "application/json",
+                                                         "X-Nexus-Token": config.N8N_TOKEN or ""})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            corpo = r.read().decode() or "{}"
+        try:
+            d = json.loads(corpo)
+            return d if isinstance(d, dict) else {}
+        except ValueError:
+            return {}
+    except urllib.error.HTTPError as e:
+        raise ErroAPI(f"n8n respondeu HTTP {e.code}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ErroAPI(f"Sem conexão com o n8n: {e}")
+
+
+def enviar_texto(telefone: str, texto: str):
+    """Mensagem livre (resposta da URA, dentro da janela de 24 h do cliente)."""
+    if modo() == "n8n":
+        return enviar_n8n({"tipo": "resposta", "telefone": telefone, "texto": texto})
+    if modo() == "meta" and configurado():
+        return _post({"messaging_product": "whatsapp", "recipient_type": "individual", "to": telefone,
+                      "type": "text", "text": {"preview_url": True, "body": texto[:4096]}})
+    return {}
 
 
 def enviar_teste(telefone: str) -> str:
@@ -217,6 +277,9 @@ def enviar_teste(telefone: str) -> str:
         raise ErroAPI("Telefone inválido. Use DDD + número, ex.: 11 91234-5678.")
     params = ["0000", "Unidade de teste", "Em andamento", f"Teste de envio pelo {config.SISTEMA_NOME}",
               config.URL_PUBLICA or "https://tecnosit.com.br"]
+    if modo() == "n8n":
+        resp = enviar_n8n({"tipo": "teste", "telefone": tel, "texto": texto_evento("status", params)})
+        return str(resp.get("id") or "n8n")
     resp = _post(payload_modelo(tel, config.WHATSAPP_MODELO_ATUALIZADO, params))
     return (resp.get("messages") or [{}])[0].get("id", "")
 
@@ -230,6 +293,28 @@ def assinatura_valida(corpo: bytes, cabecalho: str | None) -> bool:
 
 
 MAPA_WEBHOOK = {"sent": "enviado", "delivered": "entregue", "read": "lido", "failed": "falhou"}
+
+
+def mensagens_recebidas(dados: dict):
+    """[(telefone, nome, texto, id)] das mensagens de clientes no payload do webhook da Meta."""
+    saida = []
+    for entry in dados.get("entry", []):
+        for ch in entry.get("changes", []):
+            v = ch.get("value") or {}
+            nomes = {c.get("wa_id"): (c.get("profile") or {}).get("name") for c in v.get("contacts", []) or []}
+            for m in v.get("messages", []) or []:
+                tipo = m.get("type")
+                if tipo == "text":
+                    texto = (m.get("text") or {}).get("body", "")
+                elif tipo == "interactive":
+                    i = m.get("interactive") or {}
+                    texto = (i.get("button_reply") or i.get("list_reply") or {}).get("title", "")
+                elif tipo == "button":
+                    texto = (m.get("button") or {}).get("text", "")
+                else:
+                    texto = f"[{tipo}]"
+                saida.append((m.get("from", ""), nomes.get(m.get("from")), texto, m.get("id", "")))
+    return saida
 
 
 def processar_webhook(dados: dict) -> int:

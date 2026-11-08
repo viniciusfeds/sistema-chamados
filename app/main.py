@@ -395,7 +395,7 @@ def painel(request: Request, cliente: str = "", unidade: str = "", status: str =
         lista = [c for c in lista if sits[c.id] != "cancelado"]
     if parado:
         lista = [c for c in lista if c.id in parados]
-    novos_link = sum(1 for c in lista if c.origem == "link" and sits[c.id] == "aberto")
+    novos_link = sum(1 for c in lista if c.origem in ("link", "whatsapp") and sits[c.id] == "aberto")
     grupos = unidades_permitidas(db, u) if u.papel != "unidade" else []
     return render(request, "painel.html", u=u, chamados=lista, sits=sits, contagem=contagem,
                   grupos=grupos, clientes=clientes_ativos(db) if u.equipe else [],
@@ -1560,7 +1560,10 @@ def admin_whatsapp(request: Request, u: Usuario = Depends(so_admin), db: Session
                         .options(selectinload(EnvioWhatsApp.chamado))).all()
     return render(request, "admin_whatsapp.html", u=u, clientes=clientes, contatos=contatos, envios=envios,
                   configurado=whatsapp.configurado(), textos=whatsapp.textos_modelos(),
-                  nome_modelo=whatsapp.nome_modelo, webhook=f"{base_url(request)}/webhook/whatsapp")
+                  nome_modelo=whatsapp.nome_modelo, webhook=f"{base_url(request)}/webhook/whatsapp",
+                  modo=whatsapp.modo(), token_ok=len(config.N8N_TOKEN or "") >= 16,
+                  api_mensagem=f"{base_url(request)}/api/integracao/whatsapp/mensagem",
+                  api_status=f"{base_url(request)}/api/integracao/whatsapp/status")
 
 
 @app.post("/admin/whatsapp/contatos", dependencies=[Depends(checar_csrf)])
@@ -1646,6 +1649,8 @@ async def webhook_receber(request: Request):
     except ValueError:
         raise HTTPException(400, "JSON inválido.")
     whatsapp.processar_webhook(dados)
+    from .rotas_integracao import disparar_atendimento_meta
+    disparar_atendimento_meta(dados, request)         # mensagens de clientes: URA responde
     return {"ok": True}
 
 
@@ -1814,3 +1819,4 @@ from . import rotas_assinatura, rotas_preventiva  # noqa: E402,F401
 from . import rotas_rh  # noqa: E402,F401
 from . import rotas_pagar  # noqa: E402,F401
 from . import rotas_seguranca  # noqa: E402,F401
+from . import rotas_integracao  # noqa: E402,F401

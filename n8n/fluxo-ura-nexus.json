@@ -1,0 +1,262 @@
+{
+  "name": "Nexus Desk · URA WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-entrada",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Mensagem recebida (Evolution)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c5cae0ff-6abd-4ce6-aaa1-76363bb8b2ad",
+      "webhookId": "ccc48033-9ab2-47a2-a4f4-19e5523ae8ec"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mensagem recebida da Evolution API (evento messages.upsert) → telefone, nome, texto\nconst saida = [];\nfor (const item of $input.all()) {\n  const corpo = item.json.body || item.json;\n  const d = corpo.data || {};\n  const key = d.key || {};\n  const jid = key.remoteJid || '';\n  if (key.fromMe || !jid.endsWith('@s.whatsapp.net')) continue;   // ignora o que nós enviamos e grupos\n  const m = d.message || {};\n  const texto = m.conversation || (m.extendedTextMessage || {}).text\n    || (m.buttonsResponseMessage || {}).selectedDisplayText || (m.listResponseMessage || {}).title\n    || (m.imageMessage || {}).caption || '[mídia]';\n  saida.push({ json: { telefone: jid.split('@')[0], nome: d.pushName || '', texto, id: key.id || '' } });\n}\nreturn saida;"
+      },
+      "name": "Extrair mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "b76ccc05-2c4d-43b9-b34c-7c5775f40f67"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXUS_URL }}/api/integracao/whatsapp/mensagem",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Nexus-Token",
+              "value": "={{ $env.NEXUS_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ telefone: $json.telefone, nome: $json.nome, texto: $json.texto, id: $json.id }) }}",
+        "options": {}
+      },
+      "name": "Nexus: URA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "e26fb2b3-2bee-441e-a0c3-f41badf7afeb"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Só segue se a URA do Nexus devolveu algo para responder\nreturn $input.all().filter(i => i.json.responder && i.json.texto);"
+      },
+      "name": "Tem resposta?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "2e2fd92b-fa21-4c54-93f6-156451cc71b1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCIA }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_APIKEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.texto }) }}",
+        "options": {}
+      },
+      "name": "Responder no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "id": "d4f48d18-fcfc-4e67-b96c-5457cff1287e"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-enviar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Nexus pede envio",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "id": "915c8961-9ab8-462e-8170-9b43cb512820",
+      "webhookId": "f44f4fc6-fe00-4a62-88dc-9d7d1b4df34d"
+    },
+    {
+      "parameters": {
+        "jsCode": "// O Nexus manda o cabeçalho X-Nexus-Token: confere antes de enviar qualquer coisa\nconst h = $input.first().json.headers || {};\nif ((h['x-nexus-token'] || '') !== $env.NEXUS_TOKEN) throw new Error('Token inválido');\nconst b = $input.first().json.body || {};\nreturn [{ json: { telefone: String(b.telefone || ''), texto: String(b.texto || ''), envio_id: b.envio_id || null } }];"
+      },
+      "name": "Conferir token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "id": "e2d621ed-fa5a-4384-a847-16dba3daa652"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCIA }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_APIKEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.telefone, text: $json.texto }) }}",
+        "options": {}
+      },
+      "name": "Enviar no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ],
+      "id": "ae59dda4-869b-4cef-bf42-6f3ea97bfa7a"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ id: ($json.key || {}).id || '' }) }}",
+        "options": {}
+      },
+      "name": "Responder ao Nexus",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        300
+      ],
+      "id": "9b98ae2f-1866-4726-a7d3-aefc765193d0"
+    }
+  ],
+  "connections": {
+    "Mensagem recebida (Evolution)": {
+      "main": [
+        [
+          {
+            "node": "Extrair mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair mensagem": {
+      "main": [
+        [
+          {
+            "node": "Nexus: URA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nexus: URA": {
+      "main": [
+        [
+          {
+            "node": "Tem resposta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem resposta?": {
+      "main": [
+        [
+          {
+            "node": "Responder no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nexus pede envio": {
+      "main": [
+        [
+          {
+            "node": "Conferir token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir token": {
+      "main": [
+        [
+          {
+            "node": "Enviar no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar no WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Responder ao Nexus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

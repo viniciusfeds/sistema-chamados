@@ -1201,3 +1201,14 @@ class ChaveAcesso(Base):
     ultimo_uso: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     usuario = relationship("Usuario", backref=backref("chaves", cascade="all, delete-orphan",
                                                       order_by="ChaveAcesso.id"))
+
+
+class ConversaURA(Base):
+    """Em que passo da URA do WhatsApp cada telefone está."""
+    __tablename__ = "conversas_ura"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telefone: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    etapa: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dados: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ultima_msg_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

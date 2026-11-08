@@ -127,6 +127,12 @@ INTER_CHAVE_ARQUIVO = os.environ.get("INTER_CHAVE_ARQUIVO", "")
 CERT_A1_ARQUIVO = os.environ.get("CERT_A1_ARQUIVO", "")
 CERT_A1_SENHA = os.environ.get("CERT_A1_SENHA", "")
 
+WHATSAPP_MODO = os.environ.get("WHATSAPP_MODO", "meta")          # meta / n8n / desligado
+N8N_URL_ENVIO = os.environ.get("N8N_URL_ENVIO", "")              # webhook do n8n que envia a mensagem
+N8N_URL_ENTRADA = os.environ.get("N8N_URL_ENTRADA", "")          # (modo Meta) repassar mensagens recebidas ao n8n
+N8N_TOKEN = os.environ.get("N8N_TOKEN", "")                      # segredo trocado entre Nexus e n8n
+WHATSAPP_URA = os.environ.get("WHATSAPP_URA", "1").lower() in ("1", "true", "sim")
+URA_SAUDACAO = os.environ.get("URA_SAUDACAO", "Olá{nome}! Aqui é o atendimento da {empresa}.")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")
 WHATSAPP_API_VERSAO = os.environ.get("WHATSAPP_API_VERSAO", "v23.0")

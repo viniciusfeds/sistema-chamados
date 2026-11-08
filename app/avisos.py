@@ -65,12 +65,19 @@ def _enviar(assunto, corpo):
         log.warning("Falha ao enviar e-mail de aviso: %s", e)
 
 
+def avisar_equipe(assunto: str, corpo: str):
+    """E-mail para a equipe (em segundo plano), se configurado."""
+    if email_configurado():
+        threading.Thread(target=_enviar, args=(assunto, corpo), daemon=True).start()
+
+
 def avisar_chamado_novo(ch, link_interno: str):
-    """Avisa a equipe que um chamado foi aberto pelo link público (em segundo plano)."""
+    """Avisa a equipe que um chamado foi aberto pelo link público ou pelo WhatsApp (em segundo plano)."""
     if not email_configurado():
         return
     assunto = f"[Chamado {ch.numero_fmt}] {ch.unidade.nome} — {_sem_markdown(ch.assunto)}"
-    corpo = (f"Novo chamado aberto pelo link público.\n\n"
+    canal = "pelo WhatsApp (URA)" if ch.origem == "whatsapp" else "pelo link público"
+    corpo = (f"Novo chamado aberto {canal}.\n\n"
              f"Ticket: {ch.numero_fmt}\nCliente: {ch.unidade.cliente.nome}\nUnidade: {ch.unidade.nome}\n"
              f"Solicitante: {ch.solicitante_nome} · {ch.solicitante_contato}"
              f"{' · ' + ch.solicitante_email if ch.solicitante_email else ''}\n"
