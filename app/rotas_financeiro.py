@@ -99,7 +99,14 @@ def fin_painel(request: Request, u: Usuario = Depends(so_admin), db: Session = D
                           .order_by(Titulo.vencimento).limit(10)).all()
     orcs = db.scalars(select(Orcamento).where(Orcamento.status.in_(("enviado", "aprovado")))
                       .order_by(Orcamento.numero.desc()).limit(10)).all()
-    return render(request, "fin_painel.html", u=u, ind=ind, vencidos=vencidos, proximos=proximos, orcs=orcs, hoje=h)
+    from . import pagar
+    from .models import ContaPagar
+    pag = pagar.indicadores(db, h)
+    pagar_prox = db.scalars(select(ContaPagar).where(ContaPagar.status == "aberto",
+                                                     ContaPagar.vencimento <= h + timedelta(days=10))
+                            .order_by(ContaPagar.vencimento).limit(10)).all()
+    return render(request, "fin_painel.html", u=u, ind=ind, vencidos=vencidos, proximos=proximos, orcs=orcs, hoje=h,
+                  pag=pag, pagar_prox=pagar_prox)
 
 
 # ================================================================== orçamentos

@@ -61,6 +61,7 @@
     <div class="lat-sub {{ 'aberto' if p.startswith('/financeiro') }}">
       <a href="/financeiro/orcamentos" class="{{ 'ativo' if p.startswith('/financeiro/orcamentos') }}"><span>Orçamentos</span></a>
       <a href="/financeiro/receber" class="{{ 'ativo' if p.startswith('/financeiro/receber') }}"><span>Contas a receber</span></a>
+      <a href="/financeiro/pagar" class="{{ 'ativo' if p.startswith('/financeiro/pagar') }}"><span>Contas a pagar</span>{% set npag = contas_pagar_alerta() %}{% if npag %}<b class="badge-alerta" title="Vencidas ou vencendo hoje">{{ npag }}</b>{% endif %}</a>
       <a href="/financeiro/contratos" class="{{ 'ativo' if p.startswith('/financeiro/contratos') }}"><span>Contratos</span></a>
       <a href="/financeiro/catalogo" class="{{ 'ativo' if p.startswith('/financeiro/catalogo') }}"><span>Produtos e serviços</span></a>
     </div>

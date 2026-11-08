@@ -130,6 +130,12 @@ def cliente_ficha(request: Request, cid: int, u: Usuario = Depends(so_admin), db
     resumo = {"abertos": len(abertos), "a_receber": sum(t.valor for t in titulos),
               "vencido": sum(t.valor for t in titulos if t.vencimento < hoje),
               "orc_abertos": sum(1 for o in orcs if o.status in ("rascunho", "enviado", "aprovado"))}
-    return render(request, "cliente_ficha.html", u=u, cli=cli, cf=principal, por_unidade=por_unidade,
+    from .models import Contrato
+    from .rotas_pagar import resumo_cliente
+    desp = resumo_cliente(db, cid, hoje)
+    desp["receita_mensal"] = db.scalar(select(func.coalesce(func.sum(Contrato.valor), 0)).where(
+        Contrato.ativo, Contrato.cliente_fiscal_id.in_(ids_cf or [0]))) or 0
+    desp["resultado"] = desp["receita_mensal"] - desp["mensal"]
+    return render(request, "cliente_ficha.html", u=u, cli=cli, cf=principal, por_unidade=por_unidade, desp=desp,
                   por_un_abertos=por_un_abertos, tot_un=tot_un, resumo=resumo, orcs=orcs, contatos=contatos,
                   usuarios=usuarios, hoje=hoje, base=base_url(request), EVENTOS_AVISO=EVENTOS_AVISO)

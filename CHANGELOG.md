@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## 1.19.0 — 2026-11-08
+- **Contas a pagar** (Financeiro → Contas a pagar)
+  - contas avulsas ou parceladas com fornecedor, categoria, vencimento, forma de pagamento, linha digitável/PIX
+    (botão *Copiar código*) e anexo do boleto ou nota
+  - cada conta pode ficar ligada a um **cliente** (despesas que a empresa paga por ele) ou ser despesa da empresa
+  - **Pagar** registra data, valor, forma e o comprovante; estornar, cancelar, editar e excluir
+  - filtros por situação, cliente, categoria e período; exportação CSV; indicadores de vencidas, próximos 7 dias,
+    total a pagar e pago no mês; selo no menu com as contas vencidas ou vencendo hoje
+- **Despesas recorrentes**: o que se paga todo mês (link de internet, licenças, nuvem, chips, aluguel…) vira uma
+  conta a pagar por mês **automaticamente** (o mês corrente, e o seguinte a partir do dia 20), sem duplicar;
+  botão para adiantar o lançamento; encerrar e reativar; total mensal por cliente
+- **Ficha do cliente**: quadro *Receita × despesas* com o valor dos contratos por mês, as despesas recorrentes do
+  cliente, o resultado mensal (e a margem) e o que já foi pago por ele em 12 meses
+- **Visão geral do financeiro**: contas a pagar vencidas e dos próximos 7 dias, pago no mês, saldo do mês
+  (recebido − pago) e lista do que vence nos próximos 10 dias
+
 ## 1.18.1 — 2026-11-06
 - **Listas em uma linha só.** Nas telas de lista (contratos, contas a receber, orçamentos, chamados, clientes, RH,
   inventário…) cada registro ocupa uma linha: botões lado a lado, datas e valores sem quebrar; texto longo é cortado

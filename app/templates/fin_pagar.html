@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Contas a pagar{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('pagar') }}
+<div class="cab">
+  <div><h1>Contas a pagar</h1><div class="muted">{{ lista|length }} conta(s) · total {{ tot.valor|rs }}{% if tot.aberto %} · em aberto {{ tot.aberto|rs }}{% endif %}{% if tot.pago %} · pago {{ tot.pago|rs }}{% endif %}</div></div>
+  <div class="acoes-orc">
+    <a class="btn sec" href="/financeiro/pagar/recorrentes">↻ Despesas recorrentes</a>
+    <a class="btn sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}csv=1">⬇ Exportar CSV</a>
+    <a class="btn" href="#novo" onclick="document.getElementById('novo').open=true">+ Nova conta</a></div>
+</div>
+
+{% if pend_mes or pend_prox %}
+<div class="card">
+  <h2 style="margin-top:0">Despesas recorrentes a lançar</h2>
+  <p class="muted" style="margin-top:0">O sistema lança sozinho as do mês (e as do próximo a partir do dia 20). Se quiser adiantar:</p>
+  <div class="acoes-orc">
+  {% for mes, pend in ((hoje, pend_mes), (prox, pend_prox)) if pend %}
+    <form method="post" action="/financeiro/pagar/gerar"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="mes" value="{{ mes.strftime('%Y-%m') }}">
+      <button class="btn">{{ mes.strftime('%m/%Y') }}: {{ pend|length }} pendente(s) · {{ pend|sum(attribute='valor')|rs }}</button></form>
+  {% endfor %}</div>
+</div>
+{% endif %}
+
+<div class="cards fin">
+  <a href="?situacao=vencido" style="--c:#B3261E" class="{{ 'ativo' if ind.n_vencidas }}"><b>{{ ind.vencidas|rs }}</b><span>Vencidas · {{ ind.n_vencidas }} conta(s)</span></a>
+  <a href="?situacao=aberto&ate={{ (hoje + timedelta(days=7)).isoformat() }}" style="--c:#B07000"><b>{{ ind.sete_dias|rs }}</b><span>Vence em 7 dias · {{ ind.n_sete }}{% if ind.hoje %} · {{ ind.hoje }} hoje{% endif %}</span></a>
+  <a href="?situacao=abertos" style="--c:#1F5FA8"><b>{{ ind.a_pagar|rs }}</b><span>A pagar (total)</span></a>
+  <a href="?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#1E7B45"><b>{{ ind.pago_mes|rs }}</b><span>Pago no mês · {{ ind.do_mes|rs }} previsto</span></a>
+</div>
+
+<div class="card">
+  <form class="filtros" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Descrição ou fornecedor"></div>
+    <div><label for="situacao">Situação</label><select id="situacao" name="situacao">
+      {% for k, v in (('abertos', 'A pagar (todas)'), ('vencido', 'Vencidas'), ('aberto', 'A vencer'), ('pago', 'Pagas'), ('cancelado', 'Canceladas'), ('todos', 'Todas')) %}
+      <option value="{{ k }}" {{ 'selected' if f.situacao == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div><label for="cliente">Cliente</label><select id="cliente" name="cliente"><option value="">Todos</option><option value="-1" {{ 'selected' if f.cliente == '-1' }}>Despesas da empresa (sem cliente)</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if f.cliente == c.id|string }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label for="categoria">Categoria</label><select id="categoria" name="categoria"><option value="">Todas</option>
+      {% for c in CATEGORIAS_DESPESA %}<option {{ 'selected' if f.categoria == c }}>{{ c }}</option>{% endfor %}</select></div>
+    <div><label for="de">{{ 'Pago de' if f.situacao == 'pago' else 'Vence de' }}</label><input type="date" id="de" name="de" value="{{ f.de }}"></div>
+    <div><label for="ate">até</label><input type="date" id="ate" name="ate" value="{{ f.ate }}"></div>
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/financeiro/pagar">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Vencimento</th><th>Fornecedor / descrição</th><th>Cliente</th><th>Categoria</th><th class="valor">Valor</th><th>Situação</th><th></th></tr></thead>
+  <tbody>{% for c in lista %}{% set sit = c.situacao(hoje) %}
+  <tr class="{{ 'atrasado' if sit == 'vencido' }} {{ 'inativo' if c.status == 'cancelado' }}">
+    <td data-l="Vencimento"><b>{{ c.vencimento|data }}</b>{% if sit == 'vencido' %}<div style="color:#B3261E;font-weight:700;font-size:.85rem">{{ c.dias_atraso(hoje) }} dia(s) de atraso</div>{% endif %}</td>
+    <td data-l="Descrição"><b>{{ c.fornecedor or c.descricao }}</b><div class="muted">{% if c.despesa_id %}↻ {% endif %}{% if c.fornecedor %}{{ c.descricao }}{% endif %}{% if not c.competencia %}{{ ' · ' if c.fornecedor }}{{ c.parcela_fmt }}{% endif %}</div></td>
+    <td data-l="Cliente">{% if c.cliente %}<a href="/clientes/{{ c.cliente_id }}">{{ c.cliente.nome }}</a>{% else %}<span class="muted">Empresa</span>{% endif %}</td>
+    <td data-l="Categoria">{{ c.categoria or '—' }}</td>
+    <td data-l="Valor" class="valor"><b>{{ c.valor|rs }}</b>{% if c.status == 'pago' %}<div class="muted">pago {{ c.valor_pago|rs }}</div>{% endif %}</td>
+    <td data-l="Situação"><span class="situ {{ SITUACOES_PAGAR[sit][1] }}">{{ SITUACOES_PAGAR[sit][0] }}</span>{% if c.status == 'pago' %}<div class="muted">{{ c.pago_em|data }}{% if c.forma %} · {{ FORMAS_PAGAMENTO.get(c.forma, '') }}{% endif %}</div>{% endif %}</td>
+    <td>
+      {% if c.status == 'aberto' %}
+      <details><summary class="btn peq">Pagar</summary>
+        <form method="post" action="/financeiro/pagar/{{ c.id }}/operacao" class="baixa" enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+          <label>Data do pagamento</label><input type="date" name="pago_em" value="{{ hoje.isoformat() }}">
+          <label>Valor pago</label><input name="valor_pago" value="{{ c.valor|brl_num }}" inputmode="decimal">
+          <label>Forma</label><select name="forma">{% for k, v in FORMAS_PAGAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if c.forma == k }}>{{ v }}</option>{% endfor %}</select>
+          <label>Comprovante <span class="muted">(opcional)</span></label><input type="file" name="arquivo" accept="image/*,application/pdf">
+          <button class="btn peq" name="operacao" value="pagar">Confirmar pagamento</button></form>
+      </details>
+      {% endif %}
+      <div class="acoes-orc" style="margin-top:4px">
+        {% if c.codigo_pagamento and c.status == 'aberto' %}<button type="button" class="btn peq sec" onclick="copiarCodigo(this)" data-codigo="{{ c.codigo_pagamento }}" title="Copiar linha digitável / PIX">Copiar código</button>{% endif %}
+        {% if c.anexo %}<a class="btn peq sec" href="/financeiro/pagar/{{ c.id }}/arquivo/anexo" target="_blank">📄 Boleto/NF</a>{% endif %}
+        {% if c.comprovante %}<a class="btn peq sec" href="/financeiro/pagar/{{ c.id }}/arquivo/comprovante" target="_blank">🧾 Comprovante</a>{% endif %}
+        <a class="btn peq sec" href="?{{ request.url.query }}{{ '&' if request.url.query }}editar={{ c.id }}#editar">Editar</a>
+        {% if c.status != 'aberto' %}<form method="post" action="/financeiro/pagar/{{ c.id }}/operacao"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
+          {% if c.status == 'pago' %}<button class="btn peq sec" name="operacao" value="estornar" onclick="return confirm('Estornar o pagamento?')">Estornar</button>
+          {% else %}<button class="btn peq sec" name="operacao" value="reabrir">Reabrir</button>{% endif %}</form>{% endif %}
+      </div>
+    </td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhuma conta a pagar com esses filtros.</p>{% endif %}
+</div>
+
+<datalist id="fornecedores">{% for x in fornecedores %}<option value="{{ x }}">{% endfor %}</datalist>
+<datalist id="categorias">{% for x in CATEGORIAS_DESPESA %}<option value="{{ x }}">{% endfor %}</datalist>
+
+{% if ed %}{% set e = ed %}
+<form class="card" method="post" action="/financeiro/pagar/{{ e.id }}/operacao" enctype="multipart/form-data" id="editar">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="/financeiro/pagar">
+  <h2 style="margin-top:0">Editar conta</h2>
+  <div class="grid3">
+    <div class="campo"><label>Fornecedor</label><input name="fornecedor" list="fornecedores" value="{{ e.fornecedor or '' }}"></div>
+    <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ e.descricao }}"></div>
+    <div class="campo"><label>Categoria</label><input name="categoria" list="categorias" value="{{ e.categoria or '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Cliente <span class="muted">(se a despesa é de um cliente)</span></label><select name="cliente_id"><option value="">— despesa da empresa —</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if e.cliente_id == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Valor</label><input name="valor" required inputmode="decimal" value="{{ e.valor|brl_num }}"></div>
+    <div class="campo"><label>Vencimento</label><input type="date" name="vencimento" value="{{ e.vencimento.isoformat() }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Forma de pagamento</label><select name="forma"><option value="">—</option>{% for k, v in FORMAS_PAGAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if e.forma == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Linha digitável / PIX copia e cola</label><input name="codigo_pagamento" value="{{ e.codigo_pagamento or '' }}"></div>
+    <div class="campo"><label>Boleto ou nota <span class="muted">{{ '(substituir)' if e.anexo else '(opcional)' }}</span></label><input type="file" name="arquivo" accept="image/*,application/pdf"></div>
+  </div>
+  <div class="campo"><label>Observação</label><input name="observacao" value="{{ e.observacao or '' }}"></div>
+  <div class="acoes-orc"><button class="btn" name="operacao" value="editar">Salvar</button><a class="btn sec" href="/financeiro/pagar">Fechar</a>
+    {% if e.status == 'aberto' %}<button class="btn sec" name="operacao" value="cancelar" formnovalidate onclick="return confirm('Cancelar esta conta? Ela fica no histórico como cancelada.')">Cancelar conta</button>{% endif %}
+    {% if e.status != 'pago' %}<button class="btn sec perigo" name="operacao" value="excluir" formnovalidate onclick="return confirm('Excluir esta conta?')">Excluir</button>{% endif %}</div>
+  {% if e.despesa_id %}<p class="dica">Esta conta veio da despesa recorrente “{{ e.despesa.descricao if e.despesa else '' }}”. Para mudar o valor dos próximos meses, edite em <a href="/financeiro/pagar/recorrentes?editar={{ e.despesa_id }}#form">Despesas recorrentes</a>.</p>{% endif %}
+</form>
+{% endif %}
+
+<details class="card" id="novo">
+  <summary><h2 style="display:inline">+ Nova conta a pagar</h2></summary>
+  <form method="post" action="/financeiro/pagar/novo" enctype="multipart/form-data" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid3">
+      <div class="campo"><label>Fornecedor</label><input name="fornecedor" list="fornecedores" placeholder="Ex.: Vivo, Claro, Intelbras"></div>
+      <div class="campo"><label>Descrição</label><input name="descricao" required placeholder="Ex.: Link de internet 300 MB"></div>
+      <div class="campo"><label>Categoria</label><input name="categoria" list="categorias" placeholder="Escolha ou digite"></div>
+    </div>
+    <div class="grid3">
+      <div class="campo"><label>Cliente <span class="muted">(se a despesa é de um cliente)</span></label><select name="cliente_id"><option value="">— despesa da empresa —</option>
+        {% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Valor</label><input name="valor" required inputmode="decimal" placeholder="0,00"></div>
+      <div class="campo"><label>Vencimento</label><input type="date" name="vencimento" value="{{ hoje.isoformat() }}" required></div>
+    </div>
+    <label class="check" style="margin:2px 0 10px"><input type="checkbox" name="recorrente" value="1" id="chk-rec" style="width:auto"> <span><b>Repete todo mês</b> — vira despesa recorrente e o sistema lança sozinho a cada mês, no mesmo dia</span></label>
+    <div class="grid3" id="box-parc">
+      <div class="campo"><label>Parcelas</label><input type="number" name="parcelas" value="1" min="1" max="48"></div>
+      <div class="campo"><label>Forma de pagamento</label><select name="forma"><option value="">—</option>{% for k, v in FORMAS_PAGAMENTO.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="campo"><label>Boleto ou nota <span class="muted">(opcional)</span></label><input type="file" name="anexo" accept="image/*,application/pdf"></div>
+    </div>
+    <div class="grid2">
+      <div class="campo"><label>Linha digitável / PIX copia e cola <span class="muted">(opcional)</span></label><input name="codigo_pagamento"></div>
+      <div class="campo"><label>Observação</label><input name="observacao"></div>
+    </div>
+    <input type="hidden" name="intervalo" value="30">
+    <button class="btn">Lançar</button>
+  </form>
+</details>
+<script>
+function copiarCodigo(b) {
+  var t = b.dataset.codigo;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () {
+    var o = b.textContent; b.textContent = 'Copiado ✔'; setTimeout(function () { b.textContent = o; }, 1500);
+  }, function () { prompt('Copie o código:', t); });
+}
+(function () { var c = document.getElementById('chk-rec'), p = document.querySelector('#box-parc [name=parcelas]');
+  c.addEventListener('change', function () { p.disabled = c.checked; if (c.checked) p.value = 1; }); })();
+</script>
+{% endblock %}

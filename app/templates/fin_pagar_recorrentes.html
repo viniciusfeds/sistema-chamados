@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Despesas recorrentes{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('pagar') }}
+<div class="cab">
+  <div><h1>Despesas recorrentes</h1><div class="muted">Contas que se repetem todo mês · {{ lista|selectattr('ativo')|list|length }} ativa(s) · {{ total|rs }} por mês</div></div>
+  <div class="acoes-orc"><a class="btn sec" href="/financeiro/pagar">← Contas a pagar</a><a class="btn" href="?editar=0#form" onclick="document.getElementById('form').scrollIntoView();return false">+ Nova despesa recorrente</a></div>
+</div>
+{% if por_cliente %}
+<div class="card"><h2 style="margin-top:0">Despesas mensais por cliente</h2>
+  {% for nome, v in por_cliente %}<div class="linha-lista"><span>{{ nome }}</span><b>{{ v|rs }}</b></div>{% endfor %}
+  <p class="dica">Na ficha de cada cliente aparece o que ele custa por mês ao lado do que ele paga.</p></div>
+{% endif %}
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Despesa</th><th>Cliente</th><th>Categoria</th><th class="valor">Valor/mês</th><th>Vence dia</th><th>Vigência</th><th></th></tr></thead>
+  <tbody>{% for d in lista %}
+  <tr class="{{ 'inativo' if not d.ativo }}">
+    <td data-l="Despesa"><b>{{ d.fornecedor or d.descricao }}</b>{% if d.fornecedor %}<div class="muted">{{ d.descricao }}</div>{% endif %}</td>
+    <td data-l="Cliente">{% if d.cliente %}<a href="/clientes/{{ d.cliente_id }}">{{ d.cliente.nome }}</a>{% else %}<span class="muted">Empresa</span>{% endif %}</td>
+    <td data-l="Categoria">{{ d.categoria or '—' }}</td>
+    <td data-l="Valor/mês" class="valor"><b>{{ d.valor|rs }}</b></td>
+    <td data-l="Vence dia">{{ d.dia_vencimento }}</td>
+    <td data-l="Vigência">{{ d.inicio|data }} {{ ('até ' ~ (d.fim|data)) if d.fim else 'em diante' }}{% if not d.ativo %} <span class="tag cinza">encerrada</span>{% endif %}</td>
+    <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ d.id }}#form">Editar</a>
+      <form method="post" action="/financeiro/pagar/recorrentes/{{ d.id }}/acao"><input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if d.ativo %}<button class="btn peq sec" name="acao" value="encerrar" onclick="return confirm('Encerrar? Ela para de gerar contas a partir de hoje.')">Encerrar</button>
+        {% else %}<button class="btn peq sec" name="acao" value="reativar">Reativar</button>{% endif %}</form></div></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="vazio">Nenhuma despesa recorrente. Cadastre abaixo as contas que você paga todo mês (links, licenças, plataformas de clientes…).</p>{% endif %}
+</div>
+
+<datalist id="fornecedores">{% for x in fornecedores %}<option value="{{ x }}">{% endfor %}</datalist>
+<datalist id="categorias">{% for x in CATEGORIAS_DESPESA %}<option value="{{ x }}">{% endfor %}</datalist>
+{% set e = ed %}
+<form class="card" method="post" action="/financeiro/pagar/recorrentes/salvar" id="form">
+  <input type="hidden" name="csrf" value="{{ csrf }}">{% if e %}<input type="hidden" name="id" value="{{ e.id }}">{% endif %}
+  <h2 style="margin-top:0">{{ 'Editar despesa recorrente' if e else '+ Nova despesa recorrente' }}</h2>
+  <div class="grid3">
+    <div class="campo"><label>Fornecedor</label><input name="fornecedor" list="fornecedores" value="{{ e.fornecedor or '' if e else '' }}" placeholder="Ex.: Vivo Empresas"></div>
+    <div class="campo"><label>Descrição</label><input name="descricao" required value="{{ e.descricao if e else '' }}" placeholder="Ex.: Link dedicado da portaria"></div>
+    <div class="campo"><label>Categoria</label><input name="categoria" list="categorias" value="{{ e.categoria or '' if e else '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Cliente <span class="muted">(se a despesa é de um cliente)</span></label><select name="cliente_id"><option value="">— despesa da empresa —</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if e and e.cliente_id == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Valor por mês</label><input name="valor" required inputmode="decimal" value="{{ e.valor|brl_num if e else '' }}" placeholder="0,00"></div>
+    <div class="campo"><label>Dia do vencimento</label><input type="number" name="dia_vencimento" min="1" max="31" value="{{ e.dia_vencimento if e else 10 }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>A partir de</label><input type="date" name="inicio" value="{{ e.inicio.isoformat() if e else hoje.replace(day=1).isoformat() }}"></div>
+    <div class="campo"><label>Até <span class="muted">(vazio = sem fim)</span></label><input type="date" name="fim" value="{{ e.fim.isoformat() if e and e.fim else '' }}"></div>
+    <div class="campo"><label>Forma de pagamento</label><select name="forma"><option value="">—</option>{% for k, v in FORMAS_PAGAMENTO.items() %}<option value="{{ k }}" {{ 'selected' if e and e.forma == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="campo"><label>Observações</label><input name="observacoes" value="{{ e.observacoes or '' if e else '' }}"></div>
+  {% if e %}<label class="check"><input type="checkbox" name="ativo" value="1" style="width:auto" {{ 'checked' if e.ativo }}> <span>Ativa</span></label>{% endif %}
+  <div class="acoes-orc"><button class="btn">Salvar</button>{% if e %}<a class="btn sec" href="/financeiro/pagar/recorrentes">Cancelar</a>{% endif %}</div>
+  <p class="dica">Mudanças valem para os próximos lançamentos; contas já lançadas não mudam (edite-as em Contas a pagar).</p>
+</form>
+{% endblock %}

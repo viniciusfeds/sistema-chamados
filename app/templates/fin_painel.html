@@ -6,7 +6,7 @@
 <div class="cab">
   <div><h1>Financeiro</h1><div class="muted">Orçamentos, contas a receber e contratos · {{ hoje|data }}</div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap"><a class="btn" href="/financeiro/orcamentos/novo">+ Novo orçamento</a>
-    <a class="btn sec" href="/financeiro/receber#novo">+ Conta a receber</a></div>
+    <a class="btn sec" href="/financeiro/receber#novo">+ Conta a receber</a><a class="btn sec" href="/financeiro/pagar#novo">+ Conta a pagar</a></div>
 </div>
 
 {% if ind.contratos_pendentes %}
@@ -21,6 +21,15 @@
   <a href="/financeiro/receber?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#1E7B45"><b>{{ ind.recebido_mes|rs }}</b><span>Recebido no mês</span></a>
   <a href="/financeiro/orcamentos?status=enviado" style="--c:#5B3A9E"><b>{{ ind.orc_abertos|rs }}</b><span>Orçamentos aguardando · {{ ind.n_orc_abertos }}</span></a>
   <a href="/financeiro/orcamentos" style="--c:#2B2B2B"><b>{{ ind.conversao ~ '%' if ind.conversao is not none else '—' }}</b><span>Aprovação (90 dias)</span></a>
+</div>
+
+<h2 style="margin:6px 0 10px">Contas a pagar</h2>
+<div class="cards fin">
+  <a href="/financeiro/pagar?situacao=vencido" style="--c:#B3261E" class="{{ 'ativo' if pag.n_vencidas }}"><b>{{ pag.vencidas|rs }}</b><span>A pagar vencido · {{ pag.n_vencidas }}</span></a>
+  <a href="/financeiro/pagar?situacao=aberto&ate={{ (hoje + timedelta(days=7)).isoformat() }}" style="--c:#B07000"><b>{{ pag.sete_dias|rs }}</b><span>A pagar em 7 dias</span></a>
+  <a href="/financeiro/pagar?situacao=pago&de={{ hoje.replace(day=1).isoformat() }}" style="--c:#2B2B2B"><b>{{ pag.pago_mes|rs }}</b><span>Pago no mês</span></a>
+  {% set saldo = ind.recebido_mes - pag.pago_mes %}
+  <a href="/financeiro/pagar" style="--c:{{ '#1E7B45' if saldo >= 0 else '#B3261E' }}"><b>{{ saldo|rs }}</b><span>Saldo do mês (recebido − pago)</span></a>
 </div>
 
 <div class="dash-grid">
@@ -64,5 +73,12 @@
       <span style="text-align:right"><b>{{ t.valor|rs }}</b><br><span class="muted">{{ t.vencimento|data }}</span></span></a>
     {% else %}<p class="muted">Nada a vencer.</p>{% endfor %}
   </div>
+</div>
+<div class="card">
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">A pagar nos próximos 10 dias</h2><a class="btn peq sec" href="/financeiro/pagar">Ver todas</a></div>
+  {% for c in pagar_prox %}
+  <a class="linha-lista" href="/financeiro/pagar"><span><b>{{ c.fornecedor or c.descricao }}</b><br><span class="muted">{{ c.descricao if c.fornecedor else "" }}{{ ' · ' ~ c.cliente.nome if c.cliente }}</span></span>
+    <span style="text-align:right"><b>{{ c.valor|rs }}</b><br><span style="{{ 'color:#B3261E;font-weight:700' if c.vencimento < hoje else '' }}" class="muted">{{ c.vencimento|data }}</span></span></a>
+  {% else %}<p class="ok-tudo">✔ Nada a pagar nos próximos dias.</p>{% endfor %}
 </div>
 {% endblock %}

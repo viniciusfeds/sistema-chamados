@@ -25,6 +25,21 @@
   <a href="/financeiro/receber?situacao=vencido{{ '&cliente=' ~ cf.id if cf.id }}" style="--c:#B3261E" class="{{ 'ativo' if resumo.vencido }}"><b>{{ resumo.vencido|rs }}</b><span>Vencido</span></a>
 </div>
 
+{% if desp.recorrentes or desp.contas or desp.receita_mensal %}
+<div class="card" id="custos">
+  <div class="cab" style="margin-bottom:6px"><h2 style="margin:0">Receita × despesas do cliente</h2>
+    <div class="acoes-orc"><a class="btn peq sec" href="/financeiro/pagar?cliente={{ cli.id }}&situacao=todos">Contas a pagar</a>
+      <a class="btn peq sec" href="/financeiro/pagar/recorrentes">+ Despesa recorrente</a></div></div>
+  <div class="cards fin" style="margin-bottom:8px">
+    <a href="/financeiro/contratos" style="--c:#1E7B45"><b>{{ desp.receita_mensal|rs }}</b><span>Contratos por mês</span></a>
+    <a href="/financeiro/pagar/recorrentes" style="--c:#B3261E"><b>{{ desp.mensal|rs }}</b><span>Despesas recorrentes por mês</span></a>
+    <a href="#custos" style="--c:{{ '#1E7B45' if desp.resultado >= 0 else '#B3261E' }}"><b>{{ desp.resultado|rs }}</b><span>Resultado mensal{% if desp.receita_mensal %} · {{ (100 * desp.resultado / desp.receita_mensal)|round|int }}%{% endif %}</span></a>
+    <a href="/financeiro/pagar?cliente={{ cli.id }}&situacao=pago" style="--c:#2B2B2B"><b>{{ desp.pago_12m|rs }}</b><span>Pago por este cliente (12 meses)</span></a>
+  </div>
+  {% for d in desp.recorrentes %}<div class="linha-lista"><span>↻ {{ d.fornecedor or '' }}{{ ' · ' if d.fornecedor }}{{ d.descricao }} <span class="muted">· todo dia {{ d.dia_vencimento }}</span></span><b>{{ d.valor|rs }}</b></div>{% endfor %}
+</div>
+{% endif %}
+
 <form class="card" method="post" action="/financeiro/clientes/salvar" id="faturamento">
   <input type="hidden" name="csrf" value="{{ csrf }}">{% if cf.id %}<input type="hidden" name="id" value="{{ cf.id }}">{% endif %}
   <input type="hidden" name="cliente_id" value="{{ cli.id }}"><input type="hidden" name="voltar_para" value="{{ aqui }}#faturamento">

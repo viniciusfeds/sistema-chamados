@@ -131,6 +131,13 @@ def _laco(parar: threading.Event):
                     preventiva.processar(db)
             except Exception as e:  # noqa: BLE001
                 log.warning("Falha na manutenção preventiva: %s", e)
+            try:                                # contas a pagar: lança as despesas recorrentes do mês
+                from . import pagar
+                from .main import agora as _agora
+                with SessionLocal() as db:
+                    pagar.processar(db, _agora().date())
+            except Exception as e:  # noqa: BLE001
+                log.warning("Falha ao lançar despesas recorrentes: %s", e)
             try:                                # chamados em validação sem resposta do solicitante
                 from . import validacao
                 with SessionLocal() as db:

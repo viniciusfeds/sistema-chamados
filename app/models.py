@@ -1109,3 +1109,75 @@ class EspelhoPonto(Base):
     assinado_agente: Mapped[str | None] = mapped_column(String(250), nullable=True)
     observacao: Mapped[str | None] = mapped_column(Text, nullable=True)       # ressalva do funcionário
     funcionario = relationship("Funcionario")
+
+
+# ====================================================================== contas a pagar
+CATEGORIAS_DESPESA = ["Internet / link", "Licença de software", "Nuvem / armazenamento", "Monitoramento / plataforma",
+                      "Telefonia / chip", "Material e equipamentos", "Serviço terceirizado", "Aluguel",
+                      "Folha / pró-labore", "Impostos e taxas", "Combustível e transporte", "Outras"]
+
+
+class DespesaRecorrente(Base):
+    """Despesa que se repete todo mês (ex.: link de internet de um cliente) e vira uma conta a pagar por mês."""
+    __tablename__ = "despesas_recorrentes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    descricao: Mapped[str] = mapped_column(String(200))
+    fornecedor: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    categoria: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id", ondelete="SET NULL"), nullable=True,
+                                                   index=True)
+    valor: Mapped[int] = mapped_column(Integer, default=0)                   # centavos por mês
+    dia_vencimento: Mapped[int] = mapped_column(Integer, default=10)
+    inicio: Mapped[date] = mapped_column(Date)
+    fim: Mapped[date | None] = mapped_column(Date, nullable=True)
+    forma: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente = relationship("Cliente")
+
+
+class ContaPagar(Base):
+    __tablename__ = "contas_pagar"
+    __table_args__ = (UniqueConstraint("despesa_id", "competencia"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    descricao: Mapped[str] = mapped_column(String(200))
+    fornecedor: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    categoria: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id", ondelete="SET NULL"), nullable=True,
+                                                   index=True)
+    despesa_id: Mapped[int | None] = mapped_column(ForeignKey("despesas_recorrentes.id", ondelete="SET NULL"),
+                                                   nullable=True)
+    competencia: Mapped[str | None] = mapped_column(String(7), nullable=True)   # "2026-11" (recorrentes)
+    parcela: Mapped[int] = mapped_column(Integer, default=1)
+    total_parcelas: Mapped[int] = mapped_column(Integer, default=1)
+    valor: Mapped[int] = mapped_column(Integer)                              # centavos
+    vencimento: Mapped[date] = mapped_column(Date, index=True)
+    status: Mapped[str] = mapped_column(String(10), default="aberto", index=True)   # aberto / pago / cancelado
+    pago_em: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valor_pago: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    forma: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    codigo_pagamento: Mapped[str | None] = mapped_column(Text, nullable=True)  # linha digitável ou PIX copia e cola
+    anexo: Mapped[str | None] = mapped_column(String(120), nullable=True)      # boleto / nota
+    comprovante: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente = relationship("Cliente")
+    despesa = relationship("DespesaRecorrente")
+
+    def situacao(self, hoje):
+        if self.status != "aberto":
+            return self.status
+        if self.vencimento < hoje:
+            return "vencido"
+        return "hoje" if self.vencimento == hoje else "aberto"
+
+    def dias_atraso(self, hoje):
+        return max(0, (hoje - self.vencimento).days) if self.status == "aberto" else 0
+
+    @property
+    def parcela_fmt(self):
+        if self.competencia:
+            return f"mensal {self.competencia[5:]}/{self.competencia[:4]}"
+        return "parcela única" if self.total_parcelas <= 1 else f"parcela {self.parcela}/{self.total_parcelas}"

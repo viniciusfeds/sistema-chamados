@@ -1740,3 +1740,4 @@ async def _erro(request: Request, exc: StarletteHTTPException):
 from . import rotas_clientes, rotas_financeiro  # noqa: E402,F401
 from . import rotas_assinatura, rotas_preventiva  # noqa: E402,F401
 from . import rotas_rh  # noqa: E402,F401
+from . import rotas_pagar  # noqa: E402,F401

@@ -2038,3 +2038,87 @@ def test_lgpd_mascara_e_valores_ocultos():
     assert 'class="sens"' in adm_pg and "adm•••@t.com" in adm_pg
     # técnico não vê o botão (não tem financeiro)
     assert 'id="btn-valores"' not in entrar("tec@t.com").get("/").text
+
+
+# ------------------------------------------------------------------ contas a pagar
+def test_contas_a_pagar_e_recorrentes():
+    from datetime import timedelta as TD
+    from app import pagar
+    from app.financeiro import somar_meses
+    from app.models import ClienteFiscal, ContaPagar, Contrato, DespesaRecorrente
+    adm = entrar("admin@t.com")
+    tok = _csrf(adm.get("/financeiro/pagar").text)
+    hoje = date.today()
+    with SessionLocal() as db:
+        cli_id = db.scalar(select(Cliente).where(Cliente.ativo)).id
+    # avulsa parcelada com anexo
+    r = adm.post("/financeiro/pagar/novo", data={"csrf": tok, "fornecedor": "Intelbras", "descricao": "Câmeras do lote 7",
+                                                "categoria": "Material e equipamentos", "valor": "1.500,00",
+                                                "vencimento": hoje.isoformat(), "parcelas": "3",
+                                                "codigo_pagamento": "34191.79001 01043.510047"},
+                 files={"anexo": ("nf.pdf", b"%PDF-1.4 teste", "application/pdf")})
+    assert "3 conta(s) a pagar lançada(s)" in r.text and "Intelbras" in r.text and "Copiar código" in r.text
+    # recorrente de cliente a partir do formulário
+    r = adm.post("/financeiro/pagar/novo", data={"csrf": tok, "fornecedor": "Vivo Empresas", "descricao": "Link da portaria",
+                                                "categoria": "Internet / link", "cliente_id": str(cli_id), "valor": "199,90",
+                                                "vencimento": hoje.replace(day=min(hoje.day, 28)).isoformat(),
+                                                "recorrente": "1"})
+    assert "Despesa recorrente criada" in r.text
+    with SessionLocal() as db:
+        d = db.scalar(select(DespesaRecorrente).where(DespesaRecorrente.descricao == "Link da portaria"))
+        assert d and d.valor == 19990 and d.cliente_id == cli_id
+        assert db.scalar(select(func.count(ContaPagar.id)).where(ContaPagar.despesa_id == d.id)) == 1
+        # não duplica no mesmo mês; próximo mês lança 1
+        assert pagar.gerar(db, hoje) == []
+        prox = somar_meses(date(hoje.year, hoje.month, 1), 1, 1)
+        assert len([c for c in pagar.gerar(db, prox) if c.despesa_id == d.id]) == 1
+        db.commit()
+        assert not any(x.id == d.id for x in pagar.pendentes(db, prox))
+        did = d.id
+        db.add(Contrato(cliente_fiscal_id=db.scalar(select(ClienteFiscal.id).where(ClienteFiscal.cliente_id == cli_id))
+                        or _fiscal_para(db, cli_id), descricao="Manutenção", valor=100000, dia_vencimento=10,
+                        inicio=hoje.replace(day=1), ativo=True))
+        db.commit()
+    # recorrente cadastrada direto na tela
+    r = adm.post("/financeiro/pagar/recorrentes/salvar", data={"csrf": tok, "descricao": "Licença do Defense IA",
+                                                              "fornecedor": "Intelbras", "valor": "89,00",
+                                                              "dia_vencimento": "5", "categoria": "Licença de software"})
+    assert "Licença do Defense IA" in r.text and "salva" in r.text
+    # pagar com comprovante, estornar
+    with SessionLocal() as db:
+        c = db.scalar(select(ContaPagar).where(ContaPagar.fornecedor == "Intelbras", ContaPagar.parcela == 1))
+        cid = c.id
+    r = adm.post(f"/financeiro/pagar/{cid}/operacao", data={"csrf": tok, "operacao": "pagar", "pago_em": hoje.isoformat(),
+                                                          "valor_pago": "500,00", "forma": "pix"},
+                 files={"arquivo": ("comp.pdf", b"%PDF-1.4 comp", "application/pdf")})
+    assert "Pagamento de R$ 500,00 registrado" in r.text
+    assert adm.get(f"/financeiro/pagar/{cid}/arquivo/comprovante").content.startswith(b"%PDF")
+    assert adm.get(f"/financeiro/pagar/{cid}/arquivo/anexo").content.startswith(b"%PDF")
+    assert "Câmeras do lote 7" in adm.get("/financeiro/pagar?situacao=pago").text
+    painel = adm.get("/financeiro").text
+    assert "Contas a pagar" in painel and "Saldo do mês" in painel
+    # ficha do cliente mostra receita × despesas
+    ficha = adm.get(f"/clientes/{cli_id}").text
+    assert "Receita × despesas do cliente" in ficha and "Link da portaria" in ficha
+    # vencida aparece no selo do menu e no filtro
+    with SessionLocal() as db:
+        c = db.scalar(select(ContaPagar).where(ContaPagar.fornecedor == "Intelbras", ContaPagar.parcela == 2))
+        c.vencimento = hoje - TD(days=3); db.commit()
+        assert pagar.alertas(db, hoje) >= 1
+    assert "dia(s) de atraso" in adm.get("/financeiro/pagar?situacao=vencido").text
+    csv_ = adm.get("/financeiro/pagar?situacao=todos&csv=1").text
+    assert "Vivo Empresas" in csv_ and "Link da portaria" in csv_
+    r = adm.post(f"/financeiro/pagar/{cid}/operacao", data={"csrf": tok, "operacao": "estornar"})
+    assert "estornado" in r.text
+    # encerrar recorrente com contas: não exclui
+    r = adm.post(f"/financeiro/pagar/recorrentes/{did}/acao", data={"csrf": tok, "acao": "excluir"})
+    assert "encerrada em vez de excluída" in r.text
+    # técnico não acessa
+    assert entrar("tec@t.com").get("/financeiro/pagar").status_code == 403
+
+
+def _fiscal_para(db, cli_id):
+    from app.models import ClienteFiscal
+    cf = ClienteFiscal(cliente_id=cli_id, razao_social="Fiscal teste", documento="11222333000181", ativo=True)
+    db.add(cf); db.flush()
+    return cf.id
