@@ -9,6 +9,12 @@
     <a class="btn sec" href="/financeiro/receber#novo">+ Conta a receber</a><a class="btn sec" href="/financeiro/pagar#novo">+ Conta a pagar</a></div>
 </div>
 
+{% set ca = certificado_situacao() %}
+{% if ca and not ca.erro and ca.dias < 30 %}
+<div class="flash {{ 'erro' if ca.dias < 7 else 'aviso' }}">Certificado digital A1 {{ 'venceu em' if ca.vencido else 'vence em' }} {{ ca.validade.strftime('%d/%m/%Y') }}{% if not ca.vencido %} ({{ ca.dias }} dias){% endif %}: renove e envie o novo em
+  <a href="/admin/configuracoes#certificado">Configurações</a> para não parar a emissão de notas.</div>
+{% elif ca and ca.erro %}<div class="flash erro">O certificado A1 configurado não abre ({{ ca.erro }}). <a href="/admin/configuracoes#certificado">Enviar de novo</a></div>
+{% endif %}
 {% if ind.contratos_pendentes %}
 <div class="flash aviso">{{ ind.contratos_pendentes }} contrato(s) ainda sem cobrança deste mês.
   <a href="/financeiro/contratos">Gerar cobranças</a></div>

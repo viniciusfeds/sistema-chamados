@@ -1349,8 +1349,32 @@ def admin_configuracoes(request: Request, u: Usuario = Depends(so_admin), db: Se
     extras = {"ORC_NUMERO_INICIAL": f"Último orçamento usado: {ultimo:04d} · o próximo será "
                                     f"<b>{financeiro.proximo_numero_orcamento(db):04d}</b>." if ultimo else
                                     f"Nenhum orçamento ainda · o primeiro será <b>{financeiro.proximo_numero_orcamento(db):04d}</b>."}
+    from . import certificado
     return render(request, "admin_config.html", u=u, secoes=secoes, valores=valores, senhas=senhas,
-                  padroes=padroes, no_sistema=linhas, v=None, extras=extras)
+                  padroes=padroes, no_sistema=linhas, v=None, extras=extras, cert=certificado.situacao())
+
+
+@app.post("/admin/configuracoes/certificado", dependencies=[Depends(checar_csrf)])
+async def admin_certificado(request: Request, u: Usuario = Depends(so_admin)):
+    from . import certificado
+    form = await request.form()
+    op = form.get("op", "enviar")
+    if op == "remover":
+        certificado.remover()
+        flash(request, "Certificado A1 removido do sistema.")
+        return voltar("/admin/configuracoes#certificado")
+    arq = form.get("arquivo")
+    dados = await arq.read() if arq is not None and getattr(arq, "filename", "") else b""
+    try:
+        info = certificado.salvar(dados, str(form.get("senha", "")), getattr(arq, "filename", "") or "")
+    except certificado.CertificadoInvalido as e:
+        flash(request, f"Certificado não salvo: {e}", "erro")
+        return voltar("/admin/configuracoes#certificado")
+    aviso = "" if info["cnpj_confere"] else (f" Atenção: o CNPJ do certificado ({info['documento_fmt']}) é diferente do "
+                                             f"CNPJ da empresa nas configurações ({config.EMPRESA_CNPJ}).")
+    flash(request, f"Certificado A1 salvo: {info['titular']} · válido até {info['validade']:%d/%m/%Y} "
+                   f"({info['dias']} dias).{aviso}", "aviso" if aviso else "ok")
+    return voltar("/admin/configuracoes#certificado")
 
 
 @app.post("/admin/configuracoes", dependencies=[Depends(checar_csrf)])

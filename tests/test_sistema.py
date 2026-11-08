@@ -2122,3 +2122,66 @@ def _fiscal_para(db, cli_id):
     cf = ClienteFiscal(cliente_id=cli_id, razao_social="Fiscal teste", documento="11222333000181", ativo=True)
     db.add(cf); db.flush()
     return cf.id
+
+
+# ------------------------------------------------------------------ certificado digital A1
+def _gerar_pfx(senha=b"1234", dias=365, cnpj="32402010000140", legado=False):
+    from datetime import datetime as DT, timedelta as TD, timezone as TZ
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.x509.oid import NameOID
+    k = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    nome = x509.Name([x509.NameAttribute(NameOID.COUNTRY_NAME, "BR"),
+                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "ICP-Brasil"),
+                      x509.NameAttribute(NameOID.COMMON_NAME, f"TECNOSIT SOLUCOES EM TECNOLOGIA LTDA:{cnpj}")])
+    emissor = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "AC TESTE RFB v5")])
+    agora = DT.now(TZ.utc)
+    der = b"\x04" + bytes([len(cnpj)]) + cnpj.encode()
+    cert = (x509.CertificateBuilder().subject_name(nome).issuer_name(emissor).public_key(k.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(agora - TD(days=1))
+            .not_valid_after(agora + TD(days=dias))
+            .add_extension(x509.SubjectAlternativeName([x509.OtherName(x509.ObjectIdentifier("2.16.76.1.3.3"), der)]),
+                           critical=False)
+            .sign(k, hashes.SHA256()))
+    enc = (serialization.PrivateFormat.PKCS12.encryption_builder()
+           .key_cert_algorithm(pkcs12.PBES.PBESv1SHA1And3KeyTripleDESCBC).hmac_hash(hashes.SHA1()).build(senha)
+           if legado else serialization.BestAvailableEncryption(senha))
+    return pkcs12.serialize_key_and_certificates(b"a1", k, cert, None, enc)
+
+
+def test_certificado_a1_configuracoes():
+    from app import certificado
+    adm = entrar("admin@t.com")
+    pg = adm.get("/admin/configuracoes").text
+    assert 'id="certificado"' in pg and "Nenhum certificado configurado" in pg
+    tok = _csrf(pg)
+    pfx = _gerar_pfx(legado=True)
+    r = adm.post("/admin/configuracoes/certificado", data={"csrf": tok, "senha": "errada", "op": "enviar"},
+                 files={"arquivo": ("empresa.pfx", pfx, "application/x-pkcs12")})
+    assert "Senha do certificado incorreta" in r.text
+    r = adm.post("/admin/configuracoes/certificado", data={"csrf": tok, "senha": "x", "op": "enviar"},
+                 files={"arquivo": ("x.pfx", b"lixo", "application/x-pkcs12")})
+    assert "não é um certificado A1 válido" in r.text
+    r = adm.post("/admin/configuracoes/certificado", data={"csrf": tok, "senha": "1234", "op": "enviar"},
+                 files={"arquivo": ("empresa.pfx", pfx, "application/x-pkcs12")})
+    assert "Certificado A1 salvo: TECNOSIT SOLUCOES EM TECNOLOGIA LTDA" in r.text
+    pg = adm.get("/admin/configuracoes").text
+    assert "AC TESTE RFB v5" in pg and "32.402.•••/••••-••" in pg and "Válido" in pg and "empresa.pfx" in pg
+    # guardado cifrado e utilizável
+    bruto = certificado.ARQ.read_text()
+    assert "1234" not in bruto and "TECNOSIT" not in bruto
+    chave, cert, _ = certificado.carregar()
+    assert chave and certificado.descrever(cert)["documento"] == "32402010000140"
+    # CNPJ diferente avisa; vencendo aparece no financeiro
+    r = adm.post("/admin/configuracoes/certificado", data={"csrf": tok, "senha": "1234", "op": "enviar"},
+                 files={"arquivo": ("outro.pfx", _gerar_pfx(dias=10, cnpj="11222333000181"), "application/x-pkcs12")})
+    assert "é diferente do CNPJ da empresa" in r.text
+    assert "vence em" in adm.get("/financeiro").text
+    # salvar as outras configurações não apaga o certificado
+    assert certificado.situacao()["documento"] == "11222333000181"
+    adm.post("/admin/configuracoes/certificado", data={"csrf": tok, "op": "remover"})
+    assert certificado.situacao() is None
+    t = entrar("tec@t.com")
+    assert t.post("/admin/configuracoes/certificado", data={"csrf": _csrf(t.get("/conta").text), "op": "remover"}).status_code == 403

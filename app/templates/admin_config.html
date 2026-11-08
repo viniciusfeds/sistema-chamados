@@ -33,7 +33,40 @@
   <div><div class="muted"><a href="/admin">← Administração</a></div><h1>Configurações</h1>
     <div class="muted">Valem na hora, sem reiniciar e sem editar arquivos. Para voltar ao padrão, coloque o valor padrão de novo.</div></div>
 </div>
-<nav class="cfg-indice">{% for id, titulo, _, _ in secoes %}<a href="#{{ id }}">{{ titulo }}</a>{% endfor %}</nav>
+<nav class="cfg-indice"><a href="#certificado">Certificado digital A1</a>{% for id, titulo, _, _ in secoes %}<a href="#{{ id }}">{{ titulo }}</a>{% endfor %}</nav>
+
+<div class="card" id="certificado">
+  <div class="cab" style="margin-bottom:4px"><h2 style="margin:0">Certificado digital A1</h2>
+    {% if cert and not cert.erro %}<span class="situ {{ 'vermelho' if cert.vencido or cert.dias < 15 else ('laranja' if cert.dias < 45 else 'verde') }}">{{ 'Vencido' if cert.vencido else ('Vence em ' ~ cert.dias ~ ' dias' if cert.dias < 45 else 'Válido') }}</span>{% endif %}</div>
+  <p class="dica" style="margin-top:0">Certificado da empresa (e-CNPJ, arquivo .pfx ou .p12) usado para emitir NF-e e NFS-e. O arquivo e a senha ficam
+    guardados <b>cifrados</b> no servidor e nunca aparecem de novo na tela.</p>
+  {% if cert and cert.erro %}
+  <div class="flash erro">O certificado configurado não abre: {{ cert.erro }} Envie de novo abaixo.</div>
+  {% elif cert %}
+  <div class="cert-info">
+    <div><span class="dica">Titular</span><b>{{ cert.titular }}</b></div>
+    <div><span class="dica">CNPJ</span><b>{{ cert.documento_fmt|sens('documento') if cert.documento_fmt else '—' }}</b>
+      {% if not cert.cnpj_confere %}<div style="color:#B3261E;font-size:.82rem">Diferente do CNPJ da empresa</div>{% endif %}</div>
+    <div><span class="dica">Validade</span><b>{{ cert.inicio.strftime('%d/%m/%Y') }} a {{ cert.validade.strftime('%d/%m/%Y') }}</b></div>
+    <div><span class="dica">Emitido por</span><b>{{ cert.emissor }}</b></div>
+    <div><span class="dica">Origem</span><b>{{ 'Enviado pela tela' if cert.origem == 'tela' else 'Arquivo do .env (CERT_A1_ARQUIVO)' }}</b>
+      {% if cert.arquivo %}<div class="dica">{{ cert.arquivo }}{% if cert.enviado_em %} · {{ cert.enviado_em|local }}{% endif %}</div>{% endif %}</div>
+  </div>
+  {% else %}
+  <p class="muted">Nenhum certificado configurado.</p>
+  {% endif %}
+  <form method="post" action="/admin/configuracoes/certificado" enctype="multipart/form-data" autocomplete="off" class="cert-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>{{ 'Trocar certificado' if cert else 'Arquivo do certificado' }} (.pfx / .p12)</label><input type="file" name="arquivo" accept=".pfx,.p12,application/x-pkcs12" required></div>
+    <div class="campo"><label>Senha do certificado</label><input type="password" name="senha" autocomplete="new-password" required></div>
+    <div class="campo"><label>&nbsp;</label><button class="btn" name="op" value="enviar">Enviar certificado</button></div>
+  </form>
+  {% if cert and cert.origem == 'tela' %}
+  <form method="post" action="/admin/configuracoes/certificado" style="margin-top:6px"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn peq sec perigo" name="op" value="remover" onclick="return confirm('Remover o certificado A1 do sistema? A emissão de notas para até enviar outro.')">Remover certificado</button></form>
+  {% endif %}
+</div>
+
 <form method="post" action="/admin/configuracoes" autocomplete="off">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   {% for id, titulo, descricao, campos in secoes %}

@@ -24,6 +24,7 @@ from .models import (FORMAS_PAGAMENTO, STATUS_ORCAMENTO, TIPOS_ITEM, Chamado, Cl
 from .pdf_orcamento import pdf_orcamento
 
 tpl.env.filters["brl"] = brl
+tpl.env.globals["certificado_situacao"] = lambda: __import__("app.certificado", fromlist=["x"]).situacao()
 from . import lgpd  # noqa: E402
 lgpd.instalar(tpl, brl)
 tpl.env.filters["brl_num"] = lambda c: brl(c, simbolo=False)

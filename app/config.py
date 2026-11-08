@@ -121,6 +121,9 @@ INTER_WEBHOOK_TOKEN = os.environ.get("INTER_WEBHOOK_TOKEN", "")
 # Certificado do Inter direto por arquivo (alternativa ao envio pela tela). Caminho relativo à pasta do sistema.
 INTER_CERT_ARQUIVO = os.environ.get("INTER_CERT_ARQUIVO", "")
 INTER_CHAVE_ARQUIVO = os.environ.get("INTER_CHAVE_ARQUIVO", "")
+# Certificado digital A1 da empresa (NF-e/NFS-e). O enviado pela tela (Configurações) tem prioridade.
+CERT_A1_ARQUIVO = os.environ.get("CERT_A1_ARQUIVO", "")
+CERT_A1_SENHA = os.environ.get("CERT_A1_SENHA", "")
 
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")

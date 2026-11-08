@@ -464,3 +464,7 @@ body.com-menu main{max-width:1600px}
   .cel>*{overflow:hidden;text-overflow:ellipsis}
   .card:has(>table.resp),.card:has(>.tabela-rolagem){overflow-x:auto!important}
 }
+.cert-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px 18px;margin:8px 0 14px;padding:12px 14px;background:#FAFAF8;border:1px solid var(--linha);border-radius:10px}
+.cert-info span.dica{display:block;margin:0 0 2px}
+.cert-form{display:grid;grid-template-columns:2fr 1.3fr auto;gap:12px;align-items:end}
+@media (max-width:700px){.cert-form{grid-template-columns:1fr}}

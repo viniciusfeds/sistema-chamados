@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.20.0 — 2026-11-08
+- **Certificado digital A1 em Configurações** (Administração → Configurações → Certificado digital A1): envio do
+  e-CNPJ (.pfx/.p12) com a senha, que é conferida na hora (senha errada, arquivo inválido, sem chave privada ou vencido
+  são recusados com mensagem clara; aceita também os .pfx antigos)
+  - mostra titular, CNPJ (mascarado), validade, autoridade emissora e quando foi enviado; avisa se o CNPJ do
+    certificado for diferente do CNPJ da empresa
+  - arquivo e senha ficam **cifrados** em `dados/certificados/a1.json`; trocar e remover pela tela
+  - aviso no painel financeiro quando faltam menos de 30 dias para vencer
+  - alternativa sem tela: `CERT_A1_ARQUIVO` e `CERT_A1_SENHA` no `.env` (a tela tem prioridade)
+  - é o certificado que a emissão de NF-e e NFS-e vai usar
+
 ## 1.19.0 — 2026-11-08
 - **Contas a pagar** (Financeiro → Contas a pagar)
   - contas avulsas ou parceladas com fornecedor, categoria, vencimento, forma de pagamento, linha digitável/PIX
