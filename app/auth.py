@@ -44,6 +44,12 @@ def usuario_atual(request: Request, db: Session = Depends(get_db)) -> Usuario:
     if not u or not u.ativo:
         request.session.clear()
         raise PrecisaLogin()
+    sv = request.session.get("sv")               # senha trocada (por ele ou pelo admin): derruba as outras sessões
+    if sv is None:
+        request.session["sv"] = u.senha_hash[-12:]
+    elif not hmac.compare_digest(sv, u.senha_hash[-12:]):
+        request.session.clear()
+        raise PrecisaLogin()
     if u.papel == "funcionario":
         caminho = request.url.path
         if not any(caminho == p or caminho.startswith(p + "/") for p in LIVRE_FUNCIONARIO):
@@ -94,6 +100,15 @@ def csrf_token(request: Request) -> str:
         tok = secrets.token_urlsafe(24)
         request.session["csrf"] = tok
     return tok
+
+
+def limite_publico(request: Request):
+    """Formulários públicos (abrir chamado, aprovar orçamento, assinar…): no máximo 30 envios por hora por IP."""
+    from .seguranca import PUBLICO
+    cf = (request.headers.get("cf-connecting-ip") or "").strip()
+    ip = cf or (request.client.host if request.client else "?")
+    if PUBLICO.bloqueado(ip) or PUBLICO.registrar(ip):
+        raise HTTPException(429, "Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo.")
 
 
 async def checar_csrf(request: Request):

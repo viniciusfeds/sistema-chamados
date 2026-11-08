@@ -2185,3 +2185,61 @@ def test_certificado_a1_configuracoes():
     assert certificado.situacao() is None
     t = entrar("tec@t.com")
     assert t.post("/admin/configuracoes/certificado", data={"csrf": _csrf(t.get("/conta").text), "op": "remover"}).status_code == 403
+
+
+# ------------------------------------------------------------------ correções de segurança (revisão 1.20.1)
+def test_seguranca_revisao():
+    from app import seguranca
+    from app.seguranca import celula_csv, destino_interno
+    # cabeçalhos
+    r = TestClient(app).get("/login")
+    assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
+    assert "frame-ancestors 'none'" in r.headers["content-security-policy"] and r.headers["referrer-policy"] == "same-origin"
+    # redirecionamento
+    for ruim in ("//evil.com", "/\\evil.com", "https://evil.com", "/\\\\evil.com", "/x\r\nSet-Cookie: a=b", "javascript:alert(1)"):
+        assert destino_interno(ruim, "/") == "/", ruim
+    assert destino_interno("/financeiro/receber?situacao=pago") == "/financeiro/receber?situacao=pago"
+    c = TestClient(app)
+    tok = _csrf(c.get("/login").text)
+    r = c.post("/login", data={"email": "admin@t.com", "senha": "senha12345", "next": "/\\evil.com", "csrf": tok},
+               follow_redirects=False)
+    assert r.headers["location"] == "/"
+    # CSV
+    assert celula_csv("=HYPERLINK(1)") == "'=HYPERLINK(1)" and celula_csv("Vivo") == "Vivo"
+    # bloqueio de força bruta (por conta)
+    seguranca.LOGIN_CONTA.limpar("tec@t.com")
+    c = TestClient(app)
+    tok = _csrf(c.get("/login").text)
+    for _ in range(5):
+        r = c.post("/login", data={"email": "tec@t.com", "senha": "errada", "next": "/", "csrf": tok})
+    assert "bloqueado por 15 minutos" in r.text
+    r = c.post("/login", data={"email": "tec@t.com", "senha": "senha12345", "next": "/", "csrf": tok})
+    assert "Muitas tentativas" in r.text
+    seguranca.LOGIN_CONTA.limpar("tec@t.com")
+    seguranca.LOGIN_IP.limpar("testclient")
+    # troca de senha derruba a sessão de outro aparelho
+    a1, a2 = entrar("tec@t.com"), entrar("tec@t.com")
+    tk = _csrf(a1.get("/conta").text)
+    a1.post("/conta", data={"csrf": tk, "atual": "senha12345", "nova": "senha-nova-123"})
+    assert a1.get("/", follow_redirects=False).status_code == 200
+    assert a2.get("/", follow_redirects=False).status_code in (302, 303, 307)
+    a1.post("/conta", data={"csrf": tk, "atual": "senha-nova-123", "nova": "senha12345"})
+    # XSS: nome com aspas não quebra o confirm()
+    with SessionLocal() as db:
+        from app.models import ContatoAviso as WhatsappContato
+        cli = db.scalar(select(Cliente).where(Cliente.ativo))
+        db.add(WhatsappContato(cliente_id=cli.id, nome="x');alert(1);('", telefone="5511999990000", ativo=True))
+        db.commit()
+        cid = cli.id
+    pg = entrar("admin@t.com").get(f"/clientes/{cid}").text
+    assert "x');alert(1);('" not in pg and "\\u0027);alert(1);(\\u0027" in pg
+    # BMP recusado nas fotos
+    from app import fotos
+    from PIL import Image
+    from io import BytesIO
+    b = BytesIO(); Image.new("RGB", (20, 20)).save(b, "BMP")
+    try:
+        fotos._processar(b.getvalue(), "x.bmp")
+        assert False, "BMP deveria ser recusado"
+    except fotos.FotoInvalida:
+        pass

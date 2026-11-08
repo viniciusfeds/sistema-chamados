@@ -1,5 +1,22 @@
 # Histórico de versões
 
+## 1.20.1 — 2026-11-08 · revisão de segurança
+- **Pillow 13.0.0** (a 12.3.0 tinha 39 falhas conhecidas em decodificadores de imagem) e as fotos enviadas — inclusive
+  pelo formulário público — só passam pelos decodificadores JPEG/PNG/WEBP; BMP e GIF deixam de ser aceitos
+- **XSS corrigido** nos botões de confirmação que montavam JavaScript com nomes vindos do banco (equipamento — que o
+  agente local cria a partir do nome do computador —, cliente, contato, local de ponto, funcionário) e nos botões de
+  copiar PIX/linha digitável
+- **Login protegido contra força bruta**: 5 senhas erradas na mesma conta (ou 10 no mesmo IP) bloqueiam por 15 min;
+  sessão nova a cada login; trocar a senha derruba as sessões abertas em outros aparelhos
+- **Formulários públicos** (abrir chamado, confirmar chamado, aprovar orçamento, assinar contrato): até 30 envios por
+  hora por IP
+- **Redirecionamento aberto** corrigido (`/login?next=/\site` e retornos de formulário do financeiro)
+- **Cabeçalhos de segurança** em todas as respostas: proteção contra embutir as telas em outro site (clickjacking,
+  importante na página de assinatura), `nosniff`, `Referrer-Policy` (os links com token não vazam ao clicar em links
+  externos como o Google Maps), sem cache nas páginas com dados; HSTS quando `COOKIE_SEGURO=1`
+- CSV exportados protegidos contra fórmulas maliciosas no Excel; nome de arquivo do PDF higienizado; código de
+  verificação de contratos novos com 12 caracteres
+
 ## 1.20.0 — 2026-11-08
 - **Certificado digital A1 em Configurações** (Administração → Configurações → Certificado digital A1): envio do
   e-CNPJ (.pfx/.p12) com a senha, que é conferida na hora (senha errada, arquivo inválido, sem chave privada ou vencido

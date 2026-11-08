@@ -11,7 +11,8 @@ from .models import Anexo
 Image.MAX_IMAGE_PIXELS = 60_000_000  # protege contra "bombas" de imagem
 LADO_MAX = 1600
 LADO_MINI = 480
-FORMATOS_OK = {"JPEG", "PNG", "WEBP", "GIF", "BMP", "MPO"}
+FORMATOS_OK = {"JPEG", "PNG", "WEBP", "MPO"}   # MPO = JPEG de alguns celulares; BMP/GIF fora (decodificadores com falhas conhecidas)
+DECODIFICADORES = ["JPEG", "PNG", "WEBP"]   # o JPEG também abre as fotos MPO dos celulares
 
 
 class FotoInvalida(Exception):
@@ -33,9 +34,9 @@ def _ler_limitado(upload, limite_bytes):
 
 def _processar(dados: bytes, nome: str):
     try:
-        img = Image.open(BytesIO(dados))
+        img = Image.open(BytesIO(dados), formats=DECODIFICADORES)   # só abre decodificadores de foto
         img.verify()                      # confere se é mesmo uma imagem
-        img = Image.open(BytesIO(dados))
+        img = Image.open(BytesIO(dados), formats=DECODIFICADORES)
         if img.format not in FORMATOS_OK:
             raise FotoInvalida(f"“{nome}” não é uma foto em formato aceito (JPG, PNG ou WEBP).")
         img = ImageOps.exif_transpose(img)  # gira conforme o celular; os metadados são descartados

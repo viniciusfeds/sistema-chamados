@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
-from .auth import (PrecisaLogin, SoPonto, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
+from .auth import (PrecisaLogin, SoPonto, limite_publico, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, VALIDADO_LOCAL, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
@@ -46,6 +46,8 @@ async def _vida(app):
 
 
 app = FastAPI(title=config.SISTEMA_NOME, docs_url=None, redoc_url=None, openapi_url=None, lifespan=_vida)
+from .seguranca import CabecalhosSeguranca  # noqa: E402
+app.add_middleware(CabecalhosSeguranca)
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY, session_cookie="chamados",
                    max_age=60 * 60 * 24 * 14, same_site="lax", https_only=config.COOKIE_SEGURO)
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -111,8 +113,8 @@ def voltar(url):
 
 def _destino(v, padrao):
     """voltar_para vindo do formulário: só caminho interno (evita redirecionar para outro site)."""
-    v = (v or "").strip()
-    return v if v.startswith("/") and not v.startswith("//") else padrao
+    from .seguranca import destino_interno
+    return destino_interno(v, padrao)
 
 
 def _data(s, padrao=None):
@@ -130,7 +132,8 @@ def _hora(s):
 
 
 def _ascii(s):
-    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    t = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return "".join(c for c in t if c >= " " and c not in '"\\;')
 
 
 def _anexo_pdf(conteudo, nome):
@@ -322,17 +325,29 @@ def login_form(request: Request, next: str = "/"):
     return render(request, "login.html", next=next)
 
 
+_HASH_FALSO = hash_senha("senha-que-nao-existe")       # mesmo custo quando o e-mail não existe
+
+
 @app.post("/login", dependencies=[Depends(checar_csrf)])
 def login(request: Request, email: str = Form(...), senha: str = Form(...), next: str = Form("/"),
           db: Session = Depends(get_db)):
-    u = db.scalar(select(Usuario).where(func.lower(Usuario.email) == email.strip().lower()))
-    if not u or not u.ativo or not conferir_senha(senha, u.senha_hash):
-        flash(request, "E-mail ou senha incorretos.", "erro")
+    from .seguranca import LOGIN_CONTA, LOGIN_IP
+    ip, conta = _ip(request) or "?", email.strip().lower()[:200]
+    espera = max(LOGIN_IP.bloqueado(ip), LOGIN_CONTA.bloqueado(conta))
+    if espera:
+        flash(request, f"Muitas tentativas de acesso. Aguarde {max(1, espera // 60)} minuto(s) e tente de novo.", "erro")
         return voltar(f"/login?next={quote(next)}")
-    csrf = request.session.get("csrf")
-    request.session.clear()
-    request.session.update(uid=u.id, csrf=csrf)
-    return voltar(next if next.startswith("/") and not next.startswith("//") else "/")
+    u = db.scalar(select(Usuario).where(func.lower(Usuario.email) == conta))
+    if not u or not u.ativo or not conferir_senha(senha, u.senha_hash or _HASH_FALSO):
+        LOGIN_IP.registrar(ip)
+        bloqueou = LOGIN_CONTA.registrar(conta)
+        flash(request, "Muitas tentativas erradas: acesso bloqueado por 15 minutos." if bloqueou else
+              "E-mail ou senha incorretos.", "erro")
+        return voltar(f"/login?next={quote(next)}")
+    LOGIN_CONTA.limpar(conta)
+    request.session.clear()                       # sessão nova a cada login (evita fixação de sessão)
+    request.session.update(uid=u.id, sv=u.senha_hash[-12:])
+    return voltar(_destino(next, "/"))
 
 
 @app.get("/sair")
@@ -904,7 +919,7 @@ def ocorrencia_assumir(request: Request, oid: int, voltar_para: str = Form("/inv
                 avisar_whatsapp(request, db, ch, antes)
         db.commit()
         flash(request, f"Você assumiu a ocorrência de {oc.equipamento.nome}.")
-    return voltar(voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/")
+    return voltar(_destino(voltar_para, "/"))
 
 
 @app.post("/inventario/ocorrencias/{oid}/encerrar", dependencies=[Depends(checar_csrf)])
@@ -1074,7 +1089,7 @@ def publico_form(request: Request, slug: str, db: Session = Depends(get_db)):
                   unidades=[x for x in cli.unidades if x.ativa], v={})
 
 
-@app.post("/abrir/{slug}", dependencies=[Depends(checar_csrf)])
+@app.post("/abrir/{slug}", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
 def publico_abrir(request: Request, slug: str, unidade_id: str = Form(""), nome: str = Form(""),
                   contato: str = Form(""), email: str = Form(""), assunto: str = Form(""),
                   problema: str = Form(""), urgente: str = Form(""), site: str = Form(""),
@@ -1143,7 +1158,7 @@ def publico_acompanhar(request: Request, token: str, db: Session = Depends(get_d
                   texto_padrao=regras.TEXTO_PADRAO, link=f"{base_url(request)}/acompanhar/{token}")
 
 
-@app.post("/acompanhar/{token}/validar", dependencies=[Depends(checar_csrf)])
+@app.post("/acompanhar/{token}/validar", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
 def publico_validar(request: Request, token: str, resolvido: str = Form(...), nome: str = Form(""),
                     obs: str = Form(""), db: Session = Depends(get_db)):
     from . import validacao
@@ -1585,7 +1600,7 @@ def reenviar(request: Request, eid: int, voltar_para: str = Form("/admin/whatsap
     db.refresh(env)
     flash(request, "Reenviado." if env.status != "falhou" else f"Falhou de novo: {env.erro}",
           "ok" if env.status != "falhou" else "erro")
-    return voltar(voltar_para if voltar_para.startswith("/") and not voltar_para.startswith("//") else "/")
+    return voltar(_destino(voltar_para, "/"))
 
 
 @app.get("/webhook/whatsapp", include_in_schema=False)
@@ -1745,6 +1760,7 @@ def conta_senha(request: Request, atual: str = Form(...), nova: str = Form(...),
         flash(request, "A nova senha precisa ter pelo menos 8 caracteres.", "erro")
     else:
         u.senha_hash = hash_senha(nova); db.commit()
+        request.session["sv"] = u.senha_hash[-12:]   # mantém esta sessão; as outras (outros aparelhos) caem
         flash(request, "Senha alterada.")
     return voltar("/conta")
 

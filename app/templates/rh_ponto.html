@@ -20,7 +20,7 @@
   <form method="post" action="/rh/ponto/acao"><input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="funcionario_id" value="{{ fu.id }}"><input type="hidden" name="mes" value="{{ mes }}">
     {% if esp %}<button class="btn peq perigo" name="op" value="reabrir" onclick="return confirm('Reabrir o mês? {{ 'A assinatura do funcionário será descartada.' if esp.assinado_em else '' }}')">Reabrir mês</button>
-    {% else %}<button class="btn peq" name="op" value="fechar" onclick="return confirm('Fechar {{ titulo_mes|lower }} e enviar para {{ fu.nome }} assinar?')">Fechar mês e enviar para assinatura</button>{% endif %}
+    {% else %}<button class="btn peq" name="op" value="fechar" onclick='return confirm({{ ("Fechar " ~ titulo_mes|lower ~ " e enviar para " ~ fu.nome ~ " assinar?")|tojson }})'>Fechar mês e enviar para assinatura</button>{% endif %}
   </form>
 </div>
 {% if esp %}<div class="flash {{ 'ok' if esp.assinado_em else 'aviso' }}">

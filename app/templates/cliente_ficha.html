@@ -113,7 +113,7 @@
       <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="voltar_para" value="{{ aqui }}#contatos">
         <button class="btn peq sec" name="operacao" value="alternar">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
-        <button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Remover {{ c.nome }}?')">Remover</button></form></td>
+        <button class="btn peq perigo" name="operacao" value="excluir" onclick='return confirm({{ ("Remover " ~ c.nome ~ "?")|tojson }})'>Remover</button></form></td>
     </tr>{% endfor %}</tbody>
   </table>
   {% else %}<p class="muted">Ninguém recebe aviso deste cliente ainda.</p>{% endif %}
@@ -158,7 +158,7 @@
     <div class="campo"><label>Prefixo das unidades</label><input name="nome_curto" value="{{ cli.nome_curto or '' }}" placeholder="Ex.: SkyFit"></div>
     <div class="campo"><label>&nbsp;</label><div class="acoes-orc"><button class="btn" name="operacao" value="salvar">Salvar</button>
       <button class="btn {{ 'perigo' if cli.ativo else 'sec' }}" name="operacao" value="ativo" formnovalidate
-        onclick="return confirm('{{ 'Desativar' if cli.ativo else 'Ativar' }} o cliente {{ cli.nome }}?')">{{ 'Desativar cliente' if cli.ativo else 'Ativar cliente' }}</button></div></div>
+        onclick='return confirm({{ (("Desativar" if cli.ativo else "Ativar") ~ " o cliente " ~ cli.nome ~ "?")|tojson }})'>{{ 'Desativar cliente' if cli.ativo else 'Ativar cliente' }}</button></div></div>
   </div>
 </form>
 {% endblock %}

@@ -53,7 +53,7 @@
       <div class="acoes-orc" style="margin-top:4px">
         {% if t.boleto_ativo %}
           {% if t.linha_digitavel %}<a class="btn peq sec" href="/financeiro/receber/{{ t.id }}/boleto.pdf" target="_blank">📄 Boleto</a>
-          <button type="button" class="btn peq sec" onclick="navigator.clipboard.writeText('{{ t.pix_copia_cola or '' }}');this.textContent='PIX copiado ✔'">PIX</button>{% endif %}
+          <button type="button" class="btn peq sec" data-copiar="{{ t.pix_copia_cola or '' }}" onclick="navigator.clipboard.writeText(this.dataset.copiar);this.textContent='PIX copiado ✔'">PIX</button>{% endif %}
           <form method="post" action="/financeiro/receber/{{ t.id }}/boleto"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="voltar_para" value="{{ request.url.path }}?{{ request.url.query }}">
             <button class="btn peq sec" name="acao" value="atualizar" title="Consultar no Inter">↻</button>
             <button class="btn peq perigo" name="acao" value="cancelar" onclick="return confirm('Cancelar o boleto no Inter? A conta continua em aberto.')" title="Cancelar boleto">✕ boleto</button></form>

@@ -14,7 +14,7 @@
     <td data-l="Unidade">{{ l.unidade.nome if l.unidade else '—' }}</td>
     <td><form method="post" action="/rh/locais/{{ l.id }}/acao" class="acoes-orc"><input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn peq sec" name="acao" value="alternar">{{ 'Desativar' if l.ativo else 'Ativar' }}</button>
-      <button class="btn peq perigo" name="acao" value="excluir" onclick="return confirm('Excluir o local {{ l.nome }}?')">Excluir</button></form></td>
+      <button class="btn peq perigo" name="acao" value="excluir" onclick='return confirm({{ ("Excluir o local " ~ l.nome ~ "?")|tojson }})'>Excluir</button></form></td>
   </tr>{% endfor %}</tbody></table>
 {% else %}<p class="vazio">Nenhum local cadastrado. Cadastre a sede e as unidades onde a equipe trabalha.</p>{% endif %}
 </div>

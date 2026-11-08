@@ -86,7 +86,9 @@ def _salvar_anexo(up: UploadFile | None):
         (RH_DIR / nome).write_bytes(dados)
         return nome
     try:
-        img = Image.open(BytesIO(dados))
+        img = Image.open(BytesIO(dados), formats=["JPEG", "PNG", "WEBP"])
+        if img.width * img.height > 40_000_000:
+            raise ValueError
         img.load()
         img = img.convert("RGB")
         img.thumbnail((2000, 2000))

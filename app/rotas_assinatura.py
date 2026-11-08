@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from . import assinatura, avisos, config, financeiro
-from .auth import checar_csrf, so_admin
+from .auth import limite_publico, checar_csrf, so_admin
 from .db import get_db
 from .main import _anexo_pdf, _int, _ip, agora, app, base_url, flash, render, voltar
 from .models import Assinatura, Contrato, ModeloContrato, Titulo, Usuario
@@ -236,7 +236,7 @@ def assinar_pagina(request: Request, token: str, db: Session = Depends(get_db)):
     return render(request, "publico_assinar.html", a=a, c=a.contrato, token=token)
 
 
-@app.post("/assinar/{token}", dependencies=[Depends(checar_csrf)])
+@app.post("/assinar/{token}", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
 def assinar_publico(request: Request, token: str, nome: str = Form(""), cpf: str = Form(""), email: str = Form(""),
                     imagem: str = Form(""), aceite: str = Form(""), hash_visto: str = Form(""),
                     db: Session = Depends(get_db)):
@@ -267,7 +267,7 @@ def assinar_publico(request: Request, token: str, nome: str = Form(""), cpf: str
     return voltar(f"/assinar/{token}")
 
 
-@app.post("/assinar/{token}/recusar", dependencies=[Depends(checar_csrf)])
+@app.post("/assinar/{token}/recusar", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
 def recusar_publico(request: Request, token: str, motivo: str = Form(""), db: Session = Depends(get_db)):
     a = _assinatura_publica(db, token)
     try:

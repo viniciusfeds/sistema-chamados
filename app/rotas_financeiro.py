@@ -15,7 +15,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from . import avisos, config, financeiro
-from .auth import checar_csrf, so_admin
+from .seguranca import celula_csv, destino_interno
+from .auth import limite_publico, checar_csrf, so_admin
 from .db import get_db
 from .financeiro import brl, centavos
 from .main import _anexo_pdf, _data, _int, _ip, agora, app, base_url, flash, render, tpl, voltar
@@ -378,7 +379,7 @@ def orc_publico_pdf(token: str, db: Session = Depends(get_db)):
     return _anexo_pdf(pdf_orcamento(o), f"Orcamento {o.numero_fmt}.pdf")
 
 
-@app.post("/orcamento/{token}/responder", dependencies=[Depends(checar_csrf)])
+@app.post("/orcamento/{token}/responder", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
 def orc_publico_responder(request: Request, token: str, acao: str = Form(...), nome: str = Form(""),
                           obs: str = Form(""), aceite: str = Form(""), db: Session = Depends(get_db)):
     o = _orc_publico(db, token)
@@ -448,8 +449,8 @@ def receber(request: Request, situacao: str = "abertos", de: str = "", ate: str 
                     "Valor pago", "Forma"])
         for t in lista:
             cf = t.cliente_fiscal
-            w.writerow([t.vencimento.strftime("%d/%m/%Y"), cf.razao_social if cf else "", cf.documento_fmt if cf else "",
-                        t.descricao, t.parcela_fmt, brl(t.valor, False), SITUACOES[t.situacao(h)][0],
+            w.writerow([t.vencimento.strftime("%d/%m/%Y"), celula_csv(cf.razao_social if cf else ""),
+                        cf.documento_fmt if cf else "", celula_csv(t.descricao), t.parcela_fmt, brl(t.valor, False), SITUACOES[t.situacao(h)][0],
                         t.pago_em.strftime("%d/%m/%Y") if t.pago_em else "",
                         brl(t.valor_pago, False) if t.valor_pago is not None else "",
                         FORMAS_PAGAMENTO.get(t.forma or "", "")])
@@ -510,12 +511,12 @@ def receber_baixar(request: Request, tid: int, pago_em: str = Form(""), valor_pa
     t = _titulo(db, tid)
     if t.status != "aberto":
         flash(request, "Esta conta não está em aberto.", "erro")
-        return voltar(voltar_para)
+        return voltar(destino_interno(voltar_para, "/financeiro/receber"))
     try:
         t.valor_pago = centavos(valor_pago, t.valor)
     except ValueError as e:
         flash(request, str(e), "erro")
-        return voltar(voltar_para)
+        return voltar(destino_interno(voltar_para, "/financeiro/receber"))
     aviso = ""
     if t.boleto_ativo:
         try:
@@ -528,7 +529,7 @@ def receber_baixar(request: Request, tid: int, pago_em: str = Form(""), valor_pa
         t.observacao = ((t.observacao + "\n") if t.observacao else "") + observacao.strip()
     db.commit()
     flash(request, f"Recebimento de {brl(t.valor_pago)} registrado." + aviso, "erro" if aviso else "ok")
-    return voltar(voltar_para if voltar_para.startswith("/") else "/financeiro/receber")
+    return voltar(destino_interno(voltar_para, "/financeiro/receber"))
 
 
 @app.post("/financeiro/receber/{tid}/operacao", dependencies=[Depends(checar_csrf)])

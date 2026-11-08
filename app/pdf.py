@@ -205,7 +205,7 @@ def _bloco_validacoes(ch):
     for i, a in enumerate(vals):
         try:
             bruto = base64.b64decode(a.validacao_assinatura.split(",", 1)[1])
-            w, h = PILImage.open(BytesIO(bruto)).size
+            w, h = PILImage.open(BytesIO(bruto), formats=["PNG"]).size
             alt = 20 * mm
             larg = min(70 * mm, alt * w / max(h, 1))
             img = Image(BytesIO(bruto), width=larg, height=larg * h / max(w, 1))

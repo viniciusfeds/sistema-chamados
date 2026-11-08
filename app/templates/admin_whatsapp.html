@@ -56,7 +56,7 @@
       <td><form method="post" action="/admin/whatsapp/contatos/{{ c.id }}" style="display:flex;gap:6px">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn peq sec" name="operacao" value="alternar">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
-        <button class="btn peq perigo" name="operacao" value="excluir" onclick="return confirm('Remover {{ c.nome }}?')">Remover</button></form></td>
+        <button class="btn peq perigo" name="operacao" value="excluir" onclick='return confirm({{ ("Remover " ~ c.nome ~ "?")|tojson }})'>Remover</button></form></td>
     </tr>
     {% endfor %}
     </tbody>

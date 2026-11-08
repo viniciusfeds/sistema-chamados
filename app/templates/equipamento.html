@@ -163,7 +163,7 @@
     <form method="post" action="/inventario/{{ eq.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn sec">{{ 'Reativar equipamento' if not eq.ativo else 'Marcar como fora de uso' }}</button></form>
     {% if u.papel == 'admin' %}
-    <form method="post" action="/inventario/{{ eq.id }}/excluir" onsubmit="return confirm('Excluir {{ eq.nome }} do inventário? Os chamados continuam, só perdem o vínculo.')">
+    <form method="post" action="/inventario/{{ eq.id }}/excluir" onsubmit='return confirm({{ ("Excluir " ~ eq.nome ~ " do inventário? Os chamados continuam, só perdem o vínculo.")|tojson }})'>
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn perigo">Excluir</button></form>
     {% endif %}
   </div>

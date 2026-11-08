@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import config, financeiro, pagar
 from .auth import checar_csrf, so_admin
+from .seguranca import celula_csv
 from .db import get_db
 from .financeiro import brl, centavos, somar_meses
 from .main import _data, _int, agora, app, flash, render, tpl, voltar
@@ -60,7 +61,9 @@ def _salvar_arquivo(up: UploadFile | None):
         (PASTA / f"{nome}.pdf").write_bytes(dados)
         return f"{nome}.pdf"
     try:
-        img = Image.open(BytesIO(dados))
+        img = Image.open(BytesIO(dados), formats=["JPEG", "PNG", "WEBP"])
+        if img.width * img.height > 40_000_000:
+            raise ValueError
         img.load()
         img = img.convert("RGB")
         img.thumbnail((2400, 2400))
@@ -111,8 +114,8 @@ def contas_pagar(request: Request, situacao: str = "abertos", de: str = "", ate:
         w.writerow(["Vencimento", "Fornecedor", "Descrição", "Categoria", "Cliente", "Valor", "Situação", "Pago em",
                     "Valor pago", "Forma"])
         for c in lista:
-            w.writerow([c.vencimento.strftime("%d/%m/%Y"), c.fornecedor or "", c.descricao, c.categoria or "",
-                        c.cliente.nome if c.cliente else "", brl(c.valor, False), SITUACOES_PAGAR[c.situacao(h)][0],
+            w.writerow([c.vencimento.strftime("%d/%m/%Y"), celula_csv(c.fornecedor), celula_csv(c.descricao),
+                        celula_csv(c.categoria), celula_csv(c.cliente.nome if c.cliente else ""), brl(c.valor, False), SITUACOES_PAGAR[c.situacao(h)][0],
                         c.pago_em.strftime("%d/%m/%Y") if c.pago_em else "",
                         brl(c.valor_pago, False) if c.valor_pago is not None else "",
                         FORMAS_PAGAMENTO.get(c.forma or "", "")])
@@ -189,7 +192,8 @@ def pagar_operacao(request: Request, cid: int, operacao: str = Form(...), pago_e
     c = db.get(ContaPagar, cid)
     if not c:
         raise HTTPException(404)
-    volta = voltar_para if voltar_para.startswith("/financeiro/") else "/financeiro/pagar"
+    from .seguranca import destino_interno
+    volta = destino_interno(voltar_para, "/financeiro/pagar")
     if operacao == "pagar":
         if c.status != "aberto":
             flash(request, "Essa conta não está em aberto.", "erro"); return voltar(volta)

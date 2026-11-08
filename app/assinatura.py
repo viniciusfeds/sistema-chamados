@@ -136,7 +136,7 @@ def enviar(db, c: Contrato, usuario):
             "pendente", None, None, None, None, None, None
         a.token = secrets.token_urlsafe(20)
     c.doc_hash = hash_texto(c.doc_texto)
-    c.doc_codigo = c.doc_codigo or secrets.token_hex(4).upper()
+    c.doc_codigo = c.doc_codigo or secrets.token_hex(6).upper()   # 48 bits: não dá para adivinhar
     c.doc_status, c.doc_enviado_em, c.doc_concluido_em = "aguardando", agora_utc(), None
 
 
@@ -149,7 +149,7 @@ def _validar_imagem(img: str) -> str | None:
     try:                                          # reabre e regrava: só fica guardada uma imagem PNG válida
         from PIL import Image
         bruto = base64.b64decode(img.split(",", 1)[1], validate=True)
-        im = Image.open(BytesIO(bruto))
+        im = Image.open(BytesIO(bruto), formats=["PNG"])
         im.load()
         if im.width > 3000 or im.height > 1500:
             raise ValueError
