@@ -13,43 +13,68 @@ Nos dois modos a **URA** (menu de atendimento) roda dentro do Nexus: *1 – Abri
 cliente ou quem já abriu chamado com aquele número), abre o chamado na unidade certa e responde com o número e o link de
 acompanhamento.
 
-## 1. Subir o n8n
+## 1. Subir o n8n e a Evolution API
+
+A pasta `n8n/` sobe tudo junto: **n8n** (porta 9600) e **Evolution API** (porta 9610, com PostgreSQL e Redis
+próprios). A Evolution é quem conecta o número de WhatsApp (pelo QR code) e já manda as mensagens recebidas para o
+fluxo do n8n pela rede interna.
 
 ```bash
 cd n8n
 copy .env.example .env      # (Windows)   ou   cp .env.example .env
-# edite o .env: NEXUS_TOKEN, EVOLUTION_URL, EVOLUTION_APIKEY, EVOLUTION_INSTANCIA
+```
+
+Preencha o `.env`:
+
+| Variável | O que pôr |
+|---|---|
+| `NEXUS_TOKEN` | o mesmo **token de integração** de Configurações → WhatsApp no Nexus |
+| `EVOLUTION_APIKEY` | uma chave longa inventada por você (é a senha do painel da Evolution) |
+| `EVOLUTION_DB_SENHA` | outra senha inventada (banco interno da Evolution) |
+| `EVOLUTION_INSTANCIA` | nome da conexão do número, ex.: `tecnosit` |
+| `EVOLUTION_SERVER_URL` / `N8N_WEBHOOK_URL` | troque `IP-DO-SERVIDOR` pelo IP da máquina |
+
+Para gerar as senhas no PowerShell: `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})`
+
+```bash
 docker compose up -d
 ```
 
-Abra `http://IP-DO-SERVIDOR:9600`, crie o usuário dono do n8n.
+## 2. Conectar o número (Evolution)
 
-> Mantenha a porta 9600 fechada no firewall para a internet (como a 9000). Se o provedor de WhatsApp estiver fora da
-> sua rede e precisar chamar o webhook do n8n, publique só o caminho `/webhook/` pelo Cloudflare Tunnel.
+1. Abra `http://IP-DO-SERVIDOR:9610/manager` e entre com a `EVOLUTION_APIKEY`.
+2. **Create instance** com o **mesmo nome** de `EVOLUTION_INSTANCIA` (ex.: `tecnosit`), canal *Baileys*.
+3. Clique em **Get QR Code** e escaneie pelo celular do número (WhatsApp → Aparelhos conectados → Conectar).
+   Use um número de empresa dedicado ao atendimento (de preferência WhatsApp Business).
 
-## 2. Ligar o Nexus ao n8n
+As mensagens recebidas já vão para o n8n sozinhas (webhook global da Evolution, configurado no compose).
 
-Em **Configurações → WhatsApp**:
+## 3. Ligar o Nexus ao n8n
+
+Em **Configurações → WhatsApp** do Nexus:
 
 1. **Integração do WhatsApp**: *Pelo n8n*.
 2. **n8n: webhook de envio**: `http://host.docker.internal:9600/webhook/nexus-enviar`
-3. **n8n: token de integração**: uma senha longa (24+ caracteres). Use **a mesma** no `NEXUS_TOKEN` do `.env` do n8n.
-4. **Atendimento automático (URA)**: ligado. Ajuste a saudação se quiser.
+3. **n8n: token de integração**: o mesmo do `NEXUS_TOKEN`.
+4. **Atendimento automático (URA)**: ligado.
 
-## 3. Importar o fluxo
+## 4. Importar o fluxo no n8n
 
-No n8n: **Workflows → Import from file → `n8n/fluxo-ura-nexus.json`** e clique em **Publish/Active**.
+Abra `http://IP-DO-SERVIDOR:9600`, crie o usuário dono, depois **Workflows → Import from file →
+`n8n/fluxo-ura-nexus.json`** e clique em **Publish/Activate**.
 
-O fluxo tem duas partes:
+- **Mensagem recebida (Evolution)** → recebe da Evolution, pergunta ao Nexus a resposta da URA e responde.
+- **Nexus pede envio** → o Nexus manda os avisos de chamado (aberto, atualizado, concluído, alertas); o fluxo
+  confere o `X-Nexus-Token` e envia pela Evolution.
 
-- **Mensagem recebida (Evolution)** → `POST /webhook/whatsapp-entrada` — configure no provedor (Evolution: *Webhook* da
-  instância, evento `MESSAGES_UPSERT`) a URL `http://host.docker.internal:9600/webhook/whatsapp-entrada`. O fluxo
-  extrai telefone/nome/texto, chama o Nexus e envia a resposta da URA.
-- **Nexus pede envio** → `POST /webhook/nexus-enviar` — o Nexus manda aqui os avisos de chamado (aberto, atualizado,
-  concluído, alertas). O fluxo confere o `X-Nexus-Token` e envia pelo provedor.
+Teste: de outro celular, cujo número esteja cadastrado como contato de WhatsApp de um cliente, mande "oi" para o
+número conectado — deve chegar o menu. Em Administração → WhatsApp, *Enviar teste* também passa pelo n8n.
 
-Para usar outro provedor (Z-API, WAHA, Meta…), troque só os nós **Responder no WhatsApp** e **Enviar no WhatsApp**
-e o nó **Extrair mensagem** (formato do webhook do provedor).
+> Portas 9600 e 9610 fechadas no firewall para a internet (como a 9000). A Evolution não é a API oficial da Meta:
+> o número pode ser bloqueado pelo WhatsApp se mandar muita mensagem para quem não falou com vocês antes.
+
+Para usar outro provedor (Z-API, WAHA, Meta…), troque só os nós **Responder no WhatsApp**, **Enviar no WhatsApp** e
+**Extrair mensagem**.
 
 ## API do Nexus para o n8n
 

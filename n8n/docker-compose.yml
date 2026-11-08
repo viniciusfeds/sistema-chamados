@@ -1,5 +1,7 @@
-# n8n para a URA do WhatsApp integrada ao Nexus Desk — porta 9600
-# Subir:  cd n8n && docker compose up -d     →   abrir http://IP-DO-SERVIDOR:9600 e criar o usuário dono
+# URA do WhatsApp integrada ao Nexus Desk: n8n (porta 9600) + Evolution API (porta 9610)
+# Subir:  cd n8n  →  copie .env.example para .env e preencha  →  docker compose up -d
+#   n8n:             http://IP-DO-SERVIDOR:9600            (crie o usuário dono no primeiro acesso)
+#   Evolution API:   http://IP-DO-SERVIDOR:9610/manager    (conecta o número pelo QR code)
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest
@@ -15,11 +17,9 @@ services:
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false # o fluxo lê as variáveis abaixo
       - N8N_DIAGNOSTICS_ENABLED=false
       - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:9600/}
-      # ---- Nexus Desk
       - NEXUS_URL=${NEXUS_URL:-http://host.docker.internal:9000}
-      - NEXUS_TOKEN=${NEXUS_TOKEN}         # o mesmo "token de integração" de Configurações → WhatsApp
-      # ---- provedor de WhatsApp ligado no n8n (padrão do fluxo: Evolution API)
-      - EVOLUTION_URL=${EVOLUTION_URL:-http://host.docker.internal:8080}
+      - NEXUS_TOKEN=${NEXUS_TOKEN}
+      - EVOLUTION_URL=http://evolution:8080
       - EVOLUTION_APIKEY=${EVOLUTION_APIKEY}
       - EVOLUTION_INSTANCIA=${EVOLUTION_INSTANCIA:-tecnosit}
     extra_hosts:
@@ -27,5 +27,64 @@ services:
     volumes:
       - n8n_dados:/home/node/.n8n
 
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: evolution
+    restart: unless-stopped
+    depends_on:
+      - evolution-db
+      - evolution-redis
+    ports:
+      - "9610:8080"
+    environment:
+      - TZ=America/Sao_Paulo
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://localhost:9610}
+      - AUTHENTICATION_API_KEY=${EVOLUTION_APIKEY}
+      - DEL_INSTANCE=false
+      - TELEMETRY_ENABLED=false
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_DB_SENHA}@evolution-db:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
+      - DATABASE_SAVE_MESSAGE_UPDATE=false
+      - DATABASE_SAVE_DATA_CONTACTS=false
+      - DATABASE_SAVE_DATA_CHATS=false
+      - DATABASE_SAVE_DATA_HISTORIC=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_LOCAL_ENABLED=false
+      # toda mensagem recebida vai para o fluxo do n8n (rede interna, não passa pela internet)
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=http://n8n:5678/webhook/whatsapp-entrada
+      - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+    volumes:
+      - evolution_instancias:/evolution/instances
+
+  evolution-db:
+    image: postgres:16-alpine
+    container_name: evolution-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=${EVOLUTION_DB_SENHA}
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_banco:/var/lib/postgresql/data
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: evolution-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis:/data
+
 volumes:
   n8n_dados:
+  evolution_instancias:
+  evolution_banco:
+  evolution_redis:

@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.22.1 — 2026-11-08
+- `n8n/docker-compose.yml` agora sobe também a **Evolution API v2.3.7** (porta 9610) com PostgreSQL e Redis
+  próprios; as mensagens recebidas vão direto para o fluxo do n8n pela rede interna (webhook global)
+- Fluxo do n8n: ignora eventos que não são mensagem e reconhece o número real quando o WhatsApp identifica o contato
+  por código interno (@lid)
+- `docs/N8N.md` com o passo a passo completo (senhas, QR code, ligar o Nexus, importar o fluxo)
+
 ## 1.22.0 — 2026-11-08
 - **Integração do WhatsApp com lista de opções** (Configurações → WhatsApp): **Oficial (Meta Cloud API)**,
   **Pelo n8n** ou **Desligado**
