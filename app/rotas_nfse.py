@@ -80,8 +80,29 @@ def _valor_servicos(t: Titulo):
 
 
 # ------------------------------------------------------------------ emissão
+CAMPOS_COMPL = ("doc_tecnico", "doc_referencia", "info_complementar", "pedido", "itens_pedido")
+LIMITES_COMPL = {"doc_tecnico": 40, "doc_referencia": 255, "info_complementar": 2000, "pedido": 60, "itens_pedido": 6000}
+
+
+def _mes_extenso(comp: date):
+    meses = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+             "outubro", "novembro", "dezembro")
+    return f"{meses[comp.month - 1]}/{comp.year}"
+
+
+def complementares_do_contrato(t: Titulo | None, comp: date | None = None) -> dict:
+    """Informações complementares cadastradas no contrato da conta ({mes} vira o mês de referência)."""
+    c = t.contrato if t else None
+    if not c:
+        return {k: "" for k in CAMPOS_COMPL}
+    info = (c.nfse_info or "").replace("{mes}", _mes_extenso(comp)) if comp else (c.nfse_info or "")
+    return {"doc_tecnico": c.nfse_doc_tecnico or "", "doc_referencia": c.nfse_doc_referencia or "",
+            "info_complementar": info, "pedido": c.nfse_pedido or "", "itens_pedido": c.nfse_itens_pedido or ""}
+
+
 def emitir(db, u, cf, *, valor, descricao, competencia, item=None, ctribnac="", ctribmun="", nbs="", local="",
-           retido=None, aliquota=None, titulo=None, refazer: NotaServico | None = None) -> NotaServico:
+           retido=None, aliquota=None, titulo=None, refazer: NotaServico | None = None,
+           complementares: dict | None = None) -> NotaServico:
     amb = nfse.ambiente()
     if amb == "desligado":
         raise nfse.ErroNfse("A emissão de NFS-e está desligada em Configurações.")
@@ -106,6 +127,13 @@ def emitir(db, u, cf, *, valor, descricao, competencia, item=None, ctribnac="", 
     n.valor, n.descricao, n.competencia = valor, descricao.strip()[:2000], competencia
     n.ctribnac, n.ctribmun, n.nbs, n.local_prestacao = ctribnac, ctribmun or None, nbs or None, local
     n.iss_retido, n.aliquota = bool(retido), float(aliquota or 0)
+    comp_extra = complementares if complementares is not None else complementares_do_contrato(titulo, competencia)
+    for k in CAMPOS_COMPL:
+        v = str(comp_extra.get(k) or "").strip()
+        if k == "itens_pedido":
+            from .models import itens_pedido
+            v = "\n".join(itens_pedido(v))
+        setattr(n, k, v[:LIMITES_COMPL[k]] or None)
     for k, v in nfse.calcular(valor, n.iss_retido, n.aliquota).items():
         setattr(n, k, v)
     if not n.id:
@@ -218,6 +246,7 @@ def nota_nova(request: Request, titulo: str = "", cliente: str = "", refazer: st
         "aliquota": r.aliquota if r else ((item.aliquota_iss if item and item.aliquota_iss is not None
                                            else config.NFSE_ALIQUOTA_ISS)),
     }
+    dados.update({k: (getattr(r, k) or "") for k in CAMPOS_COMPL} if r else complementares_do_contrato(t, comp))
     servicos = _servicos(db)
     return render(request, "fin_nota_nova.html", u=u, t=t, r=r, cf=cf, d=dados, clientes=_clientes_fiscais(db),
                   servicos=servicos, ambiente=nfse.ambiente(), SUGESTOES=SUGESTOES, fmt_ctribnac=fmt_ctribnac,
@@ -244,7 +273,8 @@ async def nota_emitir(request: Request, u: Usuario = Depends(so_admin), db: Sess
         n = emitir(db, u, cf, valor=valor, descricao=f.get("descricao") or "", item=item,
                    competencia=nfse.competencia_de(f.get("competencia"), hoje()),
                    ctribnac=f.get("ctribnac") or "", ctribmun=f.get("ctribmun") or "", nbs=f.get("nbs") or "",
-                   local=f.get("local") or "", retido=bool(f.get("retido")), aliquota=aliquota, titulo=t, refazer=r)
+                   local=f.get("local") or "", retido=bool(f.get("retido")), aliquota=aliquota, titulo=t, refazer=r,
+                   complementares={k: f.get(k) or "" for k in CAMPOS_COMPL})
     except (ValueError, nfse.ErroNfse) as e:
         flash(request, str(e), "erro")
         return voltar(volta)

@@ -2724,7 +2724,8 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
     # lote dos contratos do mês
     with SessionLocal() as db:
         ct = Contrato(cliente_fiscal_id=cf_id, catalogo_id=manut_id, descricao="Manutenção mensal CFTV", valor=50000,
-                      inicio=date(2026, 1, 1))
+                      inicio=date(2026, 1, 1), nfse_doc_referencia="Contrato 12/2026", nfse_pedido="OC-4512",
+                      nfse_itens_pedido="10\n20; 30", nfse_info="Referente a {mes}. PIX: cnpj")
         db.add(ct); db.flush()
         db.add(Titulo(cliente_fiscal_id=cf_id, contrato_id=ct.id, competencia="2026-09", descricao="Manutenção mensal CFTV",
                       valor=50000, vencimento=date(2026, 10, 10)))
@@ -2739,6 +2740,12 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
         n = db.scalars(select(NotaServico).order_by(NotaServico.id.desc())).first()
         assert "referente a setembro/2026" in n.descricao and "<cTribNac>140101</cTribNac>" in n.xml_dps
         assert "<dCompet>2026-09-01</dCompet>" in n.xml_dps
+        assert ("<infoCompl><docRef>Contrato 12/2026</docRef><xPed>OC-4512</xPed><gItemPed><xItemPed>10</xItemPed>"
+                "<xItemPed>20</xItemPed><xItemPed>30</xItemPed></gItemPed><xInfComp>Referente a setembro/2026. PIX: cnpj"
+                "</xInfComp></infoCompl></serv>") in n.xml_dps
+        lote_id = n.id
+    assert "OC-4512" in adm.get(f"/financeiro/notas/{lote_id}").text
+    assert adm.get(f"/financeiro/notas/{lote_id}/pdf?nexus=1").content.startswith(b"%PDF")
     pg = adm.get("/financeiro/notas/diagnostico").text
     assert "aderenteEmissorNacional" in pg and "Produção" in pg and "3518800" in pg
     # técnico não acessa

@@ -125,6 +125,17 @@ def pdf_nfse(n) -> bytes:
                   ("Simples Nacional", "Optante ME/EPP" if _txt(dps, "n:prest/n:regTrib/n:opSimpNac") == "3" else
                    ("MEI" if _txt(dps, "n:prest/n:regTrib/n:opSimpNac") == "2" else "Não optante")),
               ])]
+    ic = serv.find("n:infoCompl", ns) if serv is not None else None
+    if ic is not None:
+        itens = ", ".join((e.text or "").strip() for e in ic.findall("n:gItemPed/n:xItemPed", ns))
+        linhas_ic = [(r, v) for r, v in (("Responsabilidade técnica", _txt(ic, "n:idDocTec")),
+                                          ("Documento de referência", _txt(ic, "n:docRef")),
+                                          ("Pedido / OC / OS", _txt(ic, "n:xPed")), ("Itens do pedido", itens)) if v]
+        corpo += [Paragraph("Informações complementares", sSec)]
+        if linhas_ic:
+            corpo += [_campos(linhas_ic)]
+        if _txt(ic, "n:xInfComp"):
+            corpo += [Paragraph(escape(_txt(ic, "n:xInfComp")), sVal)]
     retido = _txt(dps, "n:valores/n:trib/n:tribMun/n:tpRetISSQN") == "2"
     vserv = _txt(dps, "n:valores/n:vServPrest/n:vServ")
     linhas = [("Valor do serviço", _brl(vserv)),

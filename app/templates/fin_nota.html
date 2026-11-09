@@ -33,6 +33,15 @@
     <div><div class="muted">NBS</div>{{ fmt_nbs(n.nbs) if n.nbs else '—' }}</div>
     <div><div class="muted">Município da prestação</div>{{ n.local_prestacao }}</div>
   </div>
+  {% if n.doc_tecnico or n.doc_referencia or n.pedido or n.itens_pedido or n.info_complementar %}
+  <h3>Informações complementares</h3>
+  <div class="grid3">
+    {% if n.doc_tecnico %}<div><div class="muted">Responsabilidade técnica</div>{{ n.doc_tecnico }}</div>{% endif %}
+    {% if n.doc_referencia %}<div><div class="muted">Documento de referência</div>{{ n.doc_referencia }}</div>{% endif %}
+    {% if n.pedido %}<div><div class="muted">Pedido / OC / OS</div>{{ n.pedido }}{% if n.itens_pedido %}<div class="muted">Itens: {{ n.lista_itens_pedido|join(', ') }}</div>{% endif %}</div>{% endif %}
+  </div>
+  {% if n.info_complementar %}<p style="white-space:pre-wrap">{{ n.info_complementar }}</p>{% endif %}
+  {% endif %}
   {% if n.chave %}<div class="muted" style="margin-top:10px;word-break:break-all">Chave de acesso: {{ n.chave }}</div>{% endif %}
 </div>
 

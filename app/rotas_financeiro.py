@@ -20,6 +20,7 @@ from .auth import limite_publico, checar_csrf, so_admin
 from .db import get_db
 from .financeiro import brl, centavos
 from .main import _anexo_pdf, _data, _int, _ip, agora, app, base_url, flash, render, tpl, voltar
+from .models import itens_pedido
 from .models import (FORMAS_PAGAMENTO, STATUS_ORCAMENTO, TIPOS_ITEM, Chamado, Cliente, ClienteFiscal, Contrato,
                      ItemCatalogo, ItemOrcamento, Orcamento, Titulo, Unidade, Usuario)
 from .pdf_orcamento import pdf_orcamento
@@ -595,6 +596,8 @@ def contratos(request: Request, editar: str = "", u: Usuario = Depends(so_admin)
 def contrato_salvar(request: Request, id: str = Form(""), cliente_fiscal_id: int = Form(...), descricao: str = Form(...),
                     valor: str = Form(...), dia_vencimento: int = Form(10), inicio: str = Form(""), fim: str = Form(""),
                     catalogo_id: str = Form(""), observacoes: str = Form(""), ativo: str = Form(""),
+                    nfse_doc_tecnico: str = Form(""), nfse_doc_referencia: str = Form(""), nfse_info: str = Form(""),
+                    nfse_pedido: str = Form(""), nfse_itens_pedido: str = Form(""),
                     u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     c = db.get(Contrato, _int(id)) if _int(id) else Contrato()
     try:
@@ -606,6 +609,9 @@ def contrato_salvar(request: Request, id: str = Form(""), cliente_fiscal_id: int
     c.dia_vencimento = max(1, min(31, dia_vencimento))
     c.inicio, c.fim = _data(inicio, hoje()), _data(fim)
     c.catalogo_id, c.observacoes, c.ativo = _int(catalogo_id), _opt(observacoes), bool(ativo) or not _int(id)
+    c.nfse_doc_tecnico, c.nfse_doc_referencia = _opt(nfse_doc_tecnico[:40]), _opt(nfse_doc_referencia[:255])
+    c.nfse_info, c.nfse_pedido = _opt(nfse_info[:2000]), _opt(nfse_pedido[:60])
+    c.nfse_itens_pedido = "\n".join(itens_pedido(nfse_itens_pedido)) or None
     db.add(c)
     db.commit()
     flash(request, "Contrato salvo.")

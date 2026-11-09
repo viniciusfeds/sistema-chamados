@@ -60,6 +60,19 @@
     <div class="campo"><label>Fim <span class="muted">(opcional)</span></label><input type="date" name="fim" value="{{ ed.fim.isoformat() if ed and ed.fim else '' }}"></div>
     <div class="campo"><label>Observações</label><input name="observacoes" value="{{ ed.observacoes or '' if ed else '' }}"></div>
   </div>
+  <details {{ 'open' if ed and (ed.nfse_doc_tecnico or ed.nfse_doc_referencia or ed.nfse_info or ed.nfse_pedido or ed.nfse_itens_pedido) }}>
+    <summary><b>Informações complementares da nota fiscal</b> <span class="muted">(opcional — vão em todas as NFS-e deste contrato)</span></summary>
+    <div class="grid2" style="margin-top:8px">
+      <div class="campo"><label>Nº do documento de responsabilidade técnica</label><input name="nfse_doc_tecnico" maxlength="40" value="{{ ed.nfse_doc_tecnico or '' if ed else '' }}" placeholder="ART, RRT ou TRT, se houver"></div>
+      <div class="campo"><label>Documento de referência</label><input name="nfse_doc_referencia" maxlength="255" value="{{ ed.nfse_doc_referencia or '' if ed else '' }}" placeholder="Ex.: Contrato nº 12/2026"></div>
+    </div>
+    <div class="grid2">
+      <div class="campo"><label>Nº do pedido, ordem de compra, OS ou projeto (B2B)</label><input name="nfse_pedido" maxlength="60" value="{{ ed.nfse_pedido or '' if ed else '' }}" placeholder="Número que o cliente pede na nota"></div>
+      <div class="campo"><label>Itens do pedido / OC / OS / projeto</label><textarea name="nfse_itens_pedido" rows="2" placeholder="Um por linha (até 99)">{{ ed.nfse_itens_pedido or '' if ed else '' }}</textarea></div>
+    </div>
+    <div class="campo"><label>Informações complementares</label><textarea name="nfse_info" rows="2" maxlength="2000" placeholder="Ex.: Período de 01 a 30. Dados bancários / PIX. Centro de custo.">{{ ed.nfse_info or '' if ed else '' }}</textarea>
+      <div class="dica">Pode usar {mes} para o mês de referência (ex.: “Referente a {mes}”).</div></div>
+  </details>
   {% if ed %}<label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if ed.ativo }} style="width:auto"> Ativo</label>{% endif %}
   <button class="btn">Salvar contrato</button>{% if ed %} <a class="btn sec" href="/financeiro/contratos">Cancelar</a>{% endif %}
 </form>

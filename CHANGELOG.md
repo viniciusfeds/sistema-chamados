@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.24.0 — 2026-11-09
+- **Informações complementares da NFS-e no contrato** (Contratos → editar → *Informações complementares da nota
+  fiscal*), enviadas em cada nota do contrato, inclusive no lote:
+  - nº do documento de responsabilidade técnica (ART/RRT/TRT) → `idDocTec`
+  - documento de referência → `docRef`
+  - nº do pedido, ordem de compra, OS ou projeto (B2B) → `xPed`
+  - itens do pedido (um por linha, até 99) → `gItemPed/xItemPed`
+  - informações complementares (texto livre, aceita `{mes}` = mês de referência) → `xInfComp`
+- Na tela de emissão os campos vêm preenchidos do contrato e podem ser ajustados nota a nota; aparecem também na
+  tela da nota e no PDF gerado pelo Nexus
+
 ## 1.23.6 — 2026-11-08
 - NFS-e: quando o portal nacional não entrega o DANFSe (acontece logo após a autorização e em instabilidades do
   ADN), o botão PDF gera na hora a **representação da nota a partir do XML autorizado**, no layout TecnosIT, com

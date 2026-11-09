@@ -39,6 +39,18 @@
     <div class="campo"><label>Código municipal</label><input name="ctribmun" id="nf-ctribmun" value="{{ d.ctribmun }}" inputmode="numeric" maxlength="3"></div>
     <div class="campo"><label>NBS</label><input name="nbs" id="nf-nbs" value="{{ d.nbs }}" inputmode="numeric" maxlength="12" required></div>
   </div>
+  <details {{ 'open' if d.doc_tecnico or d.doc_referencia or d.info_complementar or d.pedido or d.itens_pedido }}>
+    <summary><b>Informações complementares</b> <span class="muted">(opcional{% if t and t.contrato %} — vêm do contrato{% endif %})</span></summary>
+    <div class="grid2" style="margin-top:8px">
+      <div class="campo"><label>Nº do documento de responsabilidade técnica</label><input name="doc_tecnico" maxlength="40" value="{{ d.doc_tecnico }}" placeholder="ART, RRT ou TRT"></div>
+      <div class="campo"><label>Documento de referência</label><input name="doc_referencia" maxlength="255" value="{{ d.doc_referencia }}"></div>
+    </div>
+    <div class="grid2">
+      <div class="campo"><label>Nº do pedido, ordem de compra, OS ou projeto (B2B)</label><input name="pedido" maxlength="60" value="{{ d.pedido }}"></div>
+      <div class="campo"><label>Itens do pedido / OC / OS / projeto</label><textarea name="itens_pedido" rows="2" placeholder="Um por linha">{{ d.itens_pedido }}</textarea></div>
+    </div>
+    <div class="campo"><label>Informações complementares</label><textarea name="info_complementar" rows="2" maxlength="2000">{{ d.info_complementar }}</textarea></div>
+  </details>
   <h2>ISS</h2>
   <div class="grid3">
     <div class="campo"><label>&nbsp;</label><label class="check"><input type="checkbox" name="retido" id="nf-retido" value="1" style="width:auto" {{ 'checked' if d.retido }}> ISS retido pelo cliente</label></div>

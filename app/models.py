@@ -817,6 +817,12 @@ class Contrato(Base):
     doc_codigo: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # código de verificação
     doc_enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     doc_concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # informações complementares da NFS-e (vão em cada nota do contrato)
+    nfse_doc_tecnico: Mapped[str | None] = mapped_column(String(40), nullable=True)      # ART/RRT/TRT
+    nfse_doc_referencia: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    nfse_info: Mapped[str | None] = mapped_column(Text, nullable=True)                    # xInfComp
+    nfse_pedido: Mapped[str | None] = mapped_column(String(60), nullable=True)            # pedido / OC / OS (B2B)
+    nfse_itens_pedido: Mapped[str | None] = mapped_column(Text, nullable=True)            # um por linha
     cliente_fiscal = relationship("ClienteFiscal")
     catalogo = relationship("ItemCatalogo")
     titulos = relationship("Titulo", back_populates="contrato")
@@ -1216,6 +1222,12 @@ class ConversaURA(Base):
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+def itens_pedido(txt):
+    """Itens do pedido/OC/OS: um por linha (ou separados por ; ), no máximo 99 de até 60 caracteres."""
+    import re as _re
+    return [x.strip()[:60] for x in _re.split(r"[\n;]+", txt or "") if x.strip()][:99]
+
+
 STATUS_NFSE = {
     "processando": ("Enviando", "#B07000"),
     "autorizada": ("Autorizada", "#1E7B34"),
@@ -1244,6 +1256,11 @@ class NotaServico(Base):
     ctribmun: Mapped[str | None] = mapped_column(String(3), nullable=True)
     nbs: Mapped[str | None] = mapped_column(String(9), nullable=True)
     local_prestacao: Mapped[str] = mapped_column(String(7))           # IBGE
+    doc_tecnico: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    doc_referencia: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    info_complementar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pedido: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    itens_pedido: Mapped[str | None] = mapped_column(Text, nullable=True)
     iss_retido: Mapped[bool] = mapped_column(Boolean, default=False)
     aliquota: Mapped[float | None] = mapped_column(nullable=True)
     valor_iss: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1266,6 +1283,10 @@ class NotaServico(Base):
     @property
     def homologacao(self):
         return self.ambiente != "producao"
+
+    @property
+    def lista_itens_pedido(self):
+        return itens_pedido(self.itens_pedido)
 
     @property
     def rotulo(self):

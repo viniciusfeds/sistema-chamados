@@ -224,6 +224,22 @@ def montar_dps(n, agora: datetime | None = None) -> etree._Element:
         _sub(cs, "xDescServ", _limpo(n.descricao, 2000))
         if n.nbs:
             _sub(cs, "cNBS", n.nbs)
+    # informações complementares (ART, documento de referência, pedido B2B, texto livre)
+    itens = n.lista_itens_pedido
+    if n.doc_tecnico or n.doc_referencia or n.pedido or itens or n.info_complementar:
+        ic = _sub(sv, "infoCompl")
+        if n.doc_tecnico:
+            _sub(ic, "idDocTec", _limpo(n.doc_tecnico, 40))
+        if n.doc_referencia:
+            _sub(ic, "docRef", _limpo(n.doc_referencia, 255))
+        if n.pedido:
+            _sub(ic, "xPed", _limpo(n.pedido, 60))
+        if itens:
+            g = _sub(ic, "gItemPed")
+            for it in itens:
+                _sub(g, "xItemPed", _limpo(it, 60))
+        if n.info_complementar:
+            _sub(ic, "xInfComp", _limpo(n.info_complementar, 2000))
     # valores e tributos
     va = _sub(inf, "valores")
     _sub(_sub(va, "vServPrest"), "vServ", _dec(n.valor))
