@@ -1,5 +1,10 @@
 # Histórico de versões
 
+## 1.23.3 — 2026-11-08
+- NFS-e: não envia DPS com competência anterior a **01/11/2026** (configurável, avançado). Guarulhos só aceita no
+  Sistema Nacional serviços de ME/EPP do Simples a partir dessa data; antes a Sefin recusa com **E0039**. A tela
+  explica o motivo em vez de mandar e receber a recusa
+
 ## 1.23.2 — 2026-11-08
 - NFS-e: tela **Diagnóstico** (Notas fiscais → Diagnóstico) que consulta na Sefin, em homologação e em produção,
   como o município da empresa está parametrizado (adesão ao emissor nacional) — para entender recusas como a E0039

@@ -132,6 +132,9 @@ SECOES = [
               ajuda="Usado quando o serviço do catálogo não tem código. 010701 = suporte técnico em informática."),
         Campo("NFSE_TRIB_MUN_PADRAO", "Código municipal padrão", ajuda="Guarulhos: 011 para suporte e manutenção."),
         Campo("NFSE_NBS_PADRAO", "NBS padrão", ajuda="115013000 = suporte em TI."),
+        Campo("NFSE_COMPETENCIA_MINIMA", "Competência mínima aceita (AAAA-MM-DD)",
+              ajuda="Guarulhos só aceita na NFS-e Nacional serviços de ME/EPP do Simples a partir de 2026-11-01 "
+                    "(antes: sistema da prefeitura). Vazio = não conferir.", avancado=True),
         Campo("NFSE_LEIAUTE", "Leiaute do XML (DPS)", "escolha",
               "Automático: homologação já usa o leiaute novo da NT 009 e a produção o atual. Se a Receita mudar a "
               "produção e a nota for recusada por “Falha no esquema XML”, escolha “Novo”.",

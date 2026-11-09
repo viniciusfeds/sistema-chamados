@@ -87,6 +87,7 @@ def emitir(db, u, cf, *, valor, descricao, competencia, item=None, ctribnac="", 
     nbs = financeiro.so_digitos(nbs or (item.nbs if item else "") or config.NFSE_NBS_PADRAO)
     ctribmun = financeiro.so_digitos(ctribmun if ctribmun is not None else "")[:3]
     local = financeiro.so_digitos(local or (cf.ibge if cf else ""))
+    nfse.conferir_competencia(competencia)
     falta = nfse.pendencias(cf, valor, ctribnac, local, nbs)
     if falta:
         raise nfse.ErroNfse("Falta: " + "; ".join(falta) + ".")

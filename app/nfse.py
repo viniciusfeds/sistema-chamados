@@ -85,6 +85,23 @@ def emitente():
             "fone": _dig(config.EMPRESA_TELEFONE), "email": (config.EMPRESA_EMAIL or "").strip()}
 
 
+def competencia_minima():
+    try:
+        return date.fromisoformat((config.NFSE_COMPETENCIA_MINIMA or "").strip())
+    except ValueError:
+        return None
+
+
+def conferir_competencia(comp: date):
+    """Guarulhos só aceita no Sistema Nacional serviços de ME/EPP do Simples com competência a partir de 01/11/2026
+    (antes disso a nota é pelo sistema da prefeitura) — a Sefin recusa com E0039."""
+    minimo = competencia_minima()
+    if minimo and comp < minimo:
+        raise ErroNfse(f"Competência {comp:%d/%m/%Y} é anterior a {minimo:%d/%m/%Y}: para o município da empresa, serviços "
+                       f"de antes dessa data não podem ir para a NFS-e Nacional (a Sefin recusa com E0039). Use competência a "
+                       f"partir de {minimo:%d/%m/%Y} ou emita pelo sistema da prefeitura — confirme com a contadora.")
+
+
 def pendencias(cf, valor: int, ctribnac: str, local: str, nbs: str = "x") -> list[str]:
     """O que falta para emitir (lista vazia = pode emitir)."""
     falta = []

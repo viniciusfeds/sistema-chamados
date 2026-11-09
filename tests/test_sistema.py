@@ -2646,6 +2646,13 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
     assert "Emitir NFS-e" in adm.get("/financeiro/receber?situacao=todos").text
     pg = adm.get(f"/financeiro/notas/nova?titulo={t_id}").text
     assert "Emitir nota de teste" in pg and 'value="1.000,00"' in pg and "checked" in pg   # cliente retém ISS
+    antes = len(pedidos)
+    monkeypatch.setattr(config, "NFSE_COMPETENCIA_MINIMA", "2026-11-01")
+    r = adm.post("/financeiro/notas/emitir", data={
+        "csrf": _csrf(pg), "titulo_id": t_id, "cliente_fiscal_id": cf_id, "valor": "1.000,00", "descricao": "Teste antigo",
+        "competencia": "2026-10-01", "ctribnac": "140101", "nbs": "120018900", "local": "3550308"})
+    assert "anterior a 01/11/2026" in r.text and "E0039" in r.text and len(pedidos) == antes
+    monkeypatch.setattr(config, "NFSE_COMPETENCIA_MINIMA", "")
     r = adm.post("/financeiro/notas/emitir", data={
         "csrf": _csrf(pg), "titulo_id": t_id, "cliente_fiscal_id": cf_id, "catalogo_id": manut_id, "valor": "1.000,00",
         "descricao": "Manutenção preventiva do CFTV — outubro/2026", "competencia": "2026-10-01", "ctribnac": "14.01.01",

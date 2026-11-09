@@ -139,6 +139,7 @@ NFSE_ALIQUOTA_ISS = float(os.environ.get("NFSE_ALIQUOTA_ISS", "1.8"))      # % d
 NFSE_TRIB_NAC_PADRAO = os.environ.get("NFSE_TRIB_NAC_PADRAO", "010701")
 NFSE_TRIB_MUN_PADRAO = os.environ.get("NFSE_TRIB_MUN_PADRAO", "011")
 NFSE_NBS_PADRAO = os.environ.get("NFSE_NBS_PADRAO", "115013000")
+NFSE_COMPETENCIA_MINIMA = os.environ.get("NFSE_COMPETENCIA_MINIMA", "2026-11-01")  # Guarulhos: Simples no nacional
 NFSE_LEIAUTE = os.environ.get("NFSE_LEIAUTE", "auto")              # auto / novo (NT 009) / atual
 NFSE_ENVIAR_EMAIL = os.environ.get("NFSE_ENVIAR_EMAIL", "1") == "1"
 
