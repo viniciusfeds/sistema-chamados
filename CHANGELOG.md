@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 1.23.4 — 2026-11-08
+- Diagnóstico da NFS-e consulta a parametrização do município no **ADN** (`/parametrizacao/{município}/convenio`),
+  onde a API realmente fica; o caminho do manual na Sefin respondia 404. Mostra o endereço consultado e o HTTP
+
 ## 1.23.3 — 2026-11-08
 - NFS-e: não envia DPS com competência anterior a **01/11/2026** (configurável, avançado). Guarulhos só aceita no
   Sistema Nacional serviços de ME/EPP do Simples a partir dessa data; antes a Sefin recusa com **E0039**. A tela

@@ -2607,7 +2607,7 @@ def _sefin_falsa(monkeypatch, pedidos, recusar=None):
             inf = etree.fromstring(xml)[0]
             assert inf.get("Id") == "PRE" + url.split("/nfse/")[1].split("/")[0] + "101101" and len(inf.get("Id")) == 59
             return 201, b'{"eventoXmlGZipB64":""}', "application/json"
-        if "/parametros_municipais/" in url:
+        if "/parametrizacao/" in url:
             return 200, b'{"parametrosConvenio":{"aderenteEmissorNacional":1}}', "application/json"
         if "/danfse/" in url:
             return 200, b"%PDF-1.4 teste", "application/pdf"

@@ -408,17 +408,28 @@ def transmitir(n):
 
 
 def parametros_municipio(amb: str, ibge: str) -> dict:
-    """Parametrização do município na Sefin (convênio/adesão) — só leitura, para diagnóstico."""
-    try:
-        st, corpo, _ = _http("GET", _url(amb, f"/parametros_municipais/{ibge}/convenio"), timeout=30)
-    except (urllib.error.URLError, OSError, ssl.SSLError, ErroNfse) as e:
-        return {"ok": False, "status": None, "erro": str(e), "dados": None}
-    try:
-        dados = json.loads(corpo or b"null")
-    except ValueError:
-        dados = (corpo or b"").decode("utf-8", "replace")[:3000]
-    return {"ok": st == 200, "status": st, "erro": None if st == 200 else ("; ".join(_erros(corpo)) or f"HTTP {st}"),
-            "dados": dados}
+    """Parametrização do município (convênio/adesão) — só leitura, para diagnóstico. A API fica no ADN
+    (/parametrizacao); tenta também o caminho antigo do manual na Sefin."""
+    tentativas = [(True, f"/parametrizacao/{ibge}/convenio"), (False, f"/parametros_municipais/{ibge}/convenio")]
+    ultimo = None
+    for adn, caminho in tentativas:
+        url = _url(amb, caminho, adn=adn)
+        try:
+            st, corpo, tipo = _http("GET", url, timeout=30)
+        except (urllib.error.URLError, OSError, ssl.SSLError, ErroNfse) as e:
+            ultimo = {"ok": False, "status": None, "erro": str(e), "dados": None, "url": url}
+            continue
+        html = b"<html" in (corpo or b"")[:300].lower() or b"<!doctype" in (corpo or b"")[:50].lower()
+        if st == 404 and html:                               # caminho inexistente: tenta o próximo
+            ultimo = {"ok": False, "status": st, "erro": "endereço não existe neste servidor", "dados": None, "url": url}
+            continue
+        try:
+            dados = json.loads(corpo or b"null")
+        except ValueError:
+            dados = (corpo or b"").decode("utf-8", "replace")[:3000]
+        return {"ok": st == 200, "status": st, "url": url,
+                "erro": None if st == 200 else ("; ".join(_erros(corpo)) or f"HTTP {st}"), "dados": dados}
+    return ultimo
 
 
 def consultar(n):
