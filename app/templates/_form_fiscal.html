@@ -13,7 +13,9 @@
     <div class="campo"><label>Inscrição estadual</label><input name="ie" value="{{ cf.ie or '' }}" placeholder="Vazio = não contribuinte / isento">
       <div class="dica">Condomínios e prestadores de serviço normalmente não têm.</div></div>
     <div class="campo"><label>Inscrição municipal</label><input name="im" value="{{ cf.im or '' }}"></div>
-    <div></div>
+    <div class="campo"><label>ISS na nota de serviço</label><input type="hidden" name="retem_iss_campo" value="1">
+      <label class="check"><input type="checkbox" name="retem_iss" value="1" style="width:auto" {{ 'checked' if cf.retem_iss }}> O cliente retém o ISS</label>
+      <div class="dica">Marque se o cliente desconta o ISS e recolhe no lugar da empresa (a nota sai com valor líquido).</div></div>
   </div>
   <h2>Contato</h2>
   <div class="grid3">

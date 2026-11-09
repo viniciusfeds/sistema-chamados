@@ -67,4 +67,5 @@ def sens(valor, tipo="", prefixo=""):
 
 def instalar(tpl, brl):
     tpl.env.filters["sens"] = sens
+    tpl.env.filters["parcial"] = parcial
     tpl.env.filters["rs"] = lambda v: Markup(f'<span class="rs">{escape(brl(v))}</span>')

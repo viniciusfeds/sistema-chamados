@@ -127,6 +127,20 @@ INTER_CHAVE_ARQUIVO = os.environ.get("INTER_CHAVE_ARQUIVO", "")
 CERT_A1_ARQUIVO = os.environ.get("CERT_A1_ARQUIVO", "")
 CERT_A1_SENHA = os.environ.get("CERT_A1_SENHA", "")
 
+# NFS-e Nacional (Sefin). Padrões tirados da NFS-e 80 da TecnosIT (Simples ME/EPP, Guarulhos).
+NFSE_AMBIENTE = os.environ.get("NFSE_AMBIENTE", "homologacao")       # desligado / homologacao / producao
+NFSE_SERIE = int(os.environ.get("NFSE_SERIE", "1"))                  # 1–49999 = sistema próprio (API)
+NFSE_PROXIMO_DPS = int(os.environ.get("NFSE_PROXIMO_DPS", "1"))
+NFSE_OPCAO_SIMPLES = os.environ.get("NFSE_OPCAO_SIMPLES", "3")       # 1 não optante / 2 MEI / 3 ME-EPP
+NFSE_REGIME_APURACAO = os.environ.get("NFSE_REGIME_APURACAO", "1")   # 1 tudo pelo SN / 2 ISS fora / 3 tudo fora
+NFSE_REGIME_ESPECIAL = os.environ.get("NFSE_REGIME_ESPECIAL", "0")
+NFSE_TRIBUTOS_SN_PCT = float(os.environ.get("NFSE_TRIBUTOS_SN_PCT", "6"))   # % aproximado de tributos (Simples)
+NFSE_ALIQUOTA_ISS = float(os.environ.get("NFSE_ALIQUOTA_ISS", "1.8"))      # % do ISS no Simples (faixa atual)
+NFSE_TRIB_NAC_PADRAO = os.environ.get("NFSE_TRIB_NAC_PADRAO", "010701")
+NFSE_TRIB_MUN_PADRAO = os.environ.get("NFSE_TRIB_MUN_PADRAO", "011")
+NFSE_NBS_PADRAO = os.environ.get("NFSE_NBS_PADRAO", "115013000")
+NFSE_ENVIAR_EMAIL = os.environ.get("NFSE_ENVIAR_EMAIL", "1") == "1"
+
 WHATSAPP_MODO = os.environ.get("WHATSAPP_MODO", "meta")          # meta / n8n / desligado
 N8N_URL_ENVIO = os.environ.get("N8N_URL_ENVIO", "")              # webhook do n8n que envia a mensagem
 N8N_URL_ENTRADA = os.environ.get("N8N_URL_ENTRADA", "")          # (modo Meta) repassar mensagens recebidas ao n8n

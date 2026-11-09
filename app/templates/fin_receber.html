@@ -38,7 +38,9 @@
       {% if t.status == 'pago' %}<div class="muted">pago {{ t.valor_pago|rs }}</div>{% endif %}</td>
     <td data-l="Situação">{{ selo_titulo(t, hoje) }}{% if t.status == 'pago' %}<div class="muted">{{ t.pago_em|data }} · {{ FORMAS_PAGAMENTO.get(t.forma or '', '') }}</div>{% endif %}
       {% if t.inter_codigo %}<div class="boleto-info"><span class="tag {{ 'alerta' if t.inter_situacao in ('FALHA_EMISSAO', 'EXPIRADO') else '' }}">Inter: {{ SITUACOES_INTER.get(t.inter_situacao, t.inter_situacao) }}</span>
-        {% if t.inter_erro %}<div style="color:#B3261E">{{ t.inter_erro }}</div>{% endif %}</div>{% endif %}</td>
+        {% if t.inter_erro %}<div style="color:#B3261E">{{ t.inter_erro }}</div>{% endif %}</div>{% endif %}
+      {% for n in t.notas if n.status != 'rejeitada' %}<div><a class="tag" href="/financeiro/notas/{{ n.id }}" style="{{ 'text-decoration:line-through' if n.status == 'cancelada' }}">🧾 {{ n.rotulo }}</a></div>{% endfor %}
+      {% if nfse_ligado() and t.status != 'cancelado' and t.cliente_fiscal and not (t.notas|selectattr('status', 'in', ['autorizada', 'processando'])|list) %}<a class="btn peq sec" href="/financeiro/notas/nova?titulo={{ t.id }}" style="margin-top:4px">🧾 Emitir NFS-e</a>{% endif %}</td>
     <td>
       {% if t.status == 'aberto' %}
       <details><summary class="btn peq">Receber</summary>

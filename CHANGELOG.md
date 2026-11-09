@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## 1.23.0 — 2026-11-08
+- **NFS-e Nacional direto na Sefin** (Financeiro → Notas fiscais), com o certificado A1 já enviado
+  - monta a DPS no leiaute 1.01 (mesma estrutura da NFS-e 80 emitida pelo Emissor Nacional), assina (XMLDSig
+    RSA-SHA256) e envia com certificado (mTLS); guarda a chave, o número, o XML e o PDF oficial (DANFSe)
+  - **começa em homologação** (produção restrita da Receita, notas de teste); a produção é ligada em Configurações
+  - série própria da DPS (1, faixa de sistema próprio) separada da 70000 do Emissor Nacional
+  - emitir a partir da **conta a receber** (botão *Emitir NFS-e*), avulsa ou **em lote** para os contratos do mês
+    (competência = mês do contrato, descrição "referente a outubro/2026")
+  - **ISS retido pelo cliente** (cadastro do cliente) com alíquota e valor líquido; quando não retido, ISS pelo DAS
+  - nota recusada mostra o motivo da Sefin e pode ser corrigida e reenviada com o mesmo número de DPS; envio sem
+    resposta fica "Enviando" e é conferido em *Consultar* (não duplica)
+  - **cancelamento** (evento 101101) com motivo e justificativa; e-mail ao cliente com PDF e XML quando autoriza
+- **Códigos fiscais prontos** para os serviços da empresa (catálogo → *+ Serviços com códigos fiscais* ou
+  *Preencher com um modelo*): suporte TI 01.07.01, instalação 14.06.01, manutenção 14.01.01, monitoramento
+  11.02.01, licença de software 01.05.01 e limpeza de imóveis 07.10.02, cada um com a NBS correlata
+- Catálogo: campo **código municipal** (Guarulhos: 011) e NBS com 9 dígitos
+- Configurações → *Nota fiscal de serviço*: ambiente, série, próximo número, Simples Nacional (ME/EPP, apuração),
+  alíquota do ISS (1,80%), tributos aproximados (6%) e códigos padrão — já preenchidos com os dados da NFS-e 80
+- `docs/NFSE.md` com o passo a passo e a tabela de códigos
+
 ## 1.22.1 — 2026-11-08
 - `n8n/docker-compose.yml` agora sobe também a **Evolution API v2.3.7** (porta 9610) com PostgreSQL e Redis
   próprios; as mensagens recebidas vão direto para o fluxo do n8n pela rede interna (webhook global)

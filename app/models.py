@@ -608,6 +608,7 @@ class ClienteFiscal(Base):
     municipio: Mapped[str | None] = mapped_column(String(80), nullable=True)
     uf: Mapped[str | None] = mapped_column(String(2), nullable=True)
     ibge: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    retem_iss: Mapped[bool] = mapped_column(Boolean, default=False)   # tomador recolhe o ISS (NFS-e)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     cliente = relationship("Cliente")
@@ -675,6 +676,7 @@ class ItemCatalogo(Base):
     cest: Mapped[str | None] = mapped_column(String(7), nullable=True)
     # serviço (NFS-e Nacional)
     ctribnac: Mapped[str | None] = mapped_column(String(6), nullable=True)   # código de tributação nacional
+    ctribmun: Mapped[str | None] = mapped_column(String(3), nullable=True)   # código municipal (Guarulhos: 011…)
     nbs: Mapped[str | None] = mapped_column(String(9), nullable=True)
     aliquota_iss: Mapped[float | None] = mapped_column(nullable=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -1212,3 +1214,61 @@ class ConversaURA(Base):
     dados: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ultima_msg_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+STATUS_NFSE = {
+    "processando": ("Enviando", "#B07000"),
+    "autorizada": ("Autorizada", "#1E7B34"),
+    "rejeitada": ("Rejeitada", "#B3261E"),
+    "cancelada": ("Cancelada", "#8A94A3"),
+}
+
+
+class NotaServico(Base):
+    """NFS-e Nacional: a DPS enviada à Sefin e a nota devolvida."""
+    __tablename__ = "nfse"
+    __table_args__ = (UniqueConstraint("ambiente", "serie", "ndps", name="uq_nfse_dps"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ambiente: Mapped[str] = mapped_column(String(12), default="homologacao", index=True)   # producao / homologacao
+    serie: Mapped[int] = mapped_column(Integer, default=1)
+    ndps: Mapped[int] = mapped_column(Integer)
+    id_dps: Mapped[str] = mapped_column(String(45), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="processando", index=True)
+    cliente_fiscal_id: Mapped[int] = mapped_column(ForeignKey("clientes_fiscais.id"), index=True)
+    titulo_id: Mapped[int | None] = mapped_column(ForeignKey("titulos.id", ondelete="SET NULL"), nullable=True, index=True)
+    catalogo_id: Mapped[int | None] = mapped_column(ForeignKey("catalogo.id", ondelete="SET NULL"), nullable=True)
+    competencia: Mapped[date] = mapped_column(Date)
+    descricao: Mapped[str] = mapped_column(Text)
+    valor: Mapped[int] = mapped_column(Integer)                       # centavos
+    ctribnac: Mapped[str] = mapped_column(String(6))
+    ctribmun: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    nbs: Mapped[str | None] = mapped_column(String(9), nullable=True)
+    local_prestacao: Mapped[str] = mapped_column(String(7))           # IBGE
+    iss_retido: Mapped[bool] = mapped_column(Boolean, default=False)
+    aliquota: Mapped[float | None] = mapped_column(nullable=True)
+    valor_iss: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    valor_liquido: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chave: Mapped[str | None] = mapped_column(String(50), nullable=True, unique=True)
+    numero: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    xml_dps: Mapped[str | None] = mapped_column(Text, nullable=True)
+    xml_nfse: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    autorizada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_cancelamento: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    titulo = relationship("Titulo", backref=backref("notas", order_by="NotaServico.id"))
+    catalogo = relationship("ItemCatalogo")
+    criado_por = relationship("Usuario")
+
+    @property
+    def homologacao(self):
+        return self.ambiente != "producao"
+
+    @property
+    def rotulo(self):
+        if self.numero:
+            return f"NFS-e {self.numero}" + (" (teste)" if self.homologacao else "")
+        return f"DPS {self.serie}/{self.ndps}" + (" (teste)" if self.homologacao else "")

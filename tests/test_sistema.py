@@ -2549,3 +2549,171 @@ def test_integracao_n8n(monkeypatch):
         assert "Pelo n8n" in pag and "/api/integracao/whatsapp/mensagem" in pag
     finally:
         srv.shutdown()
+
+
+# ------------------------------------------------------------------ NFS-e Nacional
+_SEFIN_NUM = [80]
+
+
+def _sefin_falsa(monkeypatch, pedidos, recusar=None):
+    """Substitui a Sefin: confere a DPS assinada e devolve uma NFS-e no formato da nota real."""
+    import base64 as b64, gzip as gz, json as js
+    from lxml import etree
+    from signxml import XMLVerifier
+    from app import certificado, nfse
+    _, crt, _ = certificado.carregar()
+    from cryptography.hazmat.primitives import serialization
+    pem = crt.public_bytes(serialization.Encoding.PEM)
+    autorizadas = {}
+
+    def http(metodo, url, corpo=None, timeout=60):
+        pedidos.append((metodo, url, corpo))
+        if metodo == "POST" and url.endswith("/nfse"):
+            xml = gz.decompress(b64.b64decode(corpo["dpsXmlGZipB64"]))
+            assert xml.startswith(b"<?xml") and b"<ds:" not in xml
+            XMLVerifier().verify(xml, x509_cert=pem)                 # assinatura confere
+            raiz = etree.fromstring(xml)
+            inf = raiz[0]
+            assert raiz.get("versao") == "1.01" and inf.tag.endswith("infDPS") and raiz[1].tag.endswith("Signature")
+            ordem = [etree.QName(e).localname for e in inf]
+            assert ordem == ["tpAmb", "dhEmi", "verAplic", "serie", "nDPS", "dCompet", "tpEmit", "cLocEmi", "prest",
+                             "toma", "serv", "valores"], ordem
+            if recusar:
+                return 400, js.dumps({"erros": [{"Codigo": "E0010", "Descricao": recusar}]}).encode(), "application/json"
+            _SEFIN_NUM[0] += 1
+            num = _SEFIN_NUM[0]
+            chave = "3518800232402010000140" + str(num).zfill(13) + "1" * 15
+            nfse_xml = (f'<NFSe versao="1.01" xmlns="{nfse.NS}"><infNFSe Id="NFS{chave}"><nNFSe>{num}</nNFSe>'
+                        f'<xLocIncid>Guarulhos</xLocIncid><valores><vISSQN>18.00</vISSQN><vLiq>982.00</vLiq></valores>'
+                        + xml.decode().split("?>", 1)[1] + '</infNFSe></NFSe>').encode()
+            autorizadas[inf.get("Id")] = (chave, nfse_xml)
+            return 201, js.dumps({"chaveAcesso": chave, "idDps": inf.get("Id"),
+                                  "nfseXmlGZipB64": b64.b64encode(gz.compress(nfse_xml)).decode()}).encode(), "application/json"
+        if metodo == "GET" and "/dps/" in url:
+            idd = url.rsplit("/", 1)[1]
+            if idd not in autorizadas:
+                return 404, b'{"erros":[{"Codigo":"E2404","Descricao":"nao encontrada"}]}', "application/json"
+            return 200, js.dumps({"chaveAcesso": autorizadas[idd][0]}).encode(), "application/json"
+        if metodo == "GET" and "/nfse/" in url:
+            ch = url.rsplit("/", 1)[1]
+            x = next(v[1] for v in autorizadas.values() if v[0] == ch)
+            return 200, js.dumps({"nfseXmlGZipB64": b64.b64encode(gz.compress(x)).decode()}).encode(), "application/json"
+        if metodo == "POST" and url.endswith("/eventos"):
+            xml = gz.decompress(b64.b64decode(corpo["pedidoRegistroEventoXmlGZipB64"]))
+            XMLVerifier().verify(xml, x509_cert=pem)
+            inf = etree.fromstring(xml)[0]
+            assert inf.get("Id") == "PRE" + url.split("/nfse/")[1].split("/")[0] + "101101" and len(inf.get("Id")) == 59
+            return 201, b'{"eventoXmlGZipB64":""}', "application/json"
+        if "/danfse/" in url:
+            return 200, b"%PDF-1.4 teste", "application/pdf"
+        return 404, b"", ""
+    monkeypatch.setattr(nfse, "_http", http)
+    return autorizadas
+
+
+def test_nfse_emitir_cancelar_e_lote(monkeypatch):
+    from app import certificado, config, nfse
+    from app.models import ClienteFiscal, Contrato, ItemCatalogo, NotaServico, Titulo
+    certificado.salvar(_gerar_pfx(), "1234", "empresa.pfx")
+    monkeypatch.setattr(config, "EMPRESA_CNPJ", "32.402.010/0001-40")
+    monkeypatch.setattr(config, "EMPRESA_IM", "353594")
+    monkeypatch.setattr(config, "EMPRESA_IBGE", "3518800")
+    monkeypatch.setattr(config, "NFSE_AMBIENTE", "homologacao")
+    monkeypatch.setattr(config, "SMTP_HOST", "")
+    pedidos = []
+    _sefin_falsa(monkeypatch, pedidos)
+    adm = entrar("admin@t.com")
+    # catálogo: serviços sugeridos com códigos
+    pg = adm.get("/financeiro/catalogo").text
+    assert "Serviços com códigos fiscais" in pg and "Limpeza e conservação de imóveis" in pg
+    adm.post("/financeiro/catalogo/sugestoes-fiscais", data={"csrf": _csrf(pg)})
+    with SessionLocal() as db:
+        manut = db.scalar(select(ItemCatalogo).where(ItemCatalogo.ctribnac == "140101", ItemCatalogo.nbs == "120018900"))
+        assert manut and db.scalar(select(ItemCatalogo).where(ItemCatalogo.ctribnac == "071002"))
+        cf = ClienteFiscal(documento="20619971000121", razao_social="CENTRO DE ESTETICA SEVENTH LTDA", cep="01430001",
+                           logradouro="Av. Brasil", numero="1698", bairro="Jardim America", municipio="São Paulo", uf="SP",
+                           ibge="3550308", email="fin@seventh.com.br", retem_iss=True)
+        db.add(cf); db.flush()
+        t = Titulo(cliente_fiscal_id=cf.id, descricao="Contrato de manutenção", valor=100000, vencimento=date(2026, 11, 10))
+        db.add(t); db.commit()
+        cf_id, t_id, manut_id = cf.id, t.id, manut.id
+    # tela de emissão a partir da conta a receber
+    assert "Emitir NFS-e" in adm.get("/financeiro/receber?situacao=todos").text
+    pg = adm.get(f"/financeiro/notas/nova?titulo={t_id}").text
+    assert "Emitir nota de teste" in pg and 'value="1.000,00"' in pg and "checked" in pg   # cliente retém ISS
+    r = adm.post("/financeiro/notas/emitir", data={
+        "csrf": _csrf(pg), "titulo_id": t_id, "cliente_fiscal_id": cf_id, "catalogo_id": manut_id, "valor": "1.000,00",
+        "descricao": "Manutenção preventiva do CFTV — outubro/2026", "competencia": "2026-10-01", "ctribnac": "14.01.01",
+        "ctribmun": "", "nbs": "1.2001.89.00", "local": "3550308", "retido": "1", "aliquota": "1,8"})
+    assert "NFS-e 81 (teste) autorizada" in r.text, re.search(r'class="flash[^"]*">([^<]*)', r.text)
+    with SessionLocal() as db:
+        n = db.scalar(select(NotaServico).where(NotaServico.titulo_id == t_id))
+        assert n.status == "autorizada" and n.numero == 81 and n.ambiente == "homologacao" and n.ndps == 1
+        assert n.valor_iss == 1800 and n.valor_liquido == 98200 and n.id_dps == "DPS351880023240201000014000001000000000000001"
+        assert "<tpAmb>2</tpAmb>" in n.xml_dps and "<tpRetISSQN>2</tpRetISSQN>" in n.xml_dps and "<pAliq>1.80</pAliq>" in n.xml_dps
+        assert "<dCompet>2026-10-01</dCompet>" in n.xml_dps and "<cTribNac>140101</cTribNac>" in n.xml_dps
+        assert "<IM>353594</IM>" in n.xml_dps and "<opSimpNac>3</opSimpNac>" in n.xml_dps
+        nid = n.id
+    # conta já tem nota: não emite de novo
+    assert "Emitir NFS-e" not in adm.get("/financeiro/receber?situacao=todos").text.split("Contrato de manutenção")[1][:3000]
+    r = adm.get(f"/financeiro/notas/nova?titulo={t_id}")
+    assert "já tem a NFS-e 81" in r.text
+    # XML, PDF e consulta
+    assert b"<nNFSe>81</nNFSe>" in adm.get(f"/financeiro/notas/{nid}/xml").content
+    assert adm.get(f"/financeiro/notas/{nid}/pdf").content.startswith(b"%PDF")
+    pg = adm.get(f"/financeiro/notas/{nid}").text
+    assert "14.01.01" in pg and "1.2001.89.00" in pg and "Líquido" in pg
+    assert "confere com a Sefin" in adm.post(f"/financeiro/notas/{nid}/consultar", data={"csrf": _csrf(pg)}).text
+    # cancelamento
+    r = adm.post(f"/financeiro/notas/{nid}/cancelar", data={"csrf": _csrf(pg), "motivo": "1", "justificativa": "curta"})
+    assert "pelo menos 15" in r.text
+    r = adm.post(f"/financeiro/notas/{nid}/cancelar", data={"csrf": _csrf(pg), "motivo": "1",
+                                                            "justificativa": "Valor digitado errado na nota"})
+    assert "cancelada na Sefin" in r.text
+    with SessionLocal() as db:
+        assert db.get(NotaServico, nid).status == "cancelada"
+    # recusa da Sefin: fica rejeitada com o motivo, e o reenvio usa o mesmo número de DPS
+    _sefin_falsa(monkeypatch, pedidos, recusar="Série fora da faixa")
+    pg = adm.get(f"/financeiro/notas/nova?titulo={t_id}").text
+    form = {"csrf": _csrf(pg), "titulo_id": t_id, "cliente_fiscal_id": cf_id, "valor": "500,00", "descricao": "Suporte",
+            "competencia": "2026-11-05", "ctribnac": "010701", "ctribmun": "011", "nbs": "115013000", "local": "3518800"}
+    r = adm.post("/financeiro/notas/emitir", data=form)
+    assert "recusada: E0010: Série fora da faixa" in r.text
+    with SessionLocal() as db:
+        rej = db.scalars(select(NotaServico).where(NotaServico.status == "rejeitada")).all()[-1]
+        assert rej.ndps == 2 and "<tpRetISSQN>1</tpRetISSQN>" in rej.xml_dps and "<pAliq>" not in rej.xml_dps
+        rid = rej.id
+    _sefin_falsa(monkeypatch, pedidos)
+    assert "Motivo da recusa" in adm.get(f"/financeiro/notas/nova?refazer={rid}").text
+    r = adm.post("/financeiro/notas/emitir", data=dict(form, refazer_id=rid))
+    assert "autorizada" in r.text
+    with SessionLocal() as db:
+        assert db.get(NotaServico, rid).status == "autorizada" and db.get(NotaServico, rid).ndps == 2
+    # faltando dado: não envia
+    with SessionLocal() as db:
+        sem = ClienteFiscal(documento="11222333000181", razao_social="Sem Endereço Ltda")
+        db.add(sem); db.commit(); sem_id = sem.id
+    antes = len(pedidos)
+    r = adm.post("/financeiro/notas/emitir", data=dict(form, cliente_fiscal_id=sem_id, titulo_id="", local=""))
+    assert "endereço completo do cliente" in r.text and len(pedidos) == antes
+    # lote dos contratos do mês
+    with SessionLocal() as db:
+        ct = Contrato(cliente_fiscal_id=cf_id, catalogo_id=manut_id, descricao="Manutenção mensal CFTV", valor=50000,
+                      inicio=date(2026, 1, 1))
+        db.add(ct); db.flush()
+        db.add(Titulo(cliente_fiscal_id=cf_id, contrato_id=ct.id, competencia="2026-09", descricao="Manutenção mensal CFTV",
+                      valor=50000, vencimento=date(2026, 10, 10)))
+        db.commit()
+    pg = adm.get("/financeiro/notas").text
+    assert "Homologação (testes)" in pg and "Emitir em lote" in pg
+    r = adm.post("/financeiro/notas/lote", data={"csrf": _csrf(pg), "mes": "2026-09"})
+    assert "1 nota(s) autorizada(s)" in r.text
+    r = adm.post("/financeiro/notas/lote", data={"csrf": _csrf(pg), "mes": "2026-09"})
+    assert "0 nota(s) autorizada(s), 1 já tinham nota" in r.text
+    with SessionLocal() as db:
+        n = db.scalars(select(NotaServico).order_by(NotaServico.id.desc())).first()
+        assert "referente a setembro/2026" in n.descricao and "<cTribNac>140101</cTribNac>" in n.xml_dps
+        assert "<dCompet>2026-09-01</dCompet>" in n.xml_dps
+    # técnico não acessa
+    assert entrar("tec@t.com").get("/financeiro/notas", follow_redirects=False).status_code in (303, 403)
+    certificado.remover()

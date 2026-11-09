@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}{{ n.rotulo }}{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('notas') }}
+<div class="cab">
+  <div><h1>{{ n.rotulo }} <span class="selo" style="background:{{ STATUS_NFSE[n.status][1] }};vertical-align:middle">{{ STATUS_NFSE[n.status][0] }}</span></h1>
+    <div class="muted">{{ 'Homologação (teste, sem valor fiscal)' if n.homologacao else 'Produção' }} · DPS série {{ n.serie }} nº {{ n.ndps }}{% if n.autorizada_em %} · autorizada {{ n.autorizada_em|local }}{% endif %}</div></div>
+  <div class="acoes-orc">
+    {% if n.status in ('autorizada', 'cancelada') %}<a class="btn sec" href="/financeiro/notas/{{ n.id }}/pdf" target="_blank">📄 PDF (DANFSe)</a>
+      <a class="btn sec" href="/financeiro/notas/{{ n.id }}/xml">⬇ XML</a>
+      {% if not n.homologacao %}<a class="btn sec" href="{{ consulta }}{{ n.chave }}" target="_blank" rel="noopener">Consulta pública</a>{% endif %}{% endif %}
+    {% if n.status == 'rejeitada' %}<a class="btn" href="/financeiro/notas/nova?refazer={{ n.id }}">Corrigir e reenviar</a>{% endif %}
+    <form method="post" action="/financeiro/notas/{{ n.id }}/consultar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec" title="Conferir na Sefin">↻ Consultar</button></form>
+    <a class="btn sec" href="/financeiro/notas">Voltar</a>
+  </div>
+</div>
+{% if n.erro %}<div class="card aviso-card" style="border-color:{{ '#B07000' if n.status == 'autorizada' else '#B3261E' }}">{{ n.erro }}</div>{% endif %}
+{% if n.status == 'cancelada' %}<div class="card aviso-card">Cancelada em {{ n.cancelada_em|local }} — {{ n.motivo_cancelamento }}</div>{% endif %}
+
+<div class="card">
+  <div class="grid3">
+    <div><div class="muted">Tomador</div><b>{{ n.cliente_fiscal.razao_social }}</b><div>{{ n.cliente_fiscal.documento_fmt|sens("documento") }}</div><div class="muted">{{ n.cliente_fiscal.endereco_fmt }}</div></div>
+    <div><div class="muted">Valor do serviço</div><b style="font-size:1.3rem">{{ n.valor|rs }}</b>
+      {% if n.iss_retido %}<div>ISS retido ({{ n.aliquota|qtd }}%): {{ n.valor_iss|rs }}</div><div><b>Líquido: {{ n.valor_liquido|rs }}</b></div>{% else %}<div class="muted">ISS pelo Simples (não retido)</div>{% endif %}</div>
+    <div><div class="muted">Competência</div><b>{{ n.competencia|data }}</b>
+      {% if n.titulo %}<div class="muted" style="margin-top:6px">Conta a receber</div><a href="/financeiro/receber?q={{ n.titulo.descricao|urlencode }}">{{ n.titulo.descricao }}</a>{% endif %}</div>
+  </div>
+  <h3>Serviço</h3>
+  <p style="white-space:pre-wrap">{{ n.descricao }}</p>
+  <div class="grid3">
+    <div><div class="muted">Tributação nacional</div>{{ fmt_ctribnac(n.ctribnac) }}{% if n.ctribmun %} · municipal {{ n.ctribmun }}{% endif %}</div>
+    <div><div class="muted">NBS</div>{{ fmt_nbs(n.nbs) if n.nbs else '—' }}</div>
+    <div><div class="muted">Município da prestação</div>{{ n.local_prestacao }}</div>
+  </div>
+  {% if n.chave %}<div class="muted" style="margin-top:10px;word-break:break-all">Chave de acesso: {{ n.chave }}</div>{% endif %}
+</div>
+
+{% if n.status == 'autorizada' %}
+<details class="card"><summary><b>Cancelar esta nota</b></summary>
+  <form method="post" action="/financeiro/notas/{{ n.id }}/cancelar" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid3">
+      <div class="campo"><label>Motivo</label><select name="motivo" required><option value="">— escolha —</option>{% for k, v in MOTIVOS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div class="campo" style="grid-column:span 2"><label>Justificativa (mín. 15 caracteres)</label><input name="justificativa" minlength="15" maxlength="255" required></div>
+    </div>
+    <p class="dica">O prazo e as regras de cancelamento são da prefeitura; depois de alguns dias pode ser preciso pedir pelo Emissor Nacional (análise fiscal).</p>
+    <button class="btn perigo" onclick="return confirm('Cancelar a nota na Sefin? Não dá para desfazer.')">Cancelar nota</button>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

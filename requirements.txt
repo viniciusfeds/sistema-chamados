@@ -11,3 +11,4 @@ cryptography==50.0.1
 # PostgreSQL (opcional, para produção):
 # psycopg[binary]
 webauthn==3.0.1
+lxml==6.1.3

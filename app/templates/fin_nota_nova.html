@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Emitir NFS-e{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('notas') }}
+<div class="cab">
+  <div><h1>{{ 'Corrigir e reenviar' if r else 'Emitir nota de serviço' }}</h1>
+    <div class="muted">{% if t %}Conta a receber: {{ t.descricao }} · {{ t.valor|rs }} · vence {{ t.vencimento|data }}{% else %}Nota avulsa{% endif %}</div></div>
+  <a class="btn sec" href="/financeiro/notas">Voltar</a>
+</div>
+{% if ambiente == 'homologacao' %}<div class="card aviso-card">🧪 Homologação: esta nota é de <b>teste</b> e não tem valor fiscal.</div>
+{% elif ambiente == 'desligado' %}<div class="card aviso-card">A emissão está desligada em <a href="/admin/configuracoes#nfse">Configurações</a>.</div>{% endif %}
+{% if r and r.erro %}<div class="card aviso-card" style="border-color:#B3261E"><b>Motivo da recusa:</b> {{ r.erro }}</div>{% endif %}
+
+<form method="post" action="/financeiro/notas/emitir" class="card" id="form-nota">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="titulo_id" value="{{ t.id if t else '' }}"><input type="hidden" name="refazer_id" value="{{ r.id if r else '' }}">
+  <h2 style="margin-top:0">Tomador</h2>
+  <div class="grid3">
+    <div class="campo"><label>Cliente (dados de faturamento)</label><select name="cliente_fiscal_id" id="nf-cliente" required>
+      <option value="">— escolha —</option>{% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if d.cliente_fiscal_id == c.id }}>{{ c.nome }} · {{ c.documento_fmt|parcial("documento") }}</option>{% endfor %}</select>
+      <div class="dica" id="nf-cliente-info"></div></div>
+    <div class="campo"><label>Município da prestação (IBGE)</label><input name="local" id="nf-local" value="{{ d.local }}" inputmode="numeric" maxlength="7" required>
+      <div class="dica">Onde o serviço foi feito. Padrão: o do endereço do cliente. Guarulhos = 3518800, São Paulo = 3550308.</div></div>
+    <div class="campo"><label>Competência</label><input type="date" name="competencia" value="{{ d.competencia }}" required>
+      <div class="dica">Data (ou mês) em que o serviço foi prestado.</div></div>
+  </div>
+  <h2>Serviço</h2>
+  <div class="grid3">
+    <div class="campo"><label>Serviço do catálogo</label><select name="catalogo_id" id="nf-item"><option value="">— usar os códigos abaixo —</option>
+      {% for s in servicos %}<option value="{{ s.id }}" {{ 'selected' if d.catalogo_id == s.id }}>{{ s.descricao }}{% if s.ctribnac %} ({{ fmt_ctribnac(s.ctribnac) }}){% else %} — sem código{% endif %}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Valor do serviço (R$)</label><input name="valor" id="nf-valor" value="{{ d.valor|brl_num }}" inputmode="decimal" required></div>
+    <div></div>
+  </div>
+  <div class="campo"><label>Descrição na nota</label><textarea name="descricao" rows="3" maxlength="2000" required>{{ d.descricao }}</textarea>
+    <div class="dica">Descreva o serviço de acordo com o código escolhido (ex.: “Manutenção preventiva do sistema de CFTV — outubro/2026”).</div></div>
+  <div class="grid3">
+    <div class="campo"><label>Código de tributação nacional</label><input name="ctribnac" id="nf-ctribnac" value="{{ d.ctribnac }}" inputmode="numeric" maxlength="8" required></div>
+    <div class="campo"><label>Código municipal</label><input name="ctribmun" id="nf-ctribmun" value="{{ d.ctribmun }}" inputmode="numeric" maxlength="3"></div>
+    <div class="campo"><label>NBS</label><input name="nbs" id="nf-nbs" value="{{ d.nbs }}" inputmode="numeric" maxlength="12" required></div>
+  </div>
+  <h2>ISS</h2>
+  <div class="grid3">
+    <div class="campo"><label>&nbsp;</label><label class="check"><input type="checkbox" name="retido" id="nf-retido" value="1" style="width:auto" {{ 'checked' if d.retido }}> ISS retido pelo cliente</label></div>
+    <div class="campo"><label>Alíquota (%)</label><input name="aliquota" id="nf-aliq" value="{{ d.aliquota|qtd if d.aliquota is not none else '' }}" inputmode="decimal"></div>
+    <div class="campo"><label>Resumo</label><div id="nf-resumo" class="muted" style="padding-top:8px"></div></div>
+  </div>
+  <button class="btn" {{ 'disabled' if ambiente == 'desligado' }} onclick="this.disabled=true;this.textContent='Enviando à Sefin…';this.form.submit()">
+    {{ 'Emitir nota de teste' if ambiente == 'homologacao' else 'Emitir NFS-e' }}</button>
+</form>
+<script>
+(function () {
+  var S = {{ servicos_js|tojson }}, C = {{ clientes_js|tojson }};
+  var $ = function (id) { return document.getElementById(id); };
+  function num(v) { v = String(v || '').replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  function brl(n) { return n.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  function resumo() { var v = num($('nf-valor').value), a = num($('nf-aliq').value);
+    if ($('nf-retido').checked) { var iss = Math.round(v * a) / 100; $('nf-resumo').textContent = 'ISS retido ' + brl(iss) + ' · cliente paga ' + brl(v - iss); }
+    else $('nf-resumo').textContent = 'ISS pago pela empresa no DAS · cliente paga ' + brl(v); }
+  $('nf-item').addEventListener('change', function () { var s = S[this.value]; if (!s) return;
+    if (s.ctribnac) $('nf-ctribnac').value = s.ctribnac; $('nf-ctribmun').value = s.ctribmun; if (s.nbs) $('nf-nbs').value = s.nbs;
+    if (s.aliquota !== null && s.aliquota !== undefined) $('nf-aliq').value = String(s.aliquota).replace('.', ',');
+    var ds = document.querySelector('[name=descricao]'); if (!ds.value.trim()) ds.value = s.descricao;
+    if (!num($('nf-valor').value) && s.preco) $('nf-valor').value = (s.preco / 100).toFixed(2).replace('.', ','); resumo(); });
+  function cliente() { var c = C[$('nf-cliente').value]; if (!c) { $('nf-cliente-info').textContent = ''; return; }
+    $('nf-cliente-info').innerHTML = c.ok ? c.municipio : '<span style="color:#B3261E">Endereço incompleto (CEP, IBGE, rua, número, bairro) — complete o cadastro.</span>';
+    return c; }
+  $('nf-cliente').addEventListener('change', function () { var c = cliente(); if (c) { $('nf-local').value = c.ibge; $('nf-retido').checked = c.retem; resumo(); } });
+  ['nf-valor', 'nf-aliq', 'nf-retido'].forEach(function (id) { $(id).addEventListener('input', resumo); $(id).addEventListener('change', resumo); });
+  cliente(); resumo();
+})();
+</script>
+{% endblock %}

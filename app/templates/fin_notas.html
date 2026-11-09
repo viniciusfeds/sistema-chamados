@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Notas fiscais{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('notas') }}
+<div class="cab">
+  <div><h1>Notas fiscais de serviço</h1><div class="muted">NFS-e Nacional · {{ lista|length }} nota(s){% if tot.valor %} · autorizadas {{ tot.valor|rs }}{% if tot.iss %} · ISS retido {{ tot.iss|rs }}{% endif %}{% endif %}</div></div>
+  <div class="acoes-orc"><a class="btn" href="/financeiro/notas/nova">+ Emitir nota</a></div>
+</div>
+
+{% if ambiente == 'desligado' %}
+<div class="card aviso-card">A emissão está <b>desligada</b>. Ligue em <a href="/admin/configuracoes#nfse">Configurações → Nota fiscal de serviço</a>.</div>
+{% elif ambiente == 'homologacao' %}
+<div class="card aviso-card">🧪 <b>Homologação (testes):</b> as notas vão para a produção restrita da Receita e <b>não têm valor fiscal</b>.
+  Quando os testes passarem, mude o ambiente para Produção em <a href="/admin/configuracoes#nfse">Configurações</a>.</div>
+{% endif %}
+{% if falta %}<div class="card aviso-card" style="border-color:#B3261E">Para emitir falta: <b>{{ falta|join(', ') }}</b> (em <a href="/admin/configuracoes">Configurações</a>).</div>{% endif %}
+{% if sem_codigo %}<div class="card aviso-card">{{ sem_codigo }} serviço(s) do catálogo sem código de tributação — <a href="/financeiro/catalogo?tipo=servico">preencher</a> (o padrão das Configurações é usado enquanto isso).</div>{% endif %}
+
+{% if ambiente != 'desligado' %}
+<div class="card">
+  <form method="post" action="/financeiro/notas/lote" class="acoes-orc" style="align-items:flex-end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo" style="margin:0"><label>Notas dos contratos do mês</label><input type="month" name="mes" value="{{ mes_lote }}"></div>
+    <button class="btn sec" onclick="return confirm('Emitir a nota de cada conta de contrato desse mês que ainda não tem nota?')">Emitir em lote</button>
+    <span class="muted">Uma nota por conta a receber gerada pelos contratos (competência = mês do contrato).</span>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <form class="filtros" method="get">
+    <div class="q"><label for="q">Buscar</label><input id="q" name="q" value="{{ f.q }}" placeholder="Cliente ou descrição"></div>
+    <div><label for="status">Situação</label><select id="status" name="status"><option value="">Todas</option>
+      {% for k, v in STATUS_NFSE.items() %}<option value="{{ k }}" {{ 'selected' if f.status == k }}>{{ v[0] }}</option>{% endfor %}</select></div>
+    <div><label for="amb">Ambiente</label><select id="amb" name="amb"><option value="">Todos</option>
+      <option value="producao" {{ 'selected' if f.amb == 'producao' }}>Produção</option><option value="homologacao" {{ 'selected' if f.amb == 'homologacao' }}>Homologação</option></select></div>
+    <div><label for="mes">Competência</label><input type="month" id="mes" name="mes" value="{{ f.mes }}"></div>
+    <div style="display:flex;gap:6px"><button class="btn">Filtrar</button><a class="btn sec" href="/financeiro/notas">Limpar</a></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Nota</th><th>Cliente</th><th>Serviço</th><th class="valor">Valor</th><th>Situação</th><th></th></tr></thead>
+  <tbody>{% for n in lista %}
+  <tr class="{{ 'inativo' if n.status == 'cancelada' }}">
+    <td data-l="Nota"><a href="/financeiro/notas/{{ n.id }}"><b>{{ n.rotulo }}</b></a><div class="muted">{{ n.competencia.strftime('%m/%Y') }}</div></td>
+    <td data-l="Cliente">{{ n.cliente_fiscal.nome }}<div class="muted">{{ n.cliente_fiscal.documento_fmt|sens("documento") }}</div></td>
+    <td data-l="Serviço">{{ n.descricao }}</td>
+    <td data-l="Valor" class="valor"><b>{{ n.valor|rs }}</b>{% if n.iss_retido and n.valor_iss %}<div class="muted">líquido {{ n.valor_liquido|rs }}</div>{% endif %}</td>
+    <td data-l="Situação"><span class="selo" style="background:{{ STATUS_NFSE[n.status][1] }}">{{ STATUS_NFSE[n.status][0] }}</span>
+      {% if n.status in ('rejeitada', 'processando') and n.erro %}<div style="color:#B3261E;font-size:.85rem">{{ n.erro[:160] }}</div>{% endif %}</td>
+    <td class="acoes">{% if n.status in ('autorizada', 'cancelada') %}<a class="btn peq sec" href="/financeiro/notas/{{ n.id }}/pdf" target="_blank">PDF</a> <a class="btn peq sec" href="/financeiro/notas/{{ n.id }}/xml">XML</a>
+      {% elif n.status == 'rejeitada' %}<a class="btn peq" href="/financeiro/notas/nova?refazer={{ n.id }}">Corrigir</a>{% else %}<a class="btn peq sec" href="/financeiro/notas/{{ n.id }}">Ver</a>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhuma nota{% if f.status or f.mes or f.q or f.amb %} com esses filtros{% endif %}.</p>{% endif %}
+</div>
+{% endblock %}

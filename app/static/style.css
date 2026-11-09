@@ -440,7 +440,7 @@ body.ocultar-valores td.c-tot,
 body.ocultar-valores #totais div>span:last-child,
 body.ocultar-valores #analise,
 body.ocultar-valores #cat-lucro{filter:blur(7px);user-select:none;-webkit-user-select:none}
-body.ocultar-valores.area-fin input[inputmode=decimal]:not(:focus):not([name$=_pct]):not([name$=margem]):not([name=item_qtd]){color:transparent;text-shadow:0 0 7px rgba(40,40,40,.8)}
+body.ocultar-valores.area-fin input[inputmode=decimal]:not(:focus):not([name$=_pct]):not([name$=margem]):not([name=item_qtd]):not([name=aliquota]):not([name=aliquota_iss]){color:transparent;text-shadow:0 0 7px rgba(40,40,40,.8)}
 .barra-topo{position:sticky;top:0;z-index:20;display:flex;justify-content:flex-end;margin:-6px 0 8px;pointer-events:none}
 .btn-olho{pointer-events:auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--linha);background:var(--card,#fff);
   color:var(--texto,#2B2B2B);font:inherit;font-size:.86rem;font-weight:600;padding:7px 13px;border-radius:999px;cursor:pointer;
@@ -480,3 +480,6 @@ body.com-menu main{max-width:1600px}
 .grade-codigos code{background:#fff;border:1px solid var(--linha);border-radius:6px;padding:5px 8px;text-align:center;font-size:.95rem;letter-spacing:.05em}
 #seguranca h3{margin:18px 0 6px;font-size:1.02rem}
 @media (max-width:600px){.totp-config{grid-template-columns:1fr}.qr-totp{text-align:center}}
+
+/* NFS-e */
+.card.aviso-card{border-left:4px solid #B07000;padding:12px 16px}

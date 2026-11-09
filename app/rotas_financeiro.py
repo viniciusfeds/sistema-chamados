@@ -688,6 +688,8 @@ def preencher_fiscal(cf: ClienteFiscal, f):
     cf.ibge = financeiro.so_digitos(f.get("ibge"))[:7] or None
     cf.telefone = (financeiro.so_digitos(cf.telefone)[:13] or None) if cf.telefone else None
     cf.ie = (cf.ie or "").upper().replace(".", "").replace("-", "").replace("/", "") or None
+    if "retem_iss_campo" in f:
+        cf.retem_iss = bool(f.get("retem_iss"))
 
 
 @app.post("/financeiro/clientes/salvar", dependencies=[Depends(checar_csrf)])
@@ -750,7 +752,9 @@ def catalogo(request: Request, editar: str = "", tipo: str = "", q: str = "", u:
     if q.strip():
         st = st.where(or_(ItemCatalogo.descricao.ilike(f"%{q.strip()}%"), ItemCatalogo.codigo.ilike(f"%{q.strip()}%")))
     ed = db.get(ItemCatalogo, _int(editar)) if _int(editar) else None
-    return render(request, "fin_catalogo.html", u=u, lista=db.scalars(st).all(), ed=ed, f={"tipo": tipo, "q": q})
+    from .nfse_codigos import SUGESTOES, fmt_ctribnac, fmt_nbs
+    return render(request, "fin_catalogo.html", u=u, lista=db.scalars(st).all(), ed=ed, f={"tipo": tipo, "q": q},
+                  SUGESTOES_NFSE=SUGESTOES, fmt_ctribnac=fmt_ctribnac, fmt_nbs=fmt_nbs)
 
 
 @app.post("/financeiro/catalogo/salvar", dependencies=[Depends(checar_csrf)])
@@ -781,6 +785,7 @@ async def catalogo_salvar(request: Request, u: Usuario = Depends(so_admin), db: 
     it.cfop, it.csosn = dig(f.get("cfop"))[:4] or None, dig(f.get("csosn"))[:3] or None
     it.origem = dig(f.get("origem"))[:1] or None
     it.ctribnac, it.nbs = dig(f.get("ctribnac"))[:6] or None, dig(f.get("nbs"))[:9] or None
+    it.ctribmun = dig(f.get("ctribmun"))[:3] or None
     it.aliquota_iss = aliq
     if it.tipo == "produto" and it.ncm and len(it.ncm) != 8:
         flash(request, "NCM deve ter 8 dígitos.", "erro")

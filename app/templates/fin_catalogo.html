@@ -5,7 +5,9 @@
 {{ abas_financeiro('catalogo') }}
 <div class="cab">
   <div><h1>Produtos e serviços</h1><div class="muted">Catálogo usado nos orçamentos, com os dados fiscais das notas</div></div>
-  <a class="btn" href="#form">+ Novo item</a>
+  <div class="acoes-orc"><form method="post" action="/financeiro/catalogo/sugestoes-fiscais"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn sec" title="Cria os serviços da empresa já com código de tributação e NBS">+ Serviços com códigos fiscais</button></form>
+    <a class="btn" href="#form">+ Novo item</a></div>
 </div>
 <div class="card"><form method="get" class="acoes-orc">
   <input name="q" value="{{ f.q }}" placeholder="Descrição ou código" style="flex:1;min-width:200px">
@@ -22,7 +24,7 @@
     <td data-l="Custo" class="valor muted">{% if i.custo is not none %}{{ i.custo|rs }}{% if i.margem is not none %}<div style="font-size:.8rem">+{{ i.margem|qtd }}%</div>{% endif %}{% else %}—{% endif %}</td>
     <td data-l="Preço de venda" class="valor"><b>{{ i.preco|rs }}</b></td>
     <td data-l="Fiscal" class="muted">{% if i.tipo == 'produto' %}NCM {{ i.ncm or '—' }} · CFOP {{ i.cfop or '—' }} · CSOSN {{ i.csosn or '—' }}
-      {% else %}Cód. tributação {{ i.ctribnac or '—' }}{% if i.aliquota_iss is not none %} · ISS {{ i.aliquota_iss|qtd }}%{% endif %}{% endif %}
+      {% else %}Cód. tributação {{ fmt_ctribnac(i.ctribnac) if i.ctribnac else '—' }}{% if i.nbs %} · NBS {{ fmt_nbs(i.nbs) }}{% endif %}{% if i.aliquota_iss is not none %} · ISS {{ i.aliquota_iss|qtd }}%{% endif %}{% endif %}
       {% if (i.tipo == 'produto' and not i.ncm) or (i.tipo == 'servico' and not i.ctribnac) %}<span class="tag alerta">falta dado fiscal</span>{% endif %}</td>
     <td><div class="acoes-orc"><a class="btn peq sec" href="?editar={{ i.id }}#form">Editar</a>
       <form method="post" action="/financeiro/catalogo/{{ i.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">{{ 'Desativar' if i.ativo else 'Ativar' }}</button></form></div></td>
@@ -65,10 +67,15 @@
   </div>
   <div data-tipo="servico">
     <h3>Dados fiscais do serviço (NFS-e Nacional)</h3>
+    <div class="campo"><label>Preencher com um modelo</label><select id="modelo-fiscal"><option value="">— escolha para preencher os códigos —</option>
+      {% for m in SUGESTOES_NFSE %}<option value="{{ loop.index0 }}">{{ m.descricao }} ({{ fmt_ctribnac(m.ctribnac) }})</option>{% endfor %}</select>
+      <div class="dica" id="modelo-nota"></div></div>
     <div class="grid3">
       <div class="campo"><label>Código de tributação nacional (6 dígitos)</label><input name="ctribnac" value="{{ e.ctribnac or '' if e else '' }}" inputmode="numeric" placeholder="Ex.: 140101">
         <div class="dica">Item da lista de serviços (LC 116) — confirme com a contabilidade.</div></div>
-      <div class="campo"><label>NBS <span class="muted">(opcional)</span></label><input name="nbs" value="{{ e.nbs or '' if e else '' }}" inputmode="numeric"></div>
+      <div class="campo"><label>NBS (9 dígitos)</label><input name="nbs" value="{{ e.nbs or '' if e else '' }}" inputmode="numeric" placeholder="Ex.: 120018900"></div>
+      <div class="campo"><label>Código municipal <span class="muted">(Guarulhos)</span></label><input name="ctribmun" value="{{ e.ctribmun or '' if e else '' }}" inputmode="numeric" maxlength="3" placeholder="Ex.: 011">
+        <div class="dica">Opcional: o desdobramento da prefeitura (aparece na lista do Emissor Nacional).</div></div>
       <div class="campo"><label>Alíquota ISS (%)</label><input name="aliquota_iss" value="{{ e.aliquota_iss|qtd if e and e.aliquota_iss is not none else '' }}" inputmode="decimal">
         <div class="dica">No Simples, informe só se a contabilidade orientar.</div></div>
     </div>
@@ -76,6 +83,13 @@
   <button class="btn">Salvar item</button>{% if e %} <a class="btn sec" href="/financeiro/catalogo">Cancelar</a>{% endif %}
 </form>
 <script>
+(function () {
+  var M = {{ SUGESTOES_NFSE|tojson }}, sel = document.getElementById('modelo-fiscal');
+  if (sel) sel.addEventListener('change', function () { var m = M[sel.value]; if (!m) return;
+    var f = sel.form; f.ctribnac.value = m.ctribnac; f.nbs.value = m.nbs; f.ctribmun.value = m.ctribmun || '';
+    if (!f.descricao.value.trim()) f.descricao.value = m.descricao;
+    document.getElementById('modelo-nota').textContent = (m.local === 'servico' ? 'ISS devido no município do cliente. ' : 'ISS devido em Guarulhos. ') + (m.nota || ''); });
+})();
 (function () {
   var cu = document.getElementById('cat-custo'), mg = document.getElementById('cat-margem'), pr = document.getElementById('cat-preco'),
       lu = document.getElementById('cat-lucro'), PAD = {{ config.ORC_MARGEM_PADRAO_PCT|tojson }};
