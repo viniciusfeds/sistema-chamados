@@ -2607,6 +2607,8 @@ def _sefin_falsa(monkeypatch, pedidos, recusar=None):
             inf = etree.fromstring(xml)[0]
             assert inf.get("Id") == "PRE" + url.split("/nfse/")[1].split("/")[0] + "101101" and len(inf.get("Id")) == 59
             return 201, b'{"eventoXmlGZipB64":""}', "application/json"
+        if "/parametros_municipais/" in url:
+            return 200, b'{"parametrosConvenio":{"aderenteEmissorNacional":1}}', "application/json"
         if "/danfse/" in url:
             return 200, b"%PDF-1.4 teste", "application/pdf"
         return 404, b"", ""
@@ -2727,6 +2729,8 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
         n = db.scalars(select(NotaServico).order_by(NotaServico.id.desc())).first()
         assert "referente a setembro/2026" in n.descricao and "<cTribNac>140101</cTribNac>" in n.xml_dps
         assert "<dCompet>2026-09-01</dCompet>" in n.xml_dps
+    pg = adm.get("/financeiro/notas/diagnostico").text
+    assert "aderenteEmissorNacional" in pg and "Produção" in pg and "3518800" in pg
     # técnico não acessa
     assert entrar("tec@t.com").get("/financeiro/notas", follow_redirects=False).status_code in (303, 403)
     certificado.remover()

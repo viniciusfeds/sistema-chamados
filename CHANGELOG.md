@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 1.23.2 — 2026-11-08
+- NFS-e: tela **Diagnóstico** (Notas fiscais → Diagnóstico) que consulta na Sefin, em homologação e em produção,
+  como o município da empresa está parametrizado (adesão ao emissor nacional) — para entender recusas como a E0039
+
 ## 1.23.1 — 2026-11-08
 - NFS-e: DPS no **leiaute novo da NT 009** na homologação (esquemas da produção restrita de 20/10/2026): campo
   `finNFSe` (0 = nota regular) depois de `tpEmit` e NBS antes da descrição do serviço. Corrige a recusa

@@ -390,6 +390,20 @@ def transmitir(n):
     return n
 
 
+def parametros_municipio(amb: str, ibge: str) -> dict:
+    """Parametrização do município na Sefin (convênio/adesão) — só leitura, para diagnóstico."""
+    try:
+        st, corpo, _ = _http("GET", _url(amb, f"/parametros_municipais/{ibge}/convenio"), timeout=30)
+    except (urllib.error.URLError, OSError, ssl.SSLError, ErroNfse) as e:
+        return {"ok": False, "status": None, "erro": str(e), "dados": None}
+    try:
+        dados = json.loads(corpo or b"null")
+    except ValueError:
+        dados = (corpo or b"").decode("utf-8", "replace")[:3000]
+    return {"ok": st == 200, "status": st, "erro": None if st == 200 else ("; ".join(_erros(corpo)) or f"HTTP {st}"),
+            "dados": dados}
+
+
 def consultar(n):
     """Procura a DPS na Sefin (útil quando o envio ficou sem resposta)."""
     st, corpo, _ = _http("GET", _url(n.ambiente, f"/dps/{n.id_dps}"))

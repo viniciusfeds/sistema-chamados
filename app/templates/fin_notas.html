@@ -5,7 +5,7 @@
 {{ abas_financeiro('notas') }}
 <div class="cab">
   <div><h1>Notas fiscais de serviço</h1><div class="muted">NFS-e Nacional · {{ lista|length }} nota(s){% if tot.valor %} · autorizadas {{ tot.valor|rs }}{% if tot.iss %} · ISS retido {{ tot.iss|rs }}{% endif %}{% endif %}</div></div>
-  <div class="acoes-orc"><a class="btn" href="/financeiro/notas/nova">+ Emitir nota</a></div>
+  <div class="acoes-orc"><a class="btn sec" href="/financeiro/notas/diagnostico" title="Consulta na Sefin como o município está configurado">Diagnóstico</a><a class="btn" href="/financeiro/notas/nova">+ Emitir nota</a></div>
 </div>
 
 {% if ambiente == 'desligado' %}

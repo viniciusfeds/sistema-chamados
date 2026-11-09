@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Diagnóstico NFS-e{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('notas') }}
+<div class="cab">
+  <div><h1>Diagnóstico da NFS-e</h1><div class="muted">Parametrização do município {{ ibge }} na Sefin Nacional (consulta, não emite nada)</div></div>
+  <a class="btn sec" href="/financeiro/notas">Voltar</a>
+</div>
+{% for amb, r in res.items() %}
+<div class="card">
+  <h2 style="margin-top:0">{{ 'Homologação (produção restrita)' if amb == 'homologacao' else 'Produção' }}
+    <span class="selo" style="background:{{ '#1E7B34' if r.ok else '#B3261E' }};vertical-align:middle">{{ 'respondeu' if r.ok else 'falhou' }}</span></h2>
+  {% if r.erro %}<p style="color:#B3261E">{{ r.erro }}</p>{% endif %}
+  {% if r.texto %}<pre style="white-space:pre-wrap;font-size:.8rem;max-height:420px;overflow:auto;background:#f6f6f6;padding:10px;border-radius:8px">{{ r.texto }}</pre>{% endif %}
+</div>
+{% endfor %}
+{% endblock %}

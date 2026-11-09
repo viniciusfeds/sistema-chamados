@@ -286,6 +286,19 @@ def notas_lote(request: Request, mes: str = Form(...), u: Usuario = Depends(so_a
     return voltar(f"/financeiro/notas?mes={comp.strftime('%Y-%m')}")
 
 
+@app.get("/financeiro/notas/diagnostico", response_class=HTMLResponse)
+def notas_diagnostico(request: Request, u: Usuario = Depends(so_admin)):
+    """Como o município da empresa está parametrizado na Sefin, nos dois ambientes (só consulta)."""
+    import json as _js
+    ibge = nfse.emitente()["ibge"]
+    res = {}
+    for amb in ("homologacao", "producao"):
+        r = nfse.parametros_municipio(amb, ibge)
+        r["texto"] = _js.dumps(r["dados"], ensure_ascii=False, indent=2)[:6000] if r["dados"] is not None else ""
+        res[amb] = r
+    return render(request, "fin_nota_diagnostico.html", u=u, res=res, ibge=ibge)
+
+
 @app.get("/financeiro/notas/{nid}", response_class=HTMLResponse)
 def nota_ver(request: Request, nid: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     n = _nota(db, nid)
@@ -357,3 +370,4 @@ def catalogo_sugestoes(request: Request, u: Usuario = Depends(so_admin), db: Ses
     flash(request, f"{novos} serviço(s) com dados fiscais adicionados ao catálogo. Ajuste os preços."
           if novos else "Os serviços sugeridos já estão no catálogo.")
     return voltar("/financeiro/catalogo?tipo=servico")
+
