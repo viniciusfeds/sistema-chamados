@@ -56,6 +56,13 @@ def leiaute_novo(amb: str) -> bool:
     return amb != "producao"
 
 
+def regime_especial() -> str:
+    """Simples ME/EPP com tudo apurado pelo Simples: a Sefin só aceita regime especial "Nenhum" (regra E0175)."""
+    if config.NFSE_OPCAO_SIMPLES == "3" and config.NFSE_REGIME_APURACAO == "1":
+        return "0"
+    return config.NFSE_REGIME_ESPECIAL if config.NFSE_REGIME_ESPECIAL in "0123456" else "0"
+
+
 def ligado() -> bool:
     return ambiente() != "desligado"
 
@@ -180,7 +187,7 @@ def montar_dps(n, agora: datetime | None = None) -> etree._Element:
     _sub(rt, "opSimpNac", config.NFSE_OPCAO_SIMPLES)
     if config.NFSE_OPCAO_SIMPLES == "3":
         _sub(rt, "regApTribSN", config.NFSE_REGIME_APURACAO)
-    _sub(rt, "regEspTrib", config.NFSE_REGIME_ESPECIAL)
+    _sub(rt, "regEspTrib", regime_especial())
     # tomador
     to = _sub(inf, "toma")
     _sub(to, "CNPJ" if len(cf.documento) == 14 else "CPF", cf.documento)

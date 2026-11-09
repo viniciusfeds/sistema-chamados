@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 1.23.5 — 2026-11-08
+- NFS-e: ME/EPP com tributos e ISS apurados pelo Simples sai sempre com regime especial "Nenhum"
+  (`regEspTrib = 0`), mesmo que outro esteja escolhido em Configurações — corrige a recusa **E0175**
+
 ## 1.23.4 — 2026-11-08
 - Diagnóstico da NFS-e consulta a parametrização do município no **ADN** (`/parametrizacao/{município}/convenio`),
   onde a API realmente fica; o caminho do manual na Sefin respondia 404. Mostra o endereço consultado e o HTTP

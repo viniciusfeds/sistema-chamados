@@ -2671,6 +2671,8 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
         n.ambiente = "producao"                                  # produção ainda no leiaute anterior
         xp = _et.tostring(nfse.montar_dps(n)).decode()
         assert "finNFSe" not in xp and "</xDescServ><cNBS>" in xp and "<tpAmb>1</tpAmb>" in xp
+        monkeypatch.setattr(config, "NFSE_REGIME_ESPECIAL", "3")         # ME/EPP pelo Simples: sempre 0 (E0175)
+        assert "<regEspTrib>0</regEspTrib>" in _et.tostring(nfse.montar_dps(n)).decode()
         monkeypatch.setattr(config, "NFSE_LEIAUTE", "novo")
         assert "<finNFSe>0</finNFSe>" in _et.tostring(nfse.montar_dps(n)).decode()
         monkeypatch.setattr(config, "NFSE_LEIAUTE", "auto")

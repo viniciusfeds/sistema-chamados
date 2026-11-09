@@ -121,6 +121,7 @@ SECOES = [
               opcoes={"1": "Tributos federais e ISS pelo Simples", "2": "Federais pelo Simples, ISS fora (sublimite)",
                       "3": "Federais e ISS fora do Simples"}),
         Campo("NFSE_REGIME_ESPECIAL", "Regime especial de tributação", "escolha",
+              "Para ME/EPP com tudo pelo Simples a nota sai sempre com “Nenhum” (exigência da Sefin).",
               opcoes={"0": "Nenhum", "1": "Ato cooperado", "2": "Estimativa", "3": "Microempresa municipal",
                       "4": "Notário ou registrador", "5": "Profissional autônomo", "6": "Sociedade de profissionais"}),
         Campo("NFSE_ALIQUOTA_ISS", "Alíquota do ISS (%)", "num",
