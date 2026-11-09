@@ -496,20 +496,34 @@ def cancelar(n, motivo: str, justificativa: str):
     return n
 
 
-def danfse(n) -> bytes:
-    """PDF oficial da nota (guardado em dados/nfse depois da primeira vez)."""
-    if not n.chave:
-        raise ErroNfse("A nota ainda não foi autorizada.")
+def danfse_oficial(n) -> bytes | None:
+    """DANFSe do portal nacional (ADN), guardado em dados/nfse; None se o portal não entregar."""
     arq = PASTA / f"{n.chave}.pdf"
     if arq.exists() and n.status != "cancelada":
         return arq.read_bytes()
-    st, corpo, tipo = _http("GET", _url(n.ambiente, f"/danfse/{n.chave}", adn=True))
-    if st != 200 or not corpo.startswith(b"%PDF"):
-        raise ErroNfse("O PDF ainda não está disponível no portal. Tente em alguns minutos ou abra pela consulta pública.")
+    try:
+        st, corpo, _ = _http("GET", _url(n.ambiente, f"/danfse/{n.chave}", adn=True), timeout=30)
+    except (urllib.error.URLError, OSError, ssl.SSLError, ErroNfse) as e:
+        log.warning("DANFSe %s: %s", n.chave, e)
+        return None
+    if st != 200 or not (corpo or b"").startswith(b"%PDF"):
+        log.warning("DANFSe %s: HTTP %s %s", n.chave, st, (corpo or b"")[:200])
+        return None
     if n.status != "cancelada":
         PASTA.mkdir(parents=True, exist_ok=True)
         arq.write_bytes(corpo)
     return corpo
+
+
+def danfse(n, oficial=True) -> bytes:
+    """PDF da nota: o DANFSe oficial do portal; se o portal não entregar, o PDF gerado pelo Nexus a partir do XML."""
+    if not n.chave or not n.xml_nfse:
+        raise ErroNfse("A nota ainda não foi autorizada.")
+    pdf = danfse_oficial(n) if oficial else None
+    if pdf:
+        return pdf
+    from .pdf_nfse import pdf_nfse
+    return pdf_nfse(n)
 
 
 def competencia_de(texto: str, padrao: date) -> date:

@@ -51,7 +51,9 @@ def _descricao_padrao(t: Titulo | None, item: ItemCatalogo | None):
     if t.competencia and len(t.competencia) == 7:
         meses = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
                  "outubro", "novembro", "dezembro")
-        txt += f" — referente a {meses[int(t.competencia[5:]) - 1]}/{t.competencia[:4]}"
+        mes = f"{meses[int(t.competencia[5:]) - 1]}/{t.competencia[:4]}"
+        if mes not in txt.lower() and t.competencia[5:] + "/" + t.competencia[:4] not in txt:
+            txt += f" — referente a {mes}"
     if t.total_parcelas > 1:
         txt += f" — parcela {t.parcela_fmt}"
     return txt
@@ -344,10 +346,10 @@ def nota_xml(nid: int, tipo: str = "nfse", u: Usuario = Depends(so_admin), db: S
 
 
 @app.get("/financeiro/notas/{nid}/pdf")
-def nota_pdf(request: Request, nid: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+def nota_pdf(request: Request, nid: int, nexus: int = 0, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     n = _nota(db, nid)
     try:
-        pdf = nfse.danfse(n)
+        pdf = nfse.danfse(n, oficial=not nexus)
     except (nfse.ErroNfse, OSError) as e:
         flash(request, str(e), "erro")
         return voltar(f"/financeiro/notas/{nid}")

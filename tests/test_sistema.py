@@ -2685,6 +2685,7 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
     # XML, PDF e consulta
     assert b"<nNFSe>81</nNFSe>" in adm.get(f"/financeiro/notas/{nid}/xml").content
     assert adm.get(f"/financeiro/notas/{nid}/pdf").content.startswith(b"%PDF")
+    assert adm.get(f"/financeiro/notas/{nid}/pdf?nexus=1").content.startswith(b"%PDF")   # PDF gerado do XML
     pg = adm.get(f"/financeiro/notas/{nid}").text
     assert "14.01.01" in pg and "1.2001.89.00" in pg and "Líquido" in pg
     assert "confere com a Sefin" in adm.post(f"/financeiro/notas/{nid}/consultar", data={"csrf": _csrf(pg)}).text

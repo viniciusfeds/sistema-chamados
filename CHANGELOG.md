@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.23.6 — 2026-11-08
+- NFS-e: quando o portal nacional não entrega o DANFSe (acontece logo após a autorização e em instabilidades do
+  ADN), o botão PDF gera na hora a **representação da nota a partir do XML autorizado**, no layout TecnosIT, com
+  chave de acesso e QR code da consulta pública. Assim que o portal liberar, o PDF oficial passa a ser usado
+- O e-mail ao cliente também usa esse PDF quando o oficial não está disponível
+- A descrição automática não repete o mês quando ele já está no texto da conta ("… novembro/2026 — referente a
+  novembro/2026")
+
 ## 1.23.5 — 2026-11-08
 - NFS-e: ME/EPP com tributos e ISS apurados pelo Simples sai sempre com regime especial "Nenhum"
   (`regEspTrib = 0`), mesmo que outro esteja escolhido em Configurações — corrige a recusa **E0175**
