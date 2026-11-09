@@ -1271,4 +1271,4 @@ class NotaServico(Base):
     def rotulo(self):
         if self.numero:
             return f"NFS-e {self.numero}" + (" (teste)" if self.homologacao else "")
-        return f"DPS {self.serie}/{self.ndps}" + (" (teste)" if self.homologacao else "")
+        return f"DPS nº {self.ndps} (série {self.serie})" + (" (teste)" if self.homologacao else "")

@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.23.1 — 2026-11-08
+- NFS-e: DPS no **leiaute novo da NT 009** na homologação (esquemas da produção restrita de 20/10/2026): campo
+  `finNFSe` (0 = nota regular) depois de `tpEmit` e NBS antes da descrição do serviço. Corrige a recusa
+  *E1235 — invalid child element 'cLocEmi'*. A produção segue no leiaute atual; quando a Receita mudar, basta
+  escolher *Novo* em Configurações → Nota fiscal de serviço → Leiaute do XML (avançado)
+- Nota ainda sem número aparece como "DPS nº 1 (série 81)" em vez de "DPS 81/1"
+
 ## 1.23.0 — 2026-11-08
 - **NFS-e Nacional direto na Sefin** (Financeiro → Notas fiscais), com o certificado A1 já enviado
   - monta a DPS no leiaute 1.01 (mesma estrutura da NFS-e 80 emitida pelo Emissor Nacional), assina (XMLDSig

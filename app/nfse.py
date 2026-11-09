@@ -45,6 +45,17 @@ def ambiente() -> str:
     return config.NFSE_AMBIENTE if config.NFSE_AMBIENTE in ("homologacao", "producao") else "desligado"
 
 
+def leiaute_novo(amb: str) -> bool:
+    """Leiaute da NT 009 (finNFSe; NBS antes da descrição). Já vale na homologação (esquemas de 20/10/2026);
+    a produção continua no leiaute anterior até a Receita virar a chave."""
+    escolha = config.NFSE_LEIAUTE
+    if escolha == "novo":
+        return True
+    if escolha == "atual":
+        return False
+    return amb != "producao"
+
+
 def ligado() -> bool:
     return ambiente() != "desligado"
 
@@ -135,6 +146,9 @@ def montar_dps(n, agora: datetime | None = None) -> etree._Element:
     _sub(inf, "nDPS", n.ndps)
     _sub(inf, "dCompet", comp.isoformat())
     _sub(inf, "tpEmit", "1")
+    novo = leiaute_novo(n.ambiente)
+    if novo:
+        _sub(inf, "finNFSe", "0")                    # NT 009: finalidade = NFS-e regular
     _sub(inf, "cLocEmi", em["ibge"])
     # prestador (nome e endereço vêm do cadastro nacional quando quem emite é o próprio prestador)
     pr = _sub(inf, "prest")
@@ -178,9 +192,14 @@ def montar_dps(n, agora: datetime | None = None) -> etree._Element:
     _sub(cs, "cTribNac", n.ctribnac)
     if n.ctribmun:
         _sub(cs, "cTribMun", n.ctribmun)
-    _sub(cs, "xDescServ", _limpo(n.descricao, 2000))
-    if n.nbs:
-        _sub(cs, "cNBS", n.nbs)
+    if novo:                                         # NT 009: NBS antes da descrição
+        if n.nbs:
+            _sub(cs, "cNBS", n.nbs)
+        _sub(cs, "xDescServ", _limpo(n.descricao, 2000))
+    else:
+        _sub(cs, "xDescServ", _limpo(n.descricao, 2000))
+        if n.nbs:
+            _sub(cs, "cNBS", n.nbs)
     # valores e tributos
     va = _sub(inf, "valores")
     _sub(_sub(va, "vServPrest"), "vServ", _dec(n.valor))

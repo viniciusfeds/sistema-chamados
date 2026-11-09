@@ -2576,8 +2576,11 @@ def _sefin_falsa(monkeypatch, pedidos, recusar=None):
             inf = raiz[0]
             assert raiz.get("versao") == "1.01" and inf.tag.endswith("infDPS") and raiz[1].tag.endswith("Signature")
             ordem = [etree.QName(e).localname for e in inf]
-            assert ordem == ["tpAmb", "dhEmi", "verAplic", "serie", "nDPS", "dCompet", "tpEmit", "cLocEmi", "prest",
-                             "toma", "serv", "valores"], ordem
+            novo = "producaorestrita" in url or "finNFSe" in ordem
+            assert ordem == ["tpAmb", "dhEmi", "verAplic", "serie", "nDPS", "dCompet", "tpEmit"] + (["finNFSe"] if novo else []) + [
+                "cLocEmi", "prest", "toma", "serv", "valores"], ordem
+            cserv = [etree.QName(e).localname for e in inf.find(f"{{{nfse.NS}}}serv/{{{nfse.NS}}}cServ")]
+            assert cserv[-1] == ("xDescServ" if novo else "cNBS"), cserv
             if recusar:
                 return 400, js.dumps({"erros": [{"Codigo": "E0010", "Descricao": recusar}]}).encode(), "application/json"
             _SEFIN_NUM[0] += 1
@@ -2653,6 +2656,16 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
         assert "<tpAmb>2</tpAmb>" in n.xml_dps and "<tpRetISSQN>2</tpRetISSQN>" in n.xml_dps and "<pAliq>1.80</pAliq>" in n.xml_dps
         assert "<dCompet>2026-10-01</dCompet>" in n.xml_dps and "<cTribNac>140101</cTribNac>" in n.xml_dps
         assert "<IM>353594</IM>" in n.xml_dps and "<opSimpNac>3</opSimpNac>" in n.xml_dps
+        assert "<tpEmit>1</tpEmit><finNFSe>0</finNFSe><cLocEmi>" in n.xml_dps            # homologação: NT 009
+        assert "<cNBS>120018900</cNBS><xDescServ>" in n.xml_dps
+        from lxml import etree as _et
+        n.ambiente = "producao"                                  # produção ainda no leiaute anterior
+        xp = _et.tostring(nfse.montar_dps(n)).decode()
+        assert "finNFSe" not in xp and "</xDescServ><cNBS>" in xp and "<tpAmb>1</tpAmb>" in xp
+        monkeypatch.setattr(config, "NFSE_LEIAUTE", "novo")
+        assert "<finNFSe>0</finNFSe>" in _et.tostring(nfse.montar_dps(n)).decode()
+        monkeypatch.setattr(config, "NFSE_LEIAUTE", "auto")
+        db.rollback()
         nid = n.id
     # conta já tem nota: não emite de novo
     assert "Emitir NFS-e" not in adm.get("/financeiro/receber?situacao=todos").text.split("Contrato de manutenção")[1][:3000]
