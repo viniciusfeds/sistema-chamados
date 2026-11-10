@@ -2540,6 +2540,23 @@ def test_integracao_n8n(monkeypatch):
         assert r.status_code == 200 and r.json()["unidade"] == "SkyFit Cisper" and r.json()["situacao"]
         assert c.get(f"/api/integracao/chamados/{numero}?telefone=11955550001", headers=H).status_code == 200
         assert c.get(f"/api/integracao/chamados/{numero}?telefone=11900001111", headers=H).status_code == 404
+        # listar os chamados do telefone e identificar o contato
+        r = c.get("/api/integracao/chamados?telefone=11955550003", headers=H)
+        assert r.status_code == 200 and any(x["numero"] == numero and x["aberto"] for x in r.json()["chamados"])
+        assert c.get("/api/integracao/chamados?telefone=11900001111", headers=H).json()["total"] == 0
+        assert c.get("/api/integracao/chamados?telefone=11955550003").status_code == 401
+        r = c.get("/api/integracao/contato?telefone=11955550001", headers=H).json()
+        assert r["cadastrado"] and len(r["unidades"]) > 1
+        assert not c.get("/api/integracao/contato?telefone=11900001111", headers=H).json()["cadastrado"]
+        # abrir escolhendo a unidade pelo nome, com assunto e prioridade
+        r = c.post("/api/integracao/chamados", json={"telefone": "11955550001", "texto": "Câmera 3 sem imagem desde ontem",
+                                                     "unidade": "carrao", "assunto": "Câmera sem imagem",
+                                                     "prioridade": "alta"}, headers=H)
+        assert r.status_code == 201 and r.json()["unidade"] == "SkyFit Carrão" and r.json()["prioridade"] == "alta"
+        assert r.json()["assunto"] == "Câmera sem imagem" and r.json()["aberto"]
+        r = c.post("/api/integracao/chamados", json={"telefone": "11955550001", "texto": "Teste de unidade",
+                                                     "unidade": "nao existe"}, headers=H)
+        assert r.status_code == 404 and r.json()["unidades"]
         # status de entrega informado pelo n8n
         r = c.post("/api/integracao/whatsapp/status", json={"envio_id": avisos[0]["envio_id"], "status": "read"}, headers=H)
         assert r.json()["ok"]

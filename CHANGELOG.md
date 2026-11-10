@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.25.0 — 2026-11-09
+- **API de chamados para o n8n** (token `X-Nexus-Token`), completando a da URA:
+  - `GET /api/integracao/chamados?telefone=` lista os chamados do telefone (abertos, concluídos ou todos)
+  - `GET /api/integracao/contato?telefone=` diz quem é e em quais unidades pode abrir chamado
+  - abertura aceita `assunto`, `prioridade` e a unidade pelo nome (`"unidade": "carrao"`)
+  - consulta/lista/abertura devolvem cliente, prioridade, situação (texto e código), `aberto`, técnico e última ação
+- `docs/N8N.md` com exemplos de cada chamada
+
 ## 1.24.0 — 2026-11-09
 - **Informações complementares da NFS-e no contrato** (Contratos → editar → *Informações complementares da nota
   fiscal*), enviadas em cada nota do contrato, inclusive no lote:

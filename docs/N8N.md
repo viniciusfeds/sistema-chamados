@@ -78,14 +78,65 @@ Para usar outro provedor (Z-API, WAHA, Meta…), troque só os nós **Responder 
 
 ## API do Nexus para o n8n
 
-Todas exigem o cabeçalho `X-Nexus-Token: <token>` (ou `Authorization: Bearer <token>`).
+Base: `https://app.tecnosit.com.br` (ou, de dentro do Docker, `http://host.docker.internal:9000`).
+Todas exigem o cabeçalho **`X-Nexus-Token: <token>`** (ou `Authorization: Bearer <token>`). O token é o de
+**Configurações → WhatsApp → n8n: token de integração** (mínimo 16 caracteres). Token errado: 401; 20 erros em
+15 min bloqueiam o IP por 30 min.
+
+O telefone pode vir em qualquer formato (`11 91234-5678`, `5511912345678`, `5511912345678@s.whatsapp.net`). Ele
+identifica a pessoa pelos contatos de WhatsApp do cliente, pelos usuários do cliente ou por quem já abriu chamado
+com aquele número — e só deixa abrir/ver chamados das unidades dela.
 
 | Chamada | Para quê |
 |---|---|
-| `POST /api/integracao/whatsapp/mensagem` `{telefone, nome, texto, id}` | URA: devolve `{responder, telefone, texto}` |
-| `POST /api/integracao/chamados` `{telefone, nome, texto, unidade_id?}` | abre chamado; sem `unidade_id` usa a unidade do telefone (409 com a lista se houver várias) |
-| `GET /api/integracao/chamados/{numero}?telefone=` | situação, última ação e link — só para quem é do cliente/unidade |
-| `POST /api/integracao/whatsapp/status` `{envio_id, status}` | entregue / lido / falhou de um aviso (`sent`, `delivered`, `read`, `failed`) |
+| `GET /api/integracao/contato?telefone=` | quem é: `{cadastrado, nome, unidades:[{id, nome, cliente}]}` |
+| `POST /api/integracao/chamados` | **abre chamado** |
+| `GET /api/integracao/chamados?telefone=&situacao=abertos&limite=10` | **lista** os chamados do telefone (`abertos`, `concluidos` ou `todos`; até 50) |
+| `GET /api/integracao/chamados/{numero}?telefone=` | **consulta** um chamado (404 se não for dele/do cliente) |
+| `POST /api/integracao/whatsapp/mensagem` `{telefone, nome, texto, id}` | URA pronta: devolve `{responder, telefone, texto}` |
+| `POST /api/integracao/whatsapp/status` `{envio_id, status}` | entregue / lido / falhou de um aviso |
+
+### Abrir chamado
+
+```http
+POST /api/integracao/chamados
+X-Nexus-Token: <token>
+Content-Type: application/json
+
+{
+  "telefone": "5511912345678",
+  "nome": "Portaria",                    // opcional (senão usa o nome do cadastro)
+  "texto": "Câmera 3 sem imagem desde ontem",   // obrigatório, mín. 5 caracteres
+  "assunto": "Câmera sem imagem",        // opcional (senão: início do texto)
+  "prioridade": "alta",                  // opcional: baixa | normal | alta | urgente
+  "unidade_id": 12,                      // opcional; ou "unidade": "carrao" (parte do nome, sem acento)
+}
+```
+
+Respostas:
+
+- **201** — chamado aberto (mesmo formato da consulta, com `"criado": true`). A equipe e os contatos do cliente são
+  avisados como num chamado aberto pelo site (quem abriu não recebe o aviso).
+- **409** — o telefone tem várias unidades: `{"erro": "Escolha a unidade.", "unidades": [{id, nome}]}` → pergunte e
+  reenvie com `unidade_id`.
+- **404** — telefone não cadastrado, ou nenhuma unidade com aquele nome (vem a lista de `unidades`).
+- **400** — telefone ou texto faltando.
+
+### Formato de um chamado (consulta, lista e abertura)
+
+```json
+{
+  "numero": 312, "numero_fmt": "0312", "unidade": "SkyFit Carrão", "cliente": "SkyFit Academia",
+  "assunto": "Câmera sem imagem", "prioridade": "alta",
+  "situacao": "Aguardando atendimento", "situacao_codigo": "aguardando", "aberto": true,
+  "abertura": "2026-11-09", "tecnico": "Carlos",
+  "ultima_acao": {"quando": "09/11 21:10", "descricao": "Atendimento técnico", "status": "Aguardando"},
+  "link": "https://app.tecnosit.com.br/acompanhar/…"
+}
+```
+
+No n8n, use o nó **HTTP Request** com *Authentication: Generic → Header Auth* (nome `X-Nexus-Token`) e
+*Send Body: JSON*. Exemplo de resposta ao cliente: `Chamado {{$json.numero_fmt}} aberto ✅ — acompanhe: {{$json.link}}`.
 
 O Nexus chama o webhook de envio com `{"tipo": "aviso"|"resposta"|"teste", "telefone", "texto", "evento",
 "envio_id", "chamado"}` e o mesmo cabeçalho `X-Nexus-Token`; se o n8n responder `{"id": "..."}`, esse id fica no

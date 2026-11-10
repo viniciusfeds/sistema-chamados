@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from . import avisos, config, regras, ura, whatsapp
 from .db import SessionLocal, get_db
 from .main import _agora_hm, agora_utc, app, base_url, salvar_novo_chamado
-from .models import Acao, Chamado, EnvioWhatsApp, Unidade
+from .models import PRIORIDADES, Acao, Chamado, EnvioWhatsApp, Unidade
 from .seguranca import Limitador
 
 log = logging.getLogger("chamados.integracao")
@@ -55,13 +55,32 @@ def _base(request):
     return (config.URL_PUBLICA or base_url(request)).rstrip("/")
 
 
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t or "") if unicodedata.category(c) != "Mn")
+
+
+def _resumo(ch: Chamado, request) -> dict:
+    ult = next((a for a in reversed(ch.acoes_ordenadas) if a.descricao), None)
+    st = regras.status_geral(ch)
+    return {"numero": ch.numero, "numero_fmt": ch.numero_fmt, "unidade": ch.unidade.nome,
+            "cliente": ch.unidade.cliente.nome, "assunto": ch.assunto, "prioridade": ch.prioridade_ok,
+            "situacao": regras.rotulo(st), "situacao_codigo": st, "aberto": st != "concluido",
+            "abertura": ch.abertura.isoformat() if ch.abertura else None,
+            "tecnico": ch.tecnico.nome if getattr(ch, "tecnico", None) else None,
+            "ultima_acao": {"quando": ult.quando, "descricao": ult.descricao, "status": ult.status} if ult else None,
+            "link": f"{_base(request)}/acompanhar/{ch.token_publico}"}
+
+
 # ------------------------------------------------------------------ abrir chamado vindo do WhatsApp
-def criar_chamado_whatsapp(db, un: Unidade, nome: str, telefone: str, texto: str, base: str = "") -> Chamado:
+def criar_chamado_whatsapp(db, un: Unidade, nome: str, telefone: str, texto: str, base: str = "",
+                           assunto: str = "", prioridade: str = "normal") -> Chamado:
     hoje, hm = _agora_hm()
-    primeira = " ".join(texto.split())
+    primeira = " ".join((assunto or texto).split())
     assunto = primeira[:80] + ("…" if len(primeira) > 80 else "")
+    prioridade = prioridade if prioridade in PRIORIDADES else "normal"
     ch = Chamado(unidade_id=un.id, assunto=assunto, titulo=assunto, problema=texto[:5000], abertura=hoje,
-                 origem="whatsapp", prioridade="normal", solicitante_nome=(nome or "Cliente")[:120],
+                 origem="whatsapp", prioridade=prioridade, solicitante_nome=(nome or "Cliente")[:120],
                  solicitante_contato=ura._tel_fmt(telefone)[:120], solicitante_aceita_whatsapp=True,
                  criado_em=agora_utc())
     ch.acoes.append(Acao(data=hoje, hora=hm, status="Concluído",
@@ -162,18 +181,28 @@ async def api_abrir(request: Request, db: Session = Depends(get_db)):
     nome, clientes, restritas = ura.identificar(db, tel)
     uns = ura.unidades_de(db, clientes, restritas)
     un = None
-    if d.get("unidade_id"):
+    if str(d.get("unidade_id") or "").isdigit():
         un = next((u for u in uns if u.id == int(d["unidade_id"])), None)
         if not un:
             return _json({"erro": "Unidade não pertence a esse telefone."}, 403)
+    elif d.get("unidade"):                                   # pelo nome (ou parte dele), sem acento/maiúscula
+        alvo = _sem_acento(str(d["unidade"])).lower()
+        achadas = [u for u in uns if alvo in _sem_acento(u.nome).lower()]
+        if len(achadas) == 1:
+            un = achadas[0]
+        elif not achadas:
+            return _json({"erro": "Nenhuma unidade desse telefone com esse nome.",
+                          "unidades": [{"id": u.id, "nome": u.nome} for u in uns]}, 404)
+        else:
+            uns = achadas
     elif len(uns) == 1:
         un = uns[0]
     if not un:
         return _json({"erro": "Escolha a unidade." if uns else "Telefone não cadastrado.",
                       "unidades": [{"id": u.id, "nome": u.nome} for u in uns]}, 409 if uns else 404)
-    ch = criar_chamado_whatsapp(db, un, str(d.get("nome") or nome or "Cliente"), tel, texto, _base(request))
-    return _json({"numero": ch.numero, "numero_fmt": ch.numero_fmt, "unidade": un.nome,
-                  "link": f"{_base(request)}/acompanhar/{ch.token_publico}"}, 201)
+    ch = criar_chamado_whatsapp(db, un, str(d.get("nome") or nome or "Cliente"), tel, texto, _base(request),
+                                assunto=str(d.get("assunto") or ""), prioridade=str(d.get("prioridade") or "normal"))
+    return _json(_resumo(ch, request) | {"criado": True}, 201)
 
 
 @app.get("/api/integracao/chamados/{numero}", dependencies=[Depends(exigir_token)])
@@ -186,8 +215,39 @@ def api_consultar(request: Request, numero: int, telefone: str = "", db: Session
     _, clientes, restritas = ura.identificar(db, tel)
     if not ura._pode_ver(ch, tel, clientes, restritas):
         return _json({"erro": "Chamado não encontrado."}, 404)
-    ult = next((a for a in reversed(ch.acoes_ordenadas) if a.descricao), None)
-    return _json({"numero": ch.numero, "numero_fmt": ch.numero_fmt, "unidade": ch.unidade.nome, "assunto": ch.assunto,
-                  "situacao": regras.rotulo(regras.status_geral(ch)),
-                  "ultima_acao": {"quando": ult.quando, "descricao": ult.descricao} if ult else None,
-                  "link": f"{_base(request)}/acompanhar/{ch.token_publico}"})
+    return _json(_resumo(ch, request))
+
+
+@app.get("/api/integracao/contato", dependencies=[Depends(exigir_token)])
+def api_contato(telefone: str = "", db: Session = Depends(get_db)):
+    """Quem é o telefone: nome e unidades em que pode abrir chamado (para o n8n montar o próprio menu)."""
+    tel = whatsapp.normalizar_telefone(telefone)
+    if not tel:
+        return _json({"erro": "Telefone inválido."}, 400)
+    nome, clientes, restritas = ura.identificar(db, tel)
+    uns = ura.unidades_de(db, clientes, restritas)
+    return _json({"telefone": tel, "cadastrado": bool(uns), "nome": nome,
+                  "unidades": [{"id": u.id, "nome": u.nome, "cliente": u.cliente.nome} for u in uns]})
+
+
+@app.get("/api/integracao/chamados", dependencies=[Depends(exigir_token)])
+def api_listar(request: Request, telefone: str = "", situacao: str = "abertos", limite: int = 10,
+               db: Session = Depends(get_db)):
+    """Chamados que o telefone pode ver (dele ou do cliente/unidade), mais recentes primeiro.
+    situacao = abertos (padrão) | concluidos | todos; limite até 50."""
+    tel = whatsapp.normalizar_telefone(telefone)
+    if not tel:
+        return _json({"erro": "Telefone inválido."}, 400)
+    _, clientes, restritas = ura.identificar(db, tel)
+    limite = max(1, min(50, limite))
+    lista = []
+    for ch in db.scalars(select(Chamado).where(Chamado.cancelado.is_(False)).order_by(Chamado.id.desc()).limit(1000)):
+        if not ura._pode_ver(ch, tel, clientes, restritas):
+            continue
+        aberto = regras.status_geral(ch) != "concluido"
+        if (situacao == "abertos" and not aberto) or (situacao == "concluidos" and aberto):
+            continue
+        lista.append(_resumo(ch, request))
+        if len(lista) >= limite:
+            break
+    return _json({"telefone": tel, "total": len(lista), "chamados": lista})
