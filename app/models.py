@@ -47,6 +47,8 @@ class Cliente(Base):
     slug_publico: Mapped[str] = mapped_column(String(80), unique=True, index=True, default=novo_token)
     abertura_publica: Mapped[bool] = mapped_column(Boolean, default=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    sla_horario: Mapped[str | None] = mapped_column(String(10), nullable=True)   # None = padrão / comercial / 24x7
+    sla_metas: Mapped[dict | None] = mapped_column(JSON, nullable=True)          # {"urgente": [1, 4, 8], …} em horas
     chave_agente: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True,
                                                      default=nova_chave_agente)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -170,6 +172,14 @@ class Chamado(Base):
     solicitante_aceita_whatsapp: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     prioridade: Mapped[str | None] = mapped_column(String(10), nullable=True, default="normal")
     tecnico_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    # SLA (UTC): gravados sozinhos em app/sla.py
+    sla_atendimento_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sla_chegada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sla_solucao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sla_chegada_lat: Mapped[float | None] = mapped_column(nullable=True)
+    sla_chegada_lng: Mapped[float | None] = mapped_column(nullable=True)
+    sla_expurgo: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)   # fora do indicador
+    sla_expurgo_motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(),

@@ -39,6 +39,15 @@ DADOS_DIR = Path(os.environ.get("DADOS_DIR", BASE_DIR / "dados"))
 ANEXOS_DIR = DADOS_DIR / "anexos"
 
 # Alerta de chamado parado: horas sem nova ação (por prioridade)
+# SLA: relógio e metas padrão (horas: 1º atendimento / chegada / solução)
+SLA_HORARIO = os.environ.get("SLA_HORARIO", "comercial")          # comercial / 24x7
+SLA_EXPEDIENTE = os.environ.get("SLA_EXPEDIENTE", "08:00-18:00")  # segunda a sexta
+SLA_SABADO = os.environ.get("SLA_SABADO", "")                    # ex.: 08:00-12:00 (vazio = não conta)
+SLA_URGENTE = os.environ.get("SLA_URGENTE", "1/4/8")
+SLA_ALTA = os.environ.get("SLA_ALTA", "2/8/24")
+SLA_NORMAL = os.environ.get("SLA_NORMAL", "4/24/48")
+SLA_BAIXA = os.environ.get("SLA_BAIXA", "8/48/96")
+
 ALERTA_HORAS = {"urgente": int(os.environ.get("ALERTA_HORAS_URGENTE", "4")),
                 "alta": int(os.environ.get("ALERTA_HORAS_ALTA", "12")),
                 "normal": int(os.environ.get("ALERTA_HORAS_NORMAL", "48")),

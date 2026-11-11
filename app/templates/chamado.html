@@ -57,6 +57,33 @@
 </form>
 {% endif %}
 
+{% if u.equipe and not ch.cancelado and ch.origem != 'preventiva' %}{% set sv = sla_avaliar(ch) %}
+<div class="card sla-card" id="sla">
+  <div class="sla-cab"><h2 style="margin:0">SLA <span class="muted" style="font-weight:400;font-size:.85rem">{{ 'horário comercial' if sv.horario == 'comercial' else '24x7' }} · prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}</span></h2>
+    {% if not ch.sla_chegada_em %}<form method="post" action="/chamados/{{ ch.numero }}/chegada" id="form-chegada">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lat"><input type="hidden" name="lng">
+      <button class="btn peq" type="button" onclick="(function(f){var b=f.querySelector('button');b.disabled=true;b.textContent='Registrando…';
+        if(!navigator.geolocation){f.submit();return;}navigator.geolocation.getCurrentPosition(function(p){f.lat.value=p.coords.latitude;f.lng.value=p.coords.longitude;f.submit();},function(){f.submit();},{timeout:8000});})(this.form)">📍 Cheguei no local</button></form>{% endif %}
+  </div>
+  {% if ch.sla_expurgo %}<div class="dica">Desconsiderado dos indicadores: {{ ch.sla_expurgo_motivo }}</div>{% endif %}
+  <div class="sla-marcos">{% for k, rot in SLA_MARCOS %}{% set m = sv.marcos[k] %}
+    <div class="sla-m sla-{{ m.sit }}"><div class="muted">{{ rot }}</div>
+      <b>{{ sla_fmt(m.min) }}</b> <span class="muted">/ meta {{ sla_fmt(m.meta) }}</span>
+      <div class="sla-sit">{% if m.em %}{{ m.em|local }} · {{ 'no prazo' if m.sit == 'ok' else 'fora do prazo' }}{% elif m.sit == 'fora' %}estourado há {{ sla_fmt(-m.restante) }}{% else %}faltam {{ sla_fmt(m.restante) }}{% endif %}</div></div>
+  {% endfor %}</div>
+  {% if u.papel == 'admin' %}
+  <details style="margin-top:8px"><summary class="dica">Corrigir horários ou desconsiderar dos indicadores</summary>
+    <form method="post" action="/chamados/{{ ch.numero }}/sla" style="margin-top:8px">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="grid3">{% for k, rot in SLA_MARCOS %}<div class="campo"><label>{{ rot }}</label><input type="datetime-local" name="{{ k }}"></div>{% endfor %}</div>
+      <label class="check"><input type="checkbox" name="expurgo" value="1" style="width:auto" {{ 'checked' if ch.sla_expurgo }}> Desconsiderar este chamado dos indicadores</label>
+      <div class="campo"><label>Motivo</label><input name="motivo" maxlength="255" value="{{ ch.sla_expurgo_motivo or '' }}" placeholder="Ex.: acesso ao local liberado só no dia seguinte pelo cliente"></div>
+      <button class="btn sec peq">Salvar</button>
+    </form></details>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if ch.cancelado %}
 <div class="caixa" style="background:#F0F0F0;border-color:#DADADA;margin-bottom:16px">
   <b>Chamado cancelado.</b> {% if ch.motivo_cancelamento %}{{ ch.motivo_cancelamento }}{% endif %}

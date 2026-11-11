@@ -98,6 +98,29 @@
   </div>
 </div>
 
+{% if u.papel == 'admin' %}{% set mt = sla_metas(cli) %}
+<div class="card" id="sla">
+  <h2>SLA do contrato</h2>
+  <p class="dica" style="margin-top:0">Metas em horas para 1º atendimento, chegada ao local e solução. Sem metas próprias, vale o padrão de Configurações → SLA. <a href="/indicadores?cliente={{ cli.id }}">Ver indicadores ↗</a></p>
+  <form method="post" action="/admin/clientes/{{ cli.id }}/sla">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo" style="max-width:320px"><label>Relógio do SLA</label><select name="sla_horario">
+      <option value="">Padrão das Configurações</option>
+      <option value="comercial" {{ 'selected' if cli.sla_horario == 'comercial' }}>Horário comercial</option>
+      <option value="24x7" {{ 'selected' if cli.sla_horario == '24x7' }}>24 horas, 7 dias</option></select></div>
+    <label class="check"><input type="checkbox" name="metas_proprias" value="1" style="width:auto" {{ 'checked' if cli.sla_metas }}> Este contrato tem metas próprias</label>
+    <table class="resp" style="margin:8px 0">
+      <thead><tr><th>Prioridade</th><th>1º atendimento (h)</th><th>Chegada (h)</th><th>Solução (h)</th></tr></thead>
+      <tbody>{% for p, pr in PRIORIDADES.items() %}<tr>
+        <td data-l="Prioridade"><b>{{ pr[0] }}</b></td>
+        {% for suf in ('a', 'c', 's') %}<td><input name="{{ p }}_{{ suf }}" value="{{ '%g'|format(mt[p][loop.index0]) }}" inputmode="decimal" style="max-width:110px"></td>{% endfor %}
+      </tr>{% endfor %}</tbody>
+    </table>
+    <button class="btn sec">Salvar SLA</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="card" id="contatos">
   <h2>Quem recebe aviso no WhatsApp</h2>
   <p class="dica" style="margin-top:0">Avisos automáticos dos chamados (abertura, atualização, conclusão). Sem unidade = recebe de todas as unidades.</p>

@@ -104,6 +104,18 @@ SECOES = [
         Campo("EMPRESA_EMAIL", "E-mail comercial"),
         Campo("EMPRESA_SITE", "Site"),
     ]),
+    ("sla", "SLA dos chamados",
+     "Metas em horas no formato 1º atendimento / chegada ao local / solução. Cada cliente pode ter metas e horário "
+     "próprios (ficha do cliente → SLA).", [
+        Campo("SLA_HORARIO", "Relógio padrão", "escolha", "Comercial: só conta no expediente, sem feriados.",
+              opcoes={"comercial": "Horário comercial", "24x7": "24 horas, 7 dias"}),
+        Campo("SLA_EXPEDIENTE", "Expediente (segunda a sexta)", ajuda="Ex.: 08:00-18:00"),
+        Campo("SLA_SABADO", "Expediente de sábado", ajuda="Ex.: 08:00-12:00. Vazio = sábado não conta."),
+        Campo("SLA_URGENTE", "Metas — Urgente (h)", ajuda="Ex.: 1/4/8"),
+        Campo("SLA_ALTA", "Metas — Alta (h)", ajuda="Ex.: 2/8/24"),
+        Campo("SLA_NORMAL", "Metas — Normal (h)", ajuda="Ex.: 4/24/48"),
+        Campo("SLA_BAIXA", "Metas — Baixa (h)", ajuda="Ex.: 8/48/96"),
+    ]),
     ("nfse", "Nota fiscal de serviço (NFS-e Nacional)",
      "Emissão direto na Sefin Nacional com o certificado A1. Comece em homologação (notas de teste, sem valor fiscal).", [
         Campo("NFSE_AMBIENTE", "Ambiente de emissão", "escolha",

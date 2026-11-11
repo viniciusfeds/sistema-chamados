@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block titulo %}Indicadores de SLA{% endblock %}
+{% macro pct(m) %}{% if m.pct is none %}<span class="muted">—</span>{% else %}<b class="{{ 'k-ok' if m.pct >= 90 else ('k-med' if m.pct >= 75 else 'k-ruim') }}">{{ ('%.1f'|format(m.pct)).replace('.', ',') }}%</b> <span class="muted">({{ m.no_prazo }}/{{ m.base }})</span>{% endif %}{% endmacro %}
+{% macro tabela(titulo, linhas) %}
+<table class="resp">
+  <thead><tr><th>{{ titulo }}</th><th>Chamados</th>{% for k, rot in MARCOS %}<th>{{ rot }}</th>{% endfor %}<th>Tempo médio solução</th></tr></thead>
+  <tbody>{% for nome, b in linhas %}<tr>
+    <td data-l="{{ titulo }}"><b>{{ nome }}</b></td><td data-l="Chamados">{{ b.total }}</td>
+    {% for k, rot in MARCOS %}<td data-l="{{ rot }}">{{ pct(b[k]) }}</td>{% endfor %}
+    <td data-l="Tempo médio solução">{{ fmt_min(b.solucao.medio) }}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% endmacro %}
+{% block conteudo %}
+{% set g = ind.geral %}
+{% set qs = 'cliente=' ~ (cli.id if cli else '') ~ '&unidade=' ~ (unidade_id or '') ~ '&de=' ~ ini.isoformat() ~ '&ate=' ~ fim.isoformat() %}
+<div class="cab">
+  <div><h1>Indicadores de SLA</h1>
+    <div class="muted">{{ cli.nome if cli else 'Todos os clientes' }} · chamados abertos de {{ ini|data }} a {{ fim|data }} · {{ 'horário comercial' if horario == 'comercial' else '24x7' }}</div></div>
+  <a class="btn" href="/indicadores/pdf?{{ qs }}" target="_blank">📄 PDF para o cliente</a>
+</div>
+<div class="card">
+  <form class="filtros" method="get">
+    <div><label for="cliente">Contratante</label><select id="cliente" name="cliente" onchange="this.form.unidade && (this.form.unidade.value='');this.form.submit()"><option value="">Todos</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if cli and cli.id == c.id }}>{{ c.nome }}</option>{% endfor %}</select></div>
+    {% if unidades %}<div><label for="unidade">Unidade</label><select id="unidade" name="unidade"><option value="">Todas</option>
+      {% for x in unidades %}<option value="{{ x.id }}" {{ 'selected' if unidade_id == x.id }}>{{ x.nome }}</option>{% endfor %}</select></div>{% endif %}
+    <div><label for="de">De</label><input type="date" id="de" name="de" value="{{ ini.isoformat() }}"></div>
+    <div><label for="ate">Até</label><input type="date" id="ate" name="ate" value="{{ fim.isoformat() }}"></div>
+    <div style="display:flex;gap:6px"><button class="btn">Ver</button></div>
+  </form>
+</div>
+
+<div class="cards">
+  <a style="--c:#2B2B2B"><b>{{ g.total }}</b><span>Chamados</span></a>
+  <a style="--c:#2E7D4F"><b>{{ g.concluidos }}</b><span>Solucionados</span></a>
+  <a style="--c:#B07A00"><b>{{ g.abertos }}</b><span>Em aberto</span></a>
+  {% for k, rot in MARCOS %}{% set pc = g[k].pct %}<a style="--c:{{ '#8A94A3' if pc is none else ('#2E7D4F' if pc >= 90 else ('#B07A00' if pc >= 75 else '#B3261E')) }}" title="Tempo médio: {{ fmt_min(g[k].medio) }}"><b>{{ '—' if pc is none else ('%.0f'|format(pc)) ~ '%' }}</b><span>{{ rot }} no prazo · médio {{ fmt_min(g[k].medio) }}</span></a>{% endfor %}
+</div>
+
+{% if ind.por_prioridade %}<div class="card"><h2>Por prioridade</h2>
+<table class="resp">
+  <thead><tr><th>Prioridade</th><th>Chamados</th>{% for k, rot in MARCOS %}<th>{{ rot }}</th>{% endfor %}<th>Tempo médio solução</th><th>Meta (h)</th></tr></thead>
+  <tbody>{% for p, nome, b in ind.por_prioridade %}<tr>
+    <td data-l="Prioridade"><b>{{ nome }}</b></td><td data-l="Chamados">{{ b.total }}</td>
+    {% for k, rot in MARCOS %}<td data-l="{{ rot }}">{{ pct(b[k]) }}</td>{% endfor %}
+    <td data-l="Tempo médio solução">{{ fmt_min(b.solucao.medio) }}</td>
+    <td data-l="Meta (h)" class="muted">{% for v in metas[p] %}{{ '%g'|format(v) }}{{ ' / ' if not loop.last }}{% endfor %}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>{% endif %}
+
+{% if ind.por_unidade|length > 1 %}<div class="card"><h2>Por unidade</h2>{{ tabela('Unidade', ind.por_unidade) }}</div>{% endif %}
+
+<div class="card" style="padding:0;overflow:hidden">
+  <h2 style="padding:14px 16px 0">Chamados do período</h2>
+  {% if ind.lista %}
+  <table class="resp">
+    <thead><tr><th>Ticket</th><th>Unidade</th><th>Assunto</th><th>Prioridade</th>{% for k, rot in MARCOS %}<th>{{ rot }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for c in ind.lista %}{% set av = ind.avaliacoes[c.id] %}
+    <tr class="{{ 'inativo' if c.sla_expurgo }}">
+      <td data-l="Ticket"><a href="/chamados/{{ c.numero }}#sla"><b>{{ c.numero_fmt }}</b></a></td>
+      <td data-l="Unidade">{{ c.unidade.nome }}</td>
+      <td data-l="Assunto">{{ c.assunto }}{% if c.sla_expurgo %}<div class="muted">desconsiderado: {{ c.sla_expurgo_motivo }}</div>{% endif %}</td>
+      <td data-l="Prioridade">{{ PRIORIDADES[c.prioridade_ok][0] }}</td>
+      {% for k, rot in MARCOS %}{% set m = av.marcos[k] %}<td data-l="{{ rot }}"><span class="sla-{{ m.sit }}-txt">{{ fmt_min(m.min) }}{% if not m.em %} …{% endif %}</span></td>{% endfor %}
+    </tr>{% endfor %}</tbody>
+  </table>
+  <p class="dica" style="padding:0 16px 12px">Tempos em horas {{ 'de expediente' if horario == 'comercial' else 'corridas' }}. Preventivas programadas não entram no SLA. Verde no prazo · vermelho fora do prazo · amarelo perto de estourar · “…” ainda em andamento.</p>
+  {% else %}<p class="muted" style="padding:16px">Nenhum chamado aberto no período.</p>{% endif %}
+</div>
+{% endblock %}

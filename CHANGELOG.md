@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## 1.27.0 — 2026-11-10
+- **SLA dos chamados** com três marcos gravados sozinhos:
+  - **1º atendimento**: a equipe registra/edita uma ação ou o chamado sai de "Aberto"
+  - **Chegada ao local**: botão **📍 Cheguei no local** no chamado (grava hora e localização) ou a ação
+    "Em andamento"; atendimento remoto concluído usa a hora da solução
+  - **Solução**: o chamado vai para "Aguardando validação" ou "Concluído" (reabriu, volta a contar); usa a data/hora
+    informada na ação quando ela é registrada depois
+- **Metas por prioridade** (horas: atendimento / chegada / solução) em Configurações → SLA, com padrão
+  1/4/8 · 2/8/24 · 4/24/48 · 8/48/96, e **metas próprias por contratante** na ficha do cliente
+- **Relógio**: horário comercial (seg–sex 08:00–18:00, sábado opcional, sem feriados nacionais e os cadastrados no
+  RH) ou 24x7 — padrão nas Configurações e escolha por cliente
+- **Cartão de SLA no chamado**: tempo decorrido × meta de cada marco, "faltam" / "estourado há", cores
+  (no prazo, perto de estourar, fora); admin corrige horários e pode **desconsiderar** um chamado dos indicadores
+  com justificativa (ex.: cliente não liberou o acesso)
+- **Indicadores (SLA)** no menu: por contratante, unidade e período — chamados, solucionados, em aberto, % no
+  prazo e tempo médio de cada marco, tabelas por prioridade e por unidade, lista de chamados com os tempos
+- **PDF de indicadores para o cliente** no layout TecnosIT (resumo, por prioridade, por unidade, metas do contrato
+  e chamados do período)
+- Chamados antigos recebem os marcos calculados pelas datas das ações; preventivas programadas não entram no SLA
+
 ## 1.26.0 — 2026-11-10
 - **Contrato com ou sem nota fiscal**: em Contratos, *Este cliente precisa de nota fiscal (NFS-e)*. Desmarcado, o
   contrato aparece com a etiqueta **Recibo** e as cobranças dele saem com recibo

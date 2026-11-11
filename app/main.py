@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, whatsapp
+from . import agentes, ajustes, avisos, config, fotos, inventario, monitor, ocorrencias, pdf, regras, sla, whatsapp
 from .auth import (Precisa2FA, PrecisaLogin, SoPonto, limite_publico, checar_csrf, conferir_senha, csrf_token, hash_senha, pode_usar_unidade,
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
@@ -40,6 +40,8 @@ async def _vida(app):
     criar_tabelas()
     inventario.garantir_chave()
     ajustes.carregar()
+    from . import sla
+    sla.retroativo()
     parar = monitor.iniciar()
     yield
     if parar:
@@ -1822,3 +1824,4 @@ from . import rotas_seguranca  # noqa: E402,F401
 from . import rotas_integracao  # noqa: E402,F401
 from . import rotas_nfse  # noqa: E402,F401
 from . import rotas_recibo  # noqa: E402,F401
+from . import rotas_sla  # noqa: E402,F401

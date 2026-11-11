@@ -47,6 +47,7 @@
     <a href="/" class="{{ 'ativo' if p == '/' or p.startswith('/chamados/') and p != '/chamados/novo' }}" title="Painel">{{ ico('painel') }}<span>Painel</span></a>
     {% if u.pode('abrir') %}<a href="/chamados/novo" class="{{ 'ativo' if p == '/chamados/novo' }}" title="Abrir chamado">{{ ico('novo') }}<span>Abrir chamado</span></a>{% endif %}
     {% if u.pode('relatorio') %}<a href="/relatorio" class="{{ 'ativo' if p == '/relatorio' }}" title="Relatório">{{ ico('relatorio') }}<span>Relatório</span></a>{% endif %}
+    {% if u.papel == 'admin' %}<a href="/indicadores" class="{{ 'ativo' if p.startswith('/indicadores') }}" title="Indicadores de SLA">{{ ico('relatorio') }}<span>Indicadores (SLA)</span></a>{% endif %}
     {% if u.equipe and u.pode('agenda') %}<a href="/agenda" class="{{ 'ativo' if p.startswith('/agenda') }}" title="Agenda">{{ ico('agenda') }}<span>Agenda</span></a>{% endif %}
     {% if u.equipe and u.pode('preventivas') %}<a href="/preventivas" class="{{ 'ativo' if p.startswith('/preventivas') }}" title="Manutenção preventiva">{{ ico('preventiva') }}<span>Preventivas</span></a>{% endif %}
     {% if u.equipe and (u.pode('inventario') or u.papel == 'admin') %}

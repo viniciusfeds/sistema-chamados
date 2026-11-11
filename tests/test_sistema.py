@@ -2820,3 +2820,70 @@ def test_contrato_sem_nf_emite_recibo(monkeypatch):
     # cancelar
     pg = adm.get(f"/financeiro/recibos/{rid}").text
     assert "cancelado" in adm.post(f"/financeiro/recibos/{rid}/cancelar", data={"csrf": _csrf(pg), "motivo": "erro"}).text
+
+
+def test_sla_marcos_indicadores_e_pdf(monkeypatch):
+    from datetime import datetime as DT
+    from app import config, sla
+    from app.models import Chamado, Cliente
+    monkeypatch.setattr(config, "SLA_EXPEDIENTE", "08:00-18:00")
+    monkeypatch.setattr(config, "SLA_SABADO", "")
+    # relógio: segunda 17:00 → terça 09:00 (horário de Brasília = UTC-3)
+    ini, fim = DT(2026, 11, 9, 20, 0), DT(2026, 11, 10, 12, 0)
+    assert sla.minutos(ini, fim, "comercial") == 120 and sla.minutos(ini, fim, "24x7") == 960
+    assert sla.minutos(DT(2026, 11, 13, 20, 0), DT(2026, 11, 16, 12, 0), "comercial") == 120   # fim de semana
+    assert sla.fmt_min(125) == "2h05" and sla.fmt_min(45) == "45 min" and sla.fmt_min(1500) == "25h00"
+    # chamado aberto pelo cliente → equipe agenda (1º atendimento) → em andamento (chegada) → concluído (solução)
+    g = entrar("gestor@t.com")
+    tok = _csrf(g.get("/chamados/novo").text)
+    r = g.post("/chamados/novo", data={"assunto": "Catraca travada", "problema": "Não libera",
+                                       "unidade_id": str(IDS["carrao"]), "csrf": tok}, follow_redirects=False)
+    url = r.headers["location"]
+    numero = int(url.rsplit("/", 1)[1])
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == numero))
+        assert ch.sla_atendimento_em is None and ch.sla_solucao_em is None
+    adm = entrar("admin@t.com")
+    pg = adm.get(url).text
+    assert 'id="sla"' in pg and "Cheguei no local" in pg and "faltam" in pg
+    adm.post(f"{url}/acoes", data={"descricao": "Visita agendada", "status": "Agendado", "data": "2026-12-01",
+                                   "csrf": _csrf(pg)})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == numero))
+        assert ch.sla_atendimento_em and not ch.sla_chegada_em
+    r = adm.post(f"{url}/chegada", data={"csrf": _csrf(pg), "lat": "-23.5", "lng": "-46.5"})
+    assert "Chegada registrada" in r.text
+    pg = adm.get(url).text
+    for i in re.findall(url + r'/acoes/(\d+)"', pg):
+        adm.post(f"{url}/acoes/{i}", data={"descricao": "ok", "status": "Concluído", "csrf": _csrf(pg)})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == numero))
+        assert ch.sla_chegada_em and ch.sla_solucao_em and ch.sla_chegada_lat == -23.5
+        av = sla.avaliar(ch)
+        assert all(av["marcos"][k]["sit"] == "ok" for k, _ in sla.MARCOS), av
+    # metas próprias do cliente
+    pg = adm.get(f"/clientes/{IDS['sky']}").text
+    assert "SLA do contrato" in pg
+    adm.post(f"/admin/clientes/{IDS['sky']}/sla", data={"csrf": _csrf(pg), "sla_horario": "24x7", "metas_proprias": "1",
+                                                        "urgente_a": "0,5", "urgente_c": "2", "urgente_s": "4",
+                                                        "alta_a": "1", "alta_c": "4", "alta_s": "8", "normal_a": "2",
+                                                        "normal_c": "8", "normal_s": "24", "baixa_a": "4", "baixa_c": "24",
+                                                        "baixa_s": "72"})
+    with SessionLocal() as db:
+        cli = db.get(Cliente, IDS["sky"])
+        assert cli.sla_horario == "24x7" and sla.metas_cliente(cli)["urgente"] == (0.5, 2.0, 4.0)
+    # indicadores (tela e PDF)
+    hoje_ = date.today().isoformat()
+    pg = adm.get(f"/indicadores?cliente={IDS['sky']}&de=2020-01-01&ate={hoje_}").text
+    assert "Indicadores de SLA" in pg and "Catraca travada" in pg and "Por prioridade" in pg and "24x7" in pg
+    pdf = adm.get(f"/indicadores/pdf?cliente={IDS['sky']}&de=2020-01-01&ate={hoje_}")
+    assert pdf.content.startswith(b"%PDF") and "SkyFit" in pdf.headers["content-disposition"]
+    assert entrar("tec@t.com").get("/indicadores", follow_redirects=False).status_code in (303, 403)
+    # expurgo exige motivo
+    pg = adm.get(url).text
+    assert "explique o motivo" in adm.post(f"{url}/sla", data={"csrf": _csrf(pg), "expurgo": "1"}).text
+    adm.post(f"{url}/sla", data={"csrf": _csrf(pg), "expurgo": "1", "motivo": "Cliente não liberou o acesso"})
+    pg = adm.get(f"/indicadores?cliente={IDS['sky']}&de=2020-01-01&ate={hoje_}").text
+    assert "desconsiderado: Cliente não liberou o acesso" in pg
+    with SessionLocal() as db:
+        cli = db.get(Cliente, IDS["sky"]); cli.sla_horario = None; cli.sla_metas = None; db.commit()
