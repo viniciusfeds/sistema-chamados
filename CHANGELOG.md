@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 1.28.0 — 2026-11-11
+- **Link público de relatório por cliente** (ficha do cliente → *Link de relatório de chamados*): página sem login
+  com os chamados do cliente — número, data de abertura, unidade, assunto e status —, contadores por status,
+  filtros de período, situação (em aberto / concluídos) e unidade, e **PDF** no layout do relatório TecnosIT
+  - por padrão mostra os abertos nos últimos 90 dias e todos que ainda estão em aberto
+  - o número leva à página de acompanhamento do chamado
+  - link com token próprio (diferente do link de abertura): criar, desativar ou gerar novo (o anterior para de
+    funcionar); página não indexável e sem cache
+- PDFs com nome de cliente acentuado (ex.: "Condomínio") baixavam com erro: nome do arquivo agora sem acento
+
 ## 1.27.0 — 2026-11-10
 - **SLA dos chamados** com três marcos gravados sozinhos:
   - **1º atendimento**: a equipe registra/edita uma ação ou o chamado sai de "Aberto"

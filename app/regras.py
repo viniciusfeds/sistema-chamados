@@ -96,3 +96,10 @@ def de_html_legado(texto: str | None) -> str:
     t = re.sub(r"<br\s*/?>", "\n", t)
     t = re.sub(r"<[^>]+>", "", t)
     return html.unescape(t)
+
+
+def nome_arquivo(txt: str) -> str:
+    """Nome seguro para Content-Disposition (sem acento, só ASCII)."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", txt or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", t).strip("_") or "arquivo"

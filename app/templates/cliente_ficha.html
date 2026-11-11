@@ -88,6 +88,21 @@
     <button class="btn peq sec" name="operacao" value="link">{{ 'Desativar link' if cli.abertura_publica else 'Ativar link' }}</button>
     <button class="btn peq sec" name="operacao" value="novo_link" onclick="return confirm('Gerar um novo link? O link atual vai parar de funcionar.')">Gerar novo link</button>
   </form>
+  <h2 style="margin-top:18px" id="relatorio">Link de relatório de chamados</h2>
+  <p class="dica" style="margin-top:0">Página sem login com os chamados do cliente (número, data de abertura, unidade, assunto e status), com filtro de período e PDF. Quem tiver o link vê: envie só aos responsáveis.</p>
+  {% if cli.relatorio_token %}
+    {{ copiar(base ~ '/relatorio-cliente/' ~ cli.relatorio_token) }}
+    <a class="dica" href="/relatorio-cliente/{{ cli.relatorio_token }}" target="_blank">Abrir relatório ↗</a>
+  {% else %}<p class="muted" style="margin:4px 0">Link de relatório desativado.</p>{% endif %}
+  {% if u.papel == 'admin' %}
+  <form method="post" action="/admin/clientes/{{ cli.id }}/relatorio-link" class="acoes-orc" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if cli.relatorio_token %}
+    <button class="btn peq sec" name="operacao" value="desativar">Desativar link</button>
+    <button class="btn peq sec" name="operacao" value="novo" onclick="return confirm('Gerar um novo link? O atual vai parar de funcionar.')">Gerar novo link</button>
+    {% else %}<button class="btn peq" name="operacao" value="ativar">Criar link de relatório</button>{% endif %}
+  </form>
+  {% endif %}
   <h2 style="margin-top:18px">Agente local (monitoramento)</h2>
   <div class="chave-agente">
     <span class="muted">Chave de ativação:</span> {{ copiar(cli.chave_agente or '', 'Copiar chave') }}

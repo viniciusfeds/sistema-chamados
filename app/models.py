@@ -47,6 +47,7 @@ class Cliente(Base):
     slug_publico: Mapped[str] = mapped_column(String(80), unique=True, index=True, default=novo_token)
     abertura_publica: Mapped[bool] = mapped_column(Boolean, default=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    relatorio_token: Mapped[str | None] = mapped_column(String(48), nullable=True, unique=True, index=True)  # link público
     sla_horario: Mapped[str | None] = mapped_column(String(10), nullable=True)   # None = padrão / comercial / 24x7
     sla_metas: Mapped[dict | None] = mapped_column(JSON, nullable=True)          # {"urgente": [1, 4, 8], …} em horas
     chave_agente: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True,

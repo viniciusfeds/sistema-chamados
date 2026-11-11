@@ -68,7 +68,8 @@ def indicadores_pdf(cliente: str = "", unidade: str = "", de: str = "", ate: str
     nome = (cli.nome if cli else "Todos os clientes") + (f" — {un.nome}" if un else "")
     periodo = f"{ini:%d/%m/%Y} a {fim:%d/%m/%Y}"
     pdf = pdf_indicadores(sla.indicadores(lista), nome, periodo, sla.horario_cliente(cli), sla.metas_cliente(cli))
-    arq = f"Indicadores_SLA_{(cli.nome if cli else 'Geral').replace(' ', '_')}_{ini:%Y-%m}.pdf"
+    from . import regras
+    arq = f"Indicadores_SLA_{regras.nome_arquivo(cli.nome if cli else 'Geral')}_{ini:%Y-%m}.pdf"
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{arq}"'})
 
 

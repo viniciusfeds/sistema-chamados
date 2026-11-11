@@ -1,0 +1,43 @@
+{% extends "publico_base.html" %}
+{% from "_macros.html" import selo %}
+{% block titulo %}Chamados {{ cli.nome }}{% endblock %}
+{% block cabecalho %}{{ cli.nome }}{% endblock %}
+{% block conteudo %}
+{% set qs = 'de=' ~ ini.isoformat() ~ '&ate=' ~ fim.isoformat() ~ '&situacao=' ~ situacao ~ '&unidade=' ~ (unidade_id or '') %}
+<div class="cab">
+  <div><h1>Relatório de chamados</h1>
+    <div class="muted">{{ cli.nome }} · abertos de {{ ini|data }} a {{ fim|data }}{% if situacao == '' %} e todos ainda em aberto{% endif %} · atualizado {{ atualizado.strftime('%d/%m/%Y %H:%M') }}</div></div>
+  <a class="btn" href="/relatorio-cliente/{{ token }}/pdf?{{ qs }}" target="_blank">Baixar PDF</a>
+</div>
+<div class="card">
+  <form class="filtros" method="get">
+    <div><label for="de">De</label><input type="date" id="de" name="de" value="{{ ini.isoformat() }}"></div>
+    <div><label for="ate">Até</label><input type="date" id="ate" name="ate" value="{{ fim.isoformat() }}"></div>
+    <div><label for="situacao">Situação</label><select id="situacao" name="situacao">
+      {% for k, v in SITUACOES.items() %}<option value="{{ k }}" {{ 'selected' if situacao == k }}>{{ v }}</option>{% endfor %}</select></div>
+    {% if unidades|length > 1 %}<div><label for="unidade">Unidade</label><select id="unidade" name="unidade"><option value="">Todas</option>
+      {% for x in unidades %}<option value="{{ x.id }}" {{ 'selected' if unidade_id == x.id }}>{{ x.nome }}</option>{% endfor %}</select></div>{% endif %}
+    <div><button class="btn">Filtrar</button></div>
+  </form>
+</div>
+<div class="cards">
+  <a style="--c:#2B2B2B"><b>{{ lista|length }}</b><span>Chamados</span></a>
+  {% for k in ORDEM_STATUS %}{% if cont[k] %}<a style="--c:{{ cor(k) }}"><b>{{ cont[k] }}</b><span>{{ rotulo(k) }}</span></a>{% endif %}{% endfor %}
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>Chamado</th><th>Abertura</th><th>Unidade</th><th>Assunto</th><th>Status</th></tr></thead>
+  <tbody>{% for c, sit in lista %}
+  <tr>
+    <td data-l="Chamado">{% if c.token_publico %}<a href="/acompanhar/{{ c.token_publico }}" target="_blank"><b>{{ c.numero_fmt }}</b></a>{% else %}<b>{{ c.numero_fmt }}</b>{% endif %}</td>
+    <td data-l="Abertura">{{ c.abertura|data }}</td>
+    <td data-l="Unidade">{{ c.unidade.nome }}</td>
+    <td data-l="Assunto">{{ c.assunto }}</td>
+    <td data-l="Status">{{ selo(sit) }}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhum chamado com esses filtros.</p>{% endif %}
+</div>
+<p class="dica">Clique no número para ver o andamento detalhado do chamado.</p>
+{% endblock %}

@@ -2887,3 +2887,30 @@ def test_sla_marcos_indicadores_e_pdf(monkeypatch):
     assert "desconsiderado: Cliente não liberou o acesso" in pg
     with SessionLocal() as db:
         cli = db.get(Cliente, IDS["sky"]); cli.sla_horario = None; cli.sla_metas = None; db.commit()
+
+
+def test_link_publico_relatorio_do_cliente():
+    from app.models import Cliente
+    adm = entrar("admin@t.com")
+    pg = adm.get(f"/clientes/{IDS['top']}").text
+    assert "Criar link de relatório" in pg
+    adm.post(f"/admin/clientes/{IDS['top']}/relatorio-link", data={"csrf": _csrf(pg), "operacao": "ativar"})
+    with SessionLocal() as db:
+        tok = db.get(Cliente, IDS["top"]).relatorio_token
+    assert tok and len(tok) >= 24
+    anon = TestClient(app)
+    r = anon.get(f"/relatorio-cliente/{tok}?de=2020-01-01")
+    assert r.status_code == 200 and "Relatório de chamados" in r.text and "Top Torre A" in r.text
+    assert "Portão travado" in r.text and "SkyFit" not in r.text.split("<main")[-1]   # só chamados desse cliente
+    assert r.headers["x-robots-tag"].startswith("noindex") and "no-store" in r.headers["cache-control"]
+    assert "Concluídos" in r.text
+    assert anon.get(f"/relatorio-cliente/{tok}/pdf?de=2020-01-01").content.startswith(b"%PDF")
+    assert anon.get("/relatorio-cliente/" + "x" * 32).status_code == 404
+    # novo link invalida o anterior; desativar tira do ar
+    pg = adm.get(f"/clientes/{IDS['top']}").text
+    assert f"/relatorio-cliente/{tok}" in pg
+    adm.post(f"/admin/clientes/{IDS['top']}/relatorio-link", data={"csrf": _csrf(pg), "operacao": "novo"})
+    assert anon.get(f"/relatorio-cliente/{tok}").status_code == 404
+    adm.post(f"/admin/clientes/{IDS['top']}/relatorio-link", data={"csrf": _csrf(pg), "operacao": "desativar"})
+    with SessionLocal() as db:
+        assert db.get(Cliente, IDS["top"]).relatorio_token is None

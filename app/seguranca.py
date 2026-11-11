@@ -35,7 +35,7 @@ class CabecalhosSeguranca:
                 if config.COOKIE_SEGURO and b"strict-transport-security" not in existentes:
                     h.append((b"strict-transport-security", b"max-age=31536000"))
                 caminho = scope.get("path", "")
-                if caminho.startswith(("/acompanhar/", "/assinar/", "/orcamento/", "/boleto/", "/ponto",
+                if caminho.startswith(("/acompanhar/", "/relatorio-cliente/", "/assinar/", "/orcamento/", "/boleto/", "/ponto",
                                        "/financeiro", "/rh", "/admin")) and b"cache-control" not in existentes:
                     h.append((b"cache-control", b"private, no-store"))
                 msg["headers"] = h
