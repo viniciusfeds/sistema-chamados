@@ -153,6 +153,7 @@ class Chamado(Base):
     assunto: Mapped[str] = mapped_column(String(200))
     problema: Mapped[str] = mapped_column(Text)
     abertura: Mapped[date] = mapped_column(Date)
+    abertura_hora: Mapped[time | None] = mapped_column(Time, nullable=True)   # vazio = hora em que foi registrado
     responsavel: Mapped[str | None] = mapped_column(String(160), nullable=True)
     diagnostico_titulo: Mapped[str | None] = mapped_column(String(120), nullable=True)
     diagnostico: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [[cabeçalho...], [linha...]]
@@ -218,6 +219,24 @@ class Chamado(Base):
         if self.criado_em:
             datas.append(self.criado_em)
         return max(datas) if datas else None
+
+    @property
+    def hora_abertura(self):
+        """Hora de abertura: a informada pela equipe ou a do registro no sistema (se for no mesmo dia)."""
+        if self.abertura_hora:
+            return self.abertura_hora
+        if self.criado_em and self.abertura:
+            from datetime import timezone
+            from . import config
+            loc = self.criado_em.replace(tzinfo=timezone.utc).astimezone(config.FUSO)
+            if loc.date() == self.abertura:
+                return loc.time().replace(second=0, microsecond=0)
+        return None
+
+    @property
+    def abertura_fmt(self):
+        h = self.hora_abertura
+        return self.abertura.strftime("%d/%m/%Y") + (h.strftime(" às %H:%M") if h else "") if self.abertura else ""
 
     @property
     def acoes_ordenadas(self):

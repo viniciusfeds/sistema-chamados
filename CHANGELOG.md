@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.28.2 — 2026-11-11
+- **Hora de abertura do chamado**: aparece junto com a data ("03/11/2026 às 19:51") no chamado, na página de
+  acompanhamento, no PDF do chamado, no relatório (PDF e link do cliente), na ficha do equipamento e na API
+  (`abertura_hora`)
+  - chamados já existentes usam a hora em que foram registrados no sistema (quando a data de abertura é a mesma)
+  - a equipe pode informar a hora ao abrir (ex.: cliente ligou mais cedo) e corrigir em *Editar chamado*
+  - o SLA passa a contar da abertura informada quando ela é anterior ao registro
+
 ## 1.28.1 — 2026-11-11
 - Relatório do cliente (link público e PDF): coluna **Motivo** nos chamados não concluídos — o texto da caixa de
   status, se a equipe escreveu um, ou a ação que está segurando o status (ex.: "Pendente — aguardando peça do

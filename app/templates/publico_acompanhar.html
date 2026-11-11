@@ -23,7 +23,7 @@
   <dl class="dados">
     <dt>Unidade</dt><dd>{{ ch.unidade.nome }}</dd>
     <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
-    <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
+    <dt>Abertura</dt><dd>{{ ch.abertura_fmt }}</dd>
     {% if ch.solicitante_nome %}<dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}</dd>{% endif %}
   </dl>
   <h2>Problema relatado</h2>

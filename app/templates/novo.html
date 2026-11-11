@@ -14,6 +14,9 @@
     {% if u.equipe %}
     <div class="campo"><label for="abertura">Data de abertura</label>
       <input id="abertura" type="date" name="abertura" value="{{ hoje.isoformat() }}"></div>
+    <div class="campo"><label for="abertura_hora">Hora de abertura</label>
+      <input id="abertura_hora" type="time" name="abertura_hora" placeholder="agora">
+      <div class="dica">Vazio = agora. Preencha se o cliente avisou antes (ex.: por telefone).</div></div>
     {% endif %}
   </div>
   {% endif %}

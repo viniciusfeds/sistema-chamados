@@ -31,7 +31,7 @@
   <tbody>{% for c, sit in lista %}
   <tr>
     <td data-l="Chamado">{% if c.token_publico %}<a href="/acompanhar/{{ c.token_publico }}" target="_blank"><b>{{ c.numero_fmt }}</b></a>{% else %}<b>{{ c.numero_fmt }}</b>{% endif %}</td>
-    <td data-l="Abertura">{{ c.abertura|data }}</td>
+    <td data-l="Abertura">{{ c.abertura_fmt }}</td>
     <td data-l="Unidade">{{ c.unidade.nome }}</td>
     <td data-l="Assunto">{{ c.assunto }}</td>
     <td data-l="Status">{{ selo(sit) }}</td>

@@ -142,7 +142,7 @@
     <tr class="link" onclick="location.href='/chamados/{{ c.numero }}'">
       <td data-l="Ticket"><a class="num" href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a></td>
       <td data-l="Assunto">{{ c.assunto }}</td>
-      <td data-l="Abertura">{{ c.abertura|data }}</td>
+      <td data-l="Abertura">{{ c.abertura_fmt }}</td>
       <td data-l="Status">{{ selo(status_geral(c)) }}</td>
     </tr>
     {% endfor %}

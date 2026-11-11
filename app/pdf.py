@@ -120,7 +120,7 @@ def pdf_chamado(ch) -> bytes:
     E = [Paragraph("RELATÓRIO DE CHAMADO", sTitulo), Spacer(1, 4),
          Paragraph(para_pdf(ch.titulo), sSub), Spacer(1, 10)]
     linhas = [("UNIDADE", ch.unidade.nome), ("ASSUNTO", ch.assunto),
-              ("DATA DE ABERTURA", ch.abertura.strftime("%d/%m/%Y"))]
+              ("ABERTURA", ch.abertura_fmt)]
     if ch.solicitante_nome:
         linhas.append(("SOLICITANTE", ch.solicitante_nome))
     if ch.prioridade_ok in ("alta", "urgente"):
@@ -312,7 +312,7 @@ def pdf_relatorio(chamados, periodo: str, subtitulo_extra: str = "", cliente_nom
             nome_un = c.unidade.nome_curto if varios is False else c.unidade.nome
             linhas.append([Paragraph(c.numero_fmt, sTk), Paragraph(para_pdf(nome_un), sTd),
                            Paragraph(para_pdf(c.assunto), sTd),
-                           Paragraph(c.abertura.strftime("%d/%m/%Y"), sTd),
+                           Paragraph(c.abertura_fmt.replace(" às ", "<br/>"), sTd),
                            Paragraph(para_pdf(c.resumo or regras.status_texto(c, s)) if s == "concluido" else
                                      "<b>" + para_pdf(regras.motivo(c, s)) + "</b>", sTd),
                            Paragraph(f'<font color="white">{regras.rotulo(s)}</font>', sSt)])

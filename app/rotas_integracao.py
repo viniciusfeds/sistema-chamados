@@ -67,6 +67,7 @@ def _resumo(ch: Chamado, request) -> dict:
             "cliente": ch.unidade.cliente.nome, "assunto": ch.assunto, "prioridade": ch.prioridade_ok,
             "situacao": regras.rotulo(st), "situacao_codigo": st, "aberto": st != "concluido",
             "abertura": ch.abertura.isoformat() if ch.abertura else None,
+            "abertura_hora": ch.hora_abertura.strftime("%H:%M") if ch.hora_abertura else None,
             "tecnico": ch.tecnico.nome if getattr(ch, "tecnico", None) else None,
             "ultima_acao": {"quando": ult.quando, "descricao": ult.descricao, "status": ult.status} if ult else None,
             "link": f"{_base(request)}/acompanhar/{ch.token_publico}"}

@@ -203,13 +203,22 @@ def instalar():
 
 
 # ------------------------------------------------------------------ avaliação
+def inicio(ch):
+    """Início do relógio: a abertura informada (data + hora) quando é antes do registro no sistema."""
+    if ch.abertura and ch.hora_abertura:
+        loc = datetime.combine(ch.abertura, ch.hora_abertura).replace(tzinfo=config.FUSO)
+        ab = loc.astimezone(timezone.utc).replace(tzinfo=None)
+        return min(ab, ch.criado_em) if ch.criado_em else ab
+    return ch.criado_em
+
+
 def avaliar(ch, agora=None) -> dict:
     """Para cada marco: meta (min), decorrido (min), situação (ok / fora / em_risco / em_curso / sem)."""
     agora = agora or _agora()
     cli = ch.unidade.cliente if ch.unidade else None
     horario = horario_cliente(cli)
     meta_h = metas_cliente(cli)[ch.prioridade_ok]
-    ini = ch.criado_em or agora
+    ini = inicio(ch) or agora
     res = {"horario": horario, "expurgo": bool(ch.sla_expurgo), "marcos": {}}
     for i, (k, rot) in enumerate(MARCOS):
         fim = getattr(ch, f"sla_{k}_em")

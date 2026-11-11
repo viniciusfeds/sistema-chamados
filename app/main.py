@@ -417,7 +417,7 @@ def novo_form(request: Request, u: Usuario = Depends(usuario_atual), db: Session
 
 @app.post("/chamados/novo", dependencies=[Depends(checar_csrf)])
 def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
-         unidade_id: str = Form(""), titulo: str = Form(""), abertura: str = Form(""),
+         unidade_id: str = Form(""), titulo: str = Form(""), abertura: str = Form(""), abertura_hora: str = Form(""),
          prioridade: str = Form("normal"), tecnico_id: str = Form(""),
          acao_descricao: str = Form(""), acao_status: str = Form("Concluído"),
          acao_data: str = Form(""), acao_hora: str = Form(""), tipo_ids: list[str] = Form(default=[]),
@@ -434,7 +434,8 @@ def novo(request: Request, assunto: str = Form(...), problema: str = Form(...),
                  problema=problema.strip(), origem="sistema", prioridade=_prioridade(prioridade),
                  tecnico_id=(_tecnico_valido(db, _int(tecnico_id)) or (u.id if u.restrito_atribuidos else None))
                  if u.equipe else None,
-                 abertura=_data(abertura, hoje) if u.equipe else hoje, criado_por_id=u.id,
+                 abertura=_data(abertura, hoje) if u.equipe else hoje,
+                 abertura_hora=_hora(abertura_hora) if u.equipe else None, criado_por_id=u.id,
                  solicitante_nome=None if u.equipe else u.nome)
     ch.tipos = _tipos_escolhidos(db, tipo_ids)
     quem = "pela equipe técnica" if u.equipe else f"por {u.nome}"
@@ -651,7 +652,7 @@ def _apos_mudanca(ch, antes):
 @app.post("/chamados/{numero}/editar", dependencies=[Depends(checar_csrf)])
 def editar(request: Request, numero: int, unidade_id: int = Form(...), titulo: str = Form(...),
            assunto: str = Form(...), problema: str = Form(...), abertura: str = Form(...),
-           responsavel: str = Form(""), diagnostico_titulo: str = Form(""), diagnostico: str = Form(""),
+           abertura_hora: str = Form(""), responsavel: str = Form(""), diagnostico_titulo: str = Form(""), diagnostico: str = Form(""),
            status_texto: str = Form(""), resumo: str = Form(""), proximo: str = Form(""),
            u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
@@ -660,6 +661,9 @@ def editar(request: Request, numero: int, unidade_id: int = Form(...), titulo: s
         raise HTTPException(400, "Unidade inválida.")
     ch.unidade_id, ch.titulo, ch.assunto = un.id, titulo.strip(), assunto.strip()
     ch.problema, ch.abertura = problema.strip(), _data(abertura, ch.abertura)
+    nova_hora = _hora(abertura_hora)
+    if nova_hora != ch.hora_abertura:
+        ch.abertura_hora = nova_hora
     ch.responsavel = responsavel.strip() or None
     ch.diagnostico_titulo = diagnostico_titulo.strip() or None
     ch.diagnostico = _diag_de_texto(diagnostico)

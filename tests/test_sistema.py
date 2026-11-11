@@ -140,6 +140,7 @@ def test_unidade_abre_chamado_e_nao_edita():
     IDS["novo"] = r.headers["location"]
     p = c.get(IDS["novo"]).text
     assert "SkyFit Carrão" in p and "Aberto" in p and "Atendimento técnico" in p
+    assert re.search(r"<dt>Abertura</dt><dd>\d\d/\d\d/\d{4} às \d\d:\d\d</dd>", p)   # dia e hora
     r = c.post(f"{IDS['novo']}/acoes", data={"descricao": "x", "status": "Concluído", "csrf": tok})
     assert r.status_code == 403
 
@@ -2820,6 +2821,22 @@ def test_contrato_sem_nf_emite_recibo(monkeypatch):
     # cancelar
     pg = adm.get(f"/financeiro/recibos/{rid}").text
     assert "cancelado" in adm.post(f"/financeiro/recibos/{rid}/cancelar", data={"csrf": _csrf(pg), "motivo": "erro"}).text
+
+
+def test_hora_de_abertura_editavel():
+    from app.models import Chamado
+    adm = entrar("admin@t.com")
+    tok = _csrf(adm.get("/chamados/novo").text)
+    r = adm.post("/chamados/novo", data={"assunto": "Câmera offline", "problema": "Sem imagem",
+                                         "unidade_id": str(IDS["torre"]), "abertura": "2026-11-02",
+                                         "abertura_hora": "07:45", "csrf": tok}, follow_redirects=False)
+    url = r.headers["location"]
+    pg = adm.get(url).text
+    assert "02/11/2026 às 07:45" in pg and 'name="abertura_hora" value="07:45"' in pg
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == int(url.rsplit("/", 1)[1])))
+        token = ch.token_publico
+    assert "02/11/2026 às 07:45" in TestClient(app).get(f"/acompanhar/{token}").text
 
 
 def test_sla_marcos_indicadores_e_pdf(monkeypatch):

@@ -95,7 +95,7 @@
     <dt>Cliente</dt><dd>{{ ch.unidade.cliente.nome }}</dd>
     <dt>Unidade</dt><dd>{{ ch.unidade.nome }}</dd>
     <dt>Assunto</dt><dd>{{ ch.assunto }}</dd>
-    <dt>Data de abertura</dt><dd>{{ ch.abertura|data }}</dd>
+    <dt>Abertura</dt><dd>{{ ch.abertura_fmt }}</dd>
     {% if ch.solicitante_nome %}
     <dt>Solicitante</dt><dd>{{ ch.solicitante_nome }}{% if ch.origem == 'link' %} <span class="tag">via link</span>{% elif ch.origem == 'whatsapp' %} <span class="tag verde">via WhatsApp</span>{% elif ch.origem == 'monitor' %} <span class="tag alerta">automático</span>{% endif %}</dd>
     {% if u.equipe and (ch.solicitante_contato or ch.solicitante_email) %}
@@ -305,6 +305,7 @@
         {% if ch.unidade.ativa %}{{ select_unidades(grupos, 'unidade_id', ch.unidade_id, id='ed_unidade') }}
         {% else %}<input type="hidden" name="unidade_id" value="{{ ch.unidade_id }}"><p>{{ ch.unidade.nome }} (inativa)</p>{% endif %}</div>
       <div class="campo"><label>Data de abertura</label><input type="date" name="abertura" value="{{ ch.abertura.isoformat() }}"></div>
+      <div class="campo"><label>Hora de abertura</label><input type="time" name="abertura_hora" value="{{ ch.hora_abertura.strftime('%H:%M') if ch.hora_abertura else '' }}"></div>
     </div>
     <div class="campo"><label>Assunto</label><input name="assunto" value="{{ ch.assunto }}" required></div>
     <div class="campo"><label>Título no PDF</label><input name="titulo" value="{{ ch.titulo }}" required></div>
