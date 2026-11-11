@@ -27,7 +27,7 @@
 <div class="card" style="padding:0;overflow:hidden">
 {% if lista %}
 <table class="resp">
-  <thead><tr><th>Chamado</th><th>Abertura</th><th>Unidade</th><th>Assunto</th><th>Status</th></tr></thead>
+  <thead><tr><th>Chamado</th><th>Abertura</th><th>Unidade</th><th>Assunto</th><th>Status</th><th>Motivo</th></tr></thead>
   <tbody>{% for c, sit in lista %}
   <tr>
     <td data-l="Chamado">{% if c.token_publico %}<a href="/acompanhar/{{ c.token_publico }}" target="_blank"><b>{{ c.numero_fmt }}</b></a>{% else %}<b>{{ c.numero_fmt }}</b>{% endif %}</td>
@@ -35,9 +35,10 @@
     <td data-l="Unidade">{{ c.unidade.nome }}</td>
     <td data-l="Assunto">{{ c.assunto }}</td>
     <td data-l="Status">{{ selo(sit) }}</td>
+    <td data-l="Motivo">{% if sit != 'concluido' %}{{ motivo(c, sit) }}{% else %}<span class="muted">—</span>{% endif %}</td>
   </tr>{% endfor %}</tbody>
 </table>
 {% else %}<p class="muted" style="padding:16px">Nenhum chamado com esses filtros.</p>{% endif %}
 </div>
-<p class="dica">Clique no número para ver o andamento detalhado do chamado.</p>
+<p class="dica">Motivo: o que está pendente ou o próximo passo dos chamados que ainda não foram concluídos. Clique no número para ver o andamento detalhado do chamado.</p>
 {% endblock %}

@@ -304,7 +304,7 @@ def pdf_relatorio(chamados, periodo: str, subtitulo_extra: str = "", cliente_nom
         sTk = st("tk", fontName="Carlito-Bold", fontSize=10, leading=11.5, textColor=LARANJA)
         sSt = st("ss", fontName="Carlito-Bold", fontSize=9, leading=12)
         linhas = [[Paragraph(h, sTh) for h in
-                   ("Ticket", "Unidade", "Assunto", "Abertura", "Situação atual", "Status")]]
+                   ("Ticket", "Unidade", "Assunto", "Abertura", "Motivo / situação", "Status")]]
         extra = [("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5)]
         varios = len({c.unidade.cliente_id for c in chamados}) > 1
         for i, c in enumerate(chamados, start=1):
@@ -313,7 +313,8 @@ def pdf_relatorio(chamados, periodo: str, subtitulo_extra: str = "", cliente_nom
             linhas.append([Paragraph(c.numero_fmt, sTk), Paragraph(para_pdf(nome_un), sTd),
                            Paragraph(para_pdf(c.assunto), sTd),
                            Paragraph(c.abertura.strftime("%d/%m/%Y"), sTd),
-                           Paragraph(para_pdf(c.resumo or regras.status_texto(c, s)), sTd),
+                           Paragraph(para_pdf(c.resumo or regras.status_texto(c, s)) if s == "concluido" else
+                                     "<b>" + para_pdf(regras.motivo(c, s)) + "</b>", sTd),
                            Paragraph(f'<font color="white">{regras.rotulo(s)}</font>', sSt)])
             extra.append(("BACKGROUND", (5, i), (5, i), colors.HexColor(regras.cor(s))))
         cw = [13 * mm, 22 * mm, 36 * mm, 21 * mm, 0, 25 * mm]

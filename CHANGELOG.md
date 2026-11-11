@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.28.1 — 2026-11-11
+- Relatório do cliente (link público e PDF): coluna **Motivo** nos chamados não concluídos — o texto da caixa de
+  status, se a equipe escreveu um, ou a ação que está segurando o status (ex.: "Pendente — aguardando peça do
+  fornecedor (desde 05/11/2026)", "Visita técnica (agendado para 12/11/2026 às 09:00)")
+- No PDF do relatório a coluna passa a se chamar "Motivo / situação" (concluídos continuam com a situação atual)
+
 ## 1.28.0 — 2026-11-11
 - **Link público de relatório por cliente** (ficha do cliente → *Link de relatório de chamados*): página sem login
   com os chamados do cliente — número, data de abertura, unidade, assunto e status —, contadores por status,

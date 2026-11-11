@@ -103,3 +103,28 @@ def nome_arquivo(txt: str) -> str:
     import unicodedata
     t = unicodedata.normalize("NFKD", txt or "").encode("ascii", "ignore").decode()
     return re.sub(r"[^A-Za-z0-9._-]+", "_", t).strip("_") or "arquivo"
+
+
+_ACAO_DO_STATUS = {"andamento": "Em andamento", "pendente": "Pendente", "agendado": "Agendado",
+                   "validacao": "Aguardando validação", "aberto": "Aguardando"}
+
+
+def motivo(chamado, st=None) -> str:
+    """Por que o chamado ainda não foi concluído: a caixa de status (se a equipe escreveu) ou a ação que está
+    segurando o status (ex.: "Pendente — aguardando peça do fornecedor"), com a data quando agendada."""
+    st = st or status_geral(chamado)
+    if st in ("concluido", "cancelado"):
+        return ""
+    if chamado.status_texto:
+        return chamado.status_texto
+    alvo = _ACAO_DO_STATUS.get(st)
+    acao = next((a for a in chamado.acoes_ordenadas if a.status == alvo and (a.descricao or "").strip()), None)
+    if not acao:
+        return TEXTO_PADRAO[st]
+    txt = " ".join(acao.descricao.split())
+    if acao.data:
+        quando = acao.data.strftime("%d/%m/%Y") + (acao.hora.strftime(" às %H:%M") if acao.hora else "")
+        txt += f" ({'agendado para ' if st == 'agendado' else 'desde '}{quando})"
+    elif acao.quando_texto:
+        txt += f" ({acao.quando_texto.lower()})"
+    return txt

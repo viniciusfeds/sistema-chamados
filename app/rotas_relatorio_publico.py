@@ -14,6 +14,8 @@ from .main import _data, _int, agora, app, base_url, flash, render, voltar
 from .models import Chamado, Cliente, Unidade, Usuario
 
 SITUACOES = {"": "Todas", "abertos": "Em aberto", "concluidos": "Concluídos"}
+from .main import tpl  # noqa: E402
+tpl.env.globals["motivo"] = regras.motivo
 
 
 def _cliente(db, token) -> Cliente:
