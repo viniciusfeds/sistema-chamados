@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Emitir recibo{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('notas') }}
+<div class="cab">
+  <div><h1>Emitir recibo</h1>
+    <div class="muted">{% if t %}Conta a receber: {{ t.descricao }} · {{ t.valor|rs }} · vence {{ t.vencimento|data }}{% if t.contrato and not t.contrato.precisa_nf %} · contrato sem nota fiscal{% endif %}{% else %}Recibo avulso{% endif %}</div></div>
+  <a class="btn sec" href="{{ '/financeiro/receber' if t else '/financeiro/notas#recibos' }}">Voltar</a>
+</div>
+<form method="post" action="/financeiro/recibos/emitir" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="titulo_id" value="{{ t.id if t else '' }}">
+  <div class="grid3">
+    <div class="campo"><label>Recebemos de</label><select name="cliente_fiscal_id" required><option value="">— escolha —</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if d.cliente_fiscal_id == c.id }}>{{ c.nome }} · {{ c.documento_fmt|parcial("documento") }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Valor (R$)</label><input name="valor" value="{{ d.valor|brl_num }}" inputmode="decimal" required></div>
+    <div class="campo"><label>Data do recibo</label><input type="date" name="data" value="{{ d.data.isoformat() }}" required></div>
+  </div>
+  <div class="campo"><label>Referente a</label><input name="descricao" value="{{ d.descricao }}" maxlength="1000" required
+    placeholder="Ex.: manutenção preventiva do sistema de CFTV — novembro/2026"></div>
+  <div class="grid3">
+    <div class="campo"><label>Forma de pagamento</label><select name="forma"><option value="">— não informar —</option>
+      {% for k, v in FORMAS.items() %}<option value="{{ k }}" {{ 'selected' if d.forma == k }}>{{ v }}</option>{% endfor %}</select></div>
+    {% if t and t.status == 'aberto' %}
+    <div class="campo" style="grid-column:span 2"><label>&nbsp;</label><label class="check"><input type="checkbox" name="marcar_pago" value="1" style="width:auto" checked> Marcar a conta como paga nesta data</label>
+      <div class="dica">O recibo dá quitação: emita quando o valor tiver sido recebido.</div></div>
+    {% endif %}
+  </div>
+  <button class="btn">Emitir recibo</button>
+</form>
+{% endblock %}

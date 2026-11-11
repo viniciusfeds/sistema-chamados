@@ -1821,3 +1821,4 @@ from . import rotas_pagar  # noqa: E402,F401
 from . import rotas_seguranca  # noqa: E402,F401
 from . import rotas_integracao  # noqa: E402,F401
 from . import rotas_nfse  # noqa: E402,F401
+from . import rotas_recibo  # noqa: E402,F401

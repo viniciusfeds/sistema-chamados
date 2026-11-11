@@ -10,6 +10,12 @@
 </div>
 {% if ambiente == 'homologacao' %}<div class="card aviso-card">🧪 Homologação: esta nota é de <b>teste</b> e não tem valor fiscal.</div>
 {% elif ambiente == 'desligado' %}<div class="card aviso-card">A emissão está desligada em <a href="/admin/configuracoes#nfse">Configurações</a>.</div>{% endif %}
+{% if t and t.contrato and not t.contrato.precisa_nf %}
+<div class="card aviso-card" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+  <div>📄 O contrato <b>{{ t.contrato.descricao }}</b> está marcado como <b>sem nota fiscal</b>. Para esta cobrança, emita um recibo.</div>
+  <a class="btn" href="/financeiro/recibos/novo?titulo={{ t.id }}">Emitir recibo</a>
+</div>
+{% endif %}
 {% if r and r.erro %}<div class="card aviso-card" style="border-color:#B3261E"><b>Motivo da recusa:</b> {{ r.erro }}</div>{% endif %}
 
 <form method="post" action="/financeiro/notas/emitir" class="card" id="form-nota">

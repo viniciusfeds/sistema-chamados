@@ -1,11 +1,28 @@
 {% extends "base.html" %}
 {% from "_macros.html" import abas_financeiro with context %}
-{% block titulo %}Notas fiscais{% endblock %}
+{% block titulo %}Notas fiscais
+<h2 id="recibos" style="margin-top:24px">Recibos</h2>
+<div class="card" style="padding:0;overflow:hidden">
+{% if recibos %}
+<table class="resp">
+  <thead><tr><th>Recibo</th><th>Cliente</th><th>Referente a</th><th class="valor">Valor</th><th></th></tr></thead>
+  <tbody>{% for rc in recibos %}
+  <tr class="{{ 'inativo' if rc.cancelado }}">
+    <td data-l="Recibo"><a href="/financeiro/recibos/{{ rc.id }}"><b>Nº {{ rc.numero_fmt }}</b></a><div class="muted">{{ rc.data|data }}{% if rc.cancelado %} · cancelado{% endif %}</div></td>
+    <td data-l="Cliente">{{ rc.cliente_fiscal.nome }}</td>
+    <td data-l="Referente a">{{ rc.descricao }}</td>
+    <td data-l="Valor" class="valor"><b>{{ rc.valor|rs }}</b></td>
+    <td class="acoes"><a class="btn peq sec" href="/financeiro/recibos/{{ rc.id }}/pdf" target="_blank">PDF</a></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhum recibo ainda. Contratos marcados como “sem nota fiscal” mostram o botão <b>Emitir recibo</b> em Contas a receber.</p>{% endif %}
+</div>
+{% endblock %}
 {% block conteudo %}
 {{ abas_financeiro('notas') }}
 <div class="cab">
   <div><h1>Notas fiscais de serviço</h1><div class="muted">NFS-e Nacional · {{ lista|length }} nota(s){% if tot.valor %} · autorizadas {{ tot.valor|rs }}{% if tot.iss %} · ISS retido {{ tot.iss|rs }}{% endif %}{% endif %}</div></div>
-  <div class="acoes-orc"><a class="btn sec" href="/financeiro/notas/diagnostico" title="Consulta na Sefin como o município está configurado">Diagnóstico</a><a class="btn" href="/financeiro/notas/nova">+ Emitir nota</a></div>
+  <div class="acoes-orc"><a class="btn sec" href="/financeiro/recibos/novo">+ Recibo</a><a class="btn sec" href="/financeiro/notas/diagnostico" title="Consulta na Sefin como o município está configurado">Diagnóstico</a><a class="btn" href="/financeiro/notas/nova">+ Emitir nota</a></div>
 </div>
 
 {% if ambiente == 'desligado' %}
@@ -57,5 +74,22 @@
   </tr>{% endfor %}</tbody>
 </table>
 {% else %}<p class="muted" style="padding:16px">Nenhuma nota{% if f.status or f.mes or f.q or f.amb %} com esses filtros{% endif %}.</p>{% endif %}
+</div>
+
+<h2 id="recibos" style="margin-top:24px">Recibos</h2>
+<div class="card" style="padding:0;overflow:hidden">
+{% if recibos %}
+<table class="resp">
+  <thead><tr><th>Recibo</th><th>Cliente</th><th>Referente a</th><th class="valor">Valor</th><th></th></tr></thead>
+  <tbody>{% for rc in recibos %}
+  <tr class="{{ 'inativo' if rc.cancelado }}">
+    <td data-l="Recibo"><a href="/financeiro/recibos/{{ rc.id }}"><b>Nº {{ rc.numero_fmt }}</b></a><div class="muted">{{ rc.data|data }}{% if rc.cancelado %} · cancelado{% endif %}</div></td>
+    <td data-l="Cliente">{{ rc.cliente_fiscal.nome }}</td>
+    <td data-l="Referente a">{{ rc.descricao }}</td>
+    <td data-l="Valor" class="valor"><b>{{ rc.valor|rs }}</b></td>
+    <td class="acoes"><a class="btn peq sec" href="/financeiro/recibos/{{ rc.id }}/pdf" target="_blank">PDF</a></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhum recibo ainda. Contratos marcados como “sem nota fiscal” mostram o botão <b>Emitir recibo</b> em Contas a receber.</p>{% endif %}
 </div>
 {% endblock %}

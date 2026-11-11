@@ -27,7 +27,7 @@
   <tbody>{% for c in lista %}
   <tr class="{{ 'inativo' if not c.ativo }}">
     <td data-l="Contrato"><a href="/financeiro/contratos/{{ c.id }}"><b>{{ c.descricao }}</b></a>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}
-      {% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}{% if c.doc_status %}<span class="selo" style="background:{{ sd[1] }};font-size:.68rem">{{ sd[0] }}</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
+      {% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}{% if not c.precisa_nf %}<span class="tag" title="Não emite nota fiscal: recibo">Recibo</span> {% endif %}{% if c.doc_status %}<span class="selo" style="background:{{ sd[1] }};font-size:.68rem">{{ sd[0] }}</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
     <td data-l="Cliente">{{ c.cliente_fiscal.nome }}</td>
     <td data-l="Valor/mês" class="valor"><b>{{ c.valor|rs }}</b></td>
     <td data-l="Vence dia">{{ c.dia_vencimento }}</td>
@@ -60,6 +60,9 @@
     <div class="campo"><label>Fim <span class="muted">(opcional)</span></label><input type="date" name="fim" value="{{ ed.fim.isoformat() if ed and ed.fim else '' }}"></div>
     <div class="campo"><label>Observações</label><input name="observacoes" value="{{ ed.observacoes or '' if ed else '' }}"></div>
   </div>
+  <div class="campo"><label>Documento fiscal</label>
+    <label class="check"><input type="checkbox" name="emite_nf" value="1" style="width:auto" {{ 'checked' if not ed or ed.precisa_nf }}> Este cliente precisa de nota fiscal (NFS-e)</label>
+    <div class="dica">Desmarcado: as cobranças deste contrato saem com <b>recibo</b> em vez de nota fiscal.</div></div>
   <details {{ 'open' if ed and (ed.nfse_doc_tecnico or ed.nfse_doc_referencia or ed.nfse_info or ed.nfse_pedido or ed.nfse_itens_pedido) }}>
     <summary><b>Informações complementares da nota fiscal</b> <span class="muted">(opcional — vão em todas as NFS-e deste contrato)</span></summary>
     <div class="grid2" style="margin-top:8px">

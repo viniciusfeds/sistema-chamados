@@ -2768,3 +2768,55 @@ def test_nfse_emitir_cancelar_e_lote(monkeypatch):
     # técnico não acessa
     assert entrar("tec@t.com").get("/financeiro/notas", follow_redirects=False).status_code in (303, 403)
     certificado.remover()
+
+
+def test_contrato_sem_nf_emite_recibo(monkeypatch):
+    from app import config
+    from app.models import ClienteFiscal, Contrato, Recibo, Titulo
+    from app.pdf_recibo import extenso
+    assert extenso(123456) == "mil duzentos e trinta e quatro reais e cinquenta e seis centavos"
+    assert extenso(120000) == "mil e duzentos reais" and extenso(100000000) == "um milhão de reais"
+    assert extenso(35099) == "trezentos e cinquenta reais e noventa e nove centavos" and extenso(100) == "um real"
+    monkeypatch.setattr(config, "NFSE_AMBIENTE", "homologacao")
+    adm = entrar("admin@t.com")
+    with SessionLocal() as db:
+        cf = ClienteFiscal(documento="11444777000161", razao_social="Condomínio Sem Nota", email="sindico@cond.com")
+        db.add(cf); db.commit()
+        cf_id = cf.id
+    pg = adm.get("/financeiro/contratos").text
+    assert "precisa de nota fiscal" in pg
+    adm.post("/financeiro/contratos/salvar", data={"csrf": _csrf(pg), "cliente_fiscal_id": cf_id, "valor": "350,00",
+                                                     "descricao": "Manutenção interfonia", "dia_vencimento": "10"})
+    with SessionLocal() as db:
+        ct = db.scalars(select(Contrato).where(Contrato.cliente_fiscal_id == cf_id)).first()
+        assert ct.precisa_nf is False                         # checkbox desmarcado
+        t = Titulo(cliente_fiscal_id=cf_id, contrato_id=ct.id, competencia="2026-11", descricao="Manutenção interfonia",
+                   valor=35099, vencimento=date(2026, 11, 10))
+        db.add(t); db.commit(); t_id = t.id
+    assert "Recibo</span>" in adm.get("/financeiro/contratos").text
+    rec = adm.get("/financeiro/receber?situacao=todos").text
+    trecho = rec.split("Manutenção interfonia")[1][:3000]
+    assert "Emitir recibo" in trecho and "Emitir NFS-e" not in trecho
+    assert "sem nota fiscal" in adm.get(f"/financeiro/notas/nova?titulo={t_id}").text
+    pg = adm.get(f"/financeiro/recibos/novo?titulo={t_id}").text
+    assert "novembro/2026" in pg and "350,99" in pg
+    r = adm.post("/financeiro/recibos/emitir", data={"csrf": _csrf(pg), "titulo_id": t_id, "cliente_fiscal_id": cf_id,
+                                                     "valor": "350,99", "descricao": "Manutenção interfonia — novembro/2026",
+                                                     "data": "2026-11-10", "forma": "pix", "marcar_pago": "1"})
+    assert "emitido" in r.text and "Conta marcada como paga" in r.text
+    with SessionLocal() as db:
+        rc = db.scalars(select(Recibo).where(Recibo.titulo_id == t_id)).one()
+        assert db.get(Titulo, t_id).status == "pago" and rc.forma == "pix"
+        rid, num = rc.id, rc.numero
+    pdf = adm.get(f"/financeiro/recibos/{rid}/pdf").content
+    assert pdf.startswith(b"%PDF")
+    # não emite dois recibos para a mesma conta
+    assert "já tem o recibo" in adm.get(f"/financeiro/recibos/novo?titulo={t_id}").text
+    assert f"Nº {num:04d}" in adm.get("/financeiro/notas").text
+    # lote de NFS-e pula o contrato sem nota
+    pg = adm.get("/financeiro/notas").text
+    r = adm.post("/financeiro/notas/lote", data={"csrf": _csrf(pg), "mes": "2026-11"})
+    assert "sem nota fiscal (use recibo)" in r.text
+    # cancelar
+    pg = adm.get(f"/financeiro/recibos/{rid}").text
+    assert "cancelado" in adm.post(f"/financeiro/recibos/{rid}/cancelar", data={"csrf": _csrf(pg), "motivo": "erro"}).text

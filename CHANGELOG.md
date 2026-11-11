@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.26.0 — 2026-11-10
+- **Contrato com ou sem nota fiscal**: em Contratos, *Este cliente precisa de nota fiscal (NFS-e)*. Desmarcado, o
+  contrato aparece com a etiqueta **Recibo** e as cobranças dele saem com recibo
+- **Recibos de pagamento** com numeração própria (0001, 0002…): PDF no layout TecnosIT com duas vias, valor por
+  extenso, forma de pagamento, data e assinatura da empresa; envio por e-mail e cancelamento
+  - Contas a receber: contas de contrato sem nota mostram **📄 Emitir recibo** no lugar de *Emitir NFS-e*; ao emitir,
+    a conta pode ser marcada como paga na mesma hora
+  - Tela de emissão da NFS-e avisa quando o contrato é sem nota e oferece **Emitir recibo**
+  - Notas fiscais: botão *+ Recibo* (avulso) e lista dos recibos emitidos
+  - O lote de NFS-e dos contratos pula os contratos sem nota
+
 ## 1.25.0 — 2026-11-09
 - **API de chamados para o n8n** (token `X-Nexus-Token`), completando a da URA:
   - `GET /api/integracao/chamados?telefone=` lista os chamados do telefone (abertos, concluídos ou todos)

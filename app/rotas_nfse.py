@@ -213,7 +213,9 @@ def notas(request: Request, status: str = "", amb: str = "", mes: str = "", q: s
         falta.append("certificado A1")
     sem_codigo = db.scalar(select(func.count(ItemCatalogo.id)).where(
         ItemCatalogo.tipo == "servico", ItemCatalogo.ativo.is_(True), ItemCatalogo.ctribnac.is_(None)))
-    return render(request, "fin_notas.html", u=u, lista=lista, tot=tot, falta=falta, sem_codigo=sem_codigo,
+    from .models import Recibo
+    recibos = db.scalars(select(Recibo).order_by(Recibo.id.desc()).limit(100)).all()
+    return render(request, "fin_notas.html", u=u, lista=lista, recibos=recibos, tot=tot, falta=falta, sem_codigo=sem_codigo,
                   ambiente=nfse.ambiente(), mes_lote=mes_lote.strftime("%Y-%m"), STATUS_NFSE=STATUS_NFSE,
                   f={"status": status, "amb": amb, "mes": mes, "q": q})
 
@@ -292,10 +294,13 @@ def notas_lote(request: Request, mes: str = Form(...), u: Usuario = Depends(so_a
         return voltar("/financeiro/notas")
     titulos = db.scalars(select(Titulo).where(Titulo.contrato_id.is_not(None), Titulo.competencia == comp.strftime("%Y-%m"),
                                               Titulo.status != "cancelado").order_by(Titulo.id)).all()
-    ok, erros, ja = 0, [], 0
+    ok, erros, ja, sem_nf = 0, [], 0, 0
     for t in titulos:
         if nota_do_titulo(t):
             ja += 1
+            continue
+        if t.contrato and not t.contrato.precisa_nf:
+            sem_nf += 1
             continue
         item = _item_do_titulo(t)
         try:
@@ -312,7 +317,8 @@ def notas_lote(request: Request, mes: str = Form(...), u: Usuario = Depends(so_a
     if not titulos:
         flash(request, f"Nenhuma conta de contrato em {comp.strftime('%m/%Y')}. Gere as cobranças em Contratos.", "aviso")
     else:
-        msg = f"{ok} nota(s) autorizada(s)" + (f", {ja} já tinham nota" if ja else "") + "."
+        msg = f"{ok} nota(s) autorizada(s)" + (f", {ja} já tinham nota" if ja else "") + (
+            f", {sem_nf} de contrato sem nota fiscal (use recibo)" if sem_nf else "") + "."
         if erros:
             msg += f" {len(erros)} com problema: " + " | ".join(erros[:5])
         flash(request, msg, "erro" if erros else "ok")

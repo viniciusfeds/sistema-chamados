@@ -817,6 +817,7 @@ class Contrato(Base):
     doc_codigo: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # código de verificação
     doc_enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     doc_concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    emite_nf: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)   # False = só recibo
     # informações complementares da NFS-e (vão em cada nota do contrato)
     nfse_doc_tecnico: Mapped[str | None] = mapped_column(String(40), nullable=True)      # ART/RRT/TRT
     nfse_doc_referencia: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -826,6 +827,10 @@ class Contrato(Base):
     cliente_fiscal = relationship("ClienteFiscal")
     catalogo = relationship("ItemCatalogo")
     titulos = relationship("Titulo", back_populates="contrato")
+
+    @property
+    def precisa_nf(self):
+        return self.emite_nf is not False
     assinaturas = relationship("Assinatura", back_populates="contrato", order_by="Assinatura.ordem",
                                cascade="all, delete-orphan")
 
@@ -1293,3 +1298,26 @@ class NotaServico(Base):
         if self.numero:
             return f"NFS-e {self.numero}" + (" (teste)" if self.homologacao else "")
         return f"DPS nº {self.ndps} (série {self.serie})" + (" (teste)" if self.homologacao else "")
+
+
+class Recibo(Base):
+    """Recibo de pagamento (contratos/clientes que não precisam de nota fiscal). Numeração sequencial própria."""
+    __tablename__ = "recibos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    numero: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    cliente_fiscal_id: Mapped[int] = mapped_column(ForeignKey("clientes_fiscais.id"), index=True)
+    titulo_id: Mapped[int | None] = mapped_column(ForeignKey("titulos.id", ondelete="SET NULL"), nullable=True, index=True)
+    valor: Mapped[int] = mapped_column(Integer)                       # centavos
+    descricao: Mapped[str] = mapped_column(Text)                      # "referente a …"
+    data: Mapped[date] = mapped_column(Date)                          # data do recibo
+    forma: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    cancelado: Mapped[bool] = mapped_column(Boolean, default=False)
+    motivo_cancelamento: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    titulo = relationship("Titulo", backref=backref("recibos", order_by="Recibo.id"))
+
+    @property
+    def numero_fmt(self):
+        return f"{self.numero:04d}"
