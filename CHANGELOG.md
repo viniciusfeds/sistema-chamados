@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.29.0 — 2026-11-14
+- Novo status **Aguardando aprovação** nas ações do chamado (ex.: orçamento enviado, esperando o cliente autorizar)
+  - o chamado passa a aparecer como **Aguardando aprovação** (cor terracota) no painel, com contador e filtro
+    próprios, na página de acompanhamento, nos PDFs e no relatório do cliente
+  - a coluna *Motivo* do relatório mostra a descrição da ação (ex.: "Orçamento do DVR enviado ao síndico")
+  - prioridade do status: em andamento › pendente › aguardando aprovação › agendado › aguardando validação ›
+    aberto › concluído
+
 ## 1.28.2 — 2026-11-11
 - **Hora de abertura do chamado**: aparece junto com a data ("03/11/2026 às 19:51") no chamado, na página de
   acompanhamento, no PDF do chamado, no relatório (PDF e link do cliente), na ficha do equipamento e na API
@@ -231,7 +239,7 @@
 
 ## 1.18.0 — 2026-11-06
 - **LGPD na tela — dados pessoais mascarados.** CPF, CNPJ, e-mail e telefone/WhatsApp aparecem só pelo começo
-  (ex.: `529.•••.•••-••`, `32.402.•••/••••-••`, `vin•••@icloud.com`, `(11) 96•••-••••`) nas listas de clientes,
+  (ex.: `529.•••.•••-••`, `32.402.•••/••••-••`, `fin•••@exemplo.com.br`, `(11) 96•••-••••`) nas listas de clientes,
   ficha do cliente, chamados, usuários, contatos de WhatsApp, contas a receber, contratos/signatários, RH e Minha
   conta; o dado completo aparece ao **passar o mouse** (ou tocar, no celular). Nos formulários, esses campos ficam
   desfocados até passar o mouse ou clicar para editar

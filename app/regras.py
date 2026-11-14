@@ -8,21 +8,23 @@ from markupsafe import Markup
 STATUS_GERAL = {
     "andamento": ("Em andamento", "#C98A00"),
     "pendente": ("Pendente", "#B3261E"),
+    "aprovacao": ("Aguardando aprovação", "#A0522D"),
     "aberto": ("Aberto", "#1F5FA8"),
     "agendado": ("Agendado", "#5B3A9E"),
     "validacao": ("Aguardando validação", "#0E7C86"),
     "concluido": ("Concluído", "#2E7D4F"),
     "cancelado": ("Cancelado", "#7A7A7A"),
 }
-ORDEM_STATUS = ["andamento", "pendente", "aberto", "agendado", "validacao", "concluido"]
+ORDEM_STATUS = ["andamento", "pendente", "aprovacao", "aberto", "agendado", "validacao", "concluido"]
 
 COR_ACAO = {"Concluído": "#2E7D4F", "Em andamento": "#B07A00", "Pendente": "#B3261E",
-            "Agendado": "#5B3A9E", "Aguardando": "#777777", "Aguardando validação": "#0E7C86",
+            "Agendado": "#5B3A9E", "Aguardando aprovação": "#A0522D", "Aguardando": "#777777", "Aguardando validação": "#0E7C86",
             "Validado pelo zelador": "#17694A"}
 
 TEXTO_PADRAO = {
     "andamento": "Atendimento em andamento. Avisaremos a cada etapa concluída.",
     "pendente": "Chamado pendente. Aguardando item necessário para dar continuidade ao atendimento.",
+    "aprovacao": "Aguardando a aprovação do cliente (orçamento ou autorização) para dar continuidade ao atendimento.",
     "aberto": "Chamado registrado. Informaremos a data do atendimento técnico.",
     "agendado": "Atendimento agendado. Informaremos a conclusão por aqui.",
     "validacao": "Atendimento realizado. Aguardando o solicitante confirmar que está tudo funcionando.",
@@ -33,7 +35,7 @@ TEXTO_PADRAO = {
 
 def status_geral(chamado) -> str:
     """Deriva o status geral a partir das ações:
-    alguma em andamento -> andamento; alguma pendente -> pendente;
+    alguma em andamento -> andamento; alguma pendente -> pendente; alguma aguardando aprovação -> aprovacao;
     alguma agendada -> agendado; alguma aguardando validação -> validacao; alguma aguardando -> aberto;
     todas concluídas (ou validadas pelo zelador) -> concluido."""
     if getattr(chamado, "cancelado", False):
@@ -45,6 +47,8 @@ def status_geral(chamado) -> str:
         return "andamento"
     if "Pendente" in sts:
         return "pendente"
+    if "Aguardando aprovação" in sts:
+        return "aprovacao"
     if "Agendado" in sts:
         return "agendado"
     if "Aguardando validação" in sts:
@@ -105,7 +109,7 @@ def nome_arquivo(txt: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", t).strip("_") or "arquivo"
 
 
-_ACAO_DO_STATUS = {"andamento": "Em andamento", "pendente": "Pendente", "agendado": "Agendado",
+_ACAO_DO_STATUS = {"andamento": "Em andamento", "pendente": "Pendente", "aprovacao": "Aguardando aprovação", "agendado": "Agendado",
                    "validacao": "Aguardando validação", "aberto": "Aguardando"}
 
 

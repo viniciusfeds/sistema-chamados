@@ -33,6 +33,7 @@ CAIXA = {  # fundo, borda, cor do título
     "andamento": ("#FFF6DD", "#F1DFA6", "#9A6B00"),
     "aberto": ("#E8F0FB", "#C9D9F2", "#1F5FA8"),
     "pendente": ("#FDECEC", "#F3C9C9", "#B3261E"),
+    "aprovacao": ("#FBF0E8", "#EDD3C0", "#A0522D"),
     "agendado": ("#F1ECFA", "#D9CCF0", "#5B3A9E"),
     "cancelado": ("#F0F0F0", "#DADADA", "#555555"),
 }

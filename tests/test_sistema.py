@@ -2025,7 +2025,7 @@ def test_lgpd_mascara_e_valores_ocultos():
     assert parcial("529.982.247-25", "cpf") == "529.•••.•••-••"
     assert parcial("32.402.010/0001-40", "cnpj") == "32.402.•••/••••-••"
     assert parcial("32402010000140", "documento") == "32.402.•••/••••-••"
-    assert parcial("viniciusfeds@icloud.com", "email") == "vin•••@icloud.com"
+    assert parcial("financeiro@exemplo.com.br", "email") == "fin•••@exemplo.com.br"
     assert parcial("(11) 96153-8947", "telefone") == "(11) 96•••-••••"
     assert parcial("5511961538947", "telefone") == "551196•••••••"
     h = str(sens("529.982.247-25", "cpf"))
@@ -2942,3 +2942,25 @@ def test_link_publico_relatorio_do_cliente():
     adm.post(f"/admin/clientes/{IDS['top']}/relatorio-link", data={"csrf": _csrf(pg), "operacao": "desativar"})
     with SessionLocal() as db:
         assert db.get(Cliente, IDS["top"]).relatorio_token is None
+
+
+def test_status_aguardando_aprovacao():
+    from app import regras
+    from app.models import Chamado
+    adm = entrar("admin@t.com")
+    tok = _csrf(adm.get("/chamados/novo").text)
+    url = adm.post("/chamados/novo", data={"assunto": "Troca do DVR", "problema": "DVR queimado",
+                                           "unidade_id": str(IDS["torre"]), "csrf": tok},
+                   follow_redirects=False).headers["location"]
+    pg = adm.get(url).text
+    assert "<option>Aguardando aprovação</option>" in pg
+    adm.post(f"{url}/acoes", data={"descricao": "Orçamento do DVR enviado ao síndico", "status": "Aguardando aprovação",
+                                   "csrf": _csrf(pg)})
+    with SessionLocal() as db:
+        ch = db.scalar(select(Chamado).where(Chamado.numero == int(url.rsplit("/", 1)[1])))
+        assert regras.status_geral(ch) == "aprovacao"
+        assert regras.motivo(ch) == "Orçamento do DVR enviado ao síndico"
+        token = ch.token_publico
+    assert "Aguardando aprovação" in adm.get(url).text
+    assert "Aguardando aprovação" in TestClient(app).get(f"/acompanhar/{token}").text
+    assert "Aguardando aprovação" in adm.get("/?status=aprovacao").text

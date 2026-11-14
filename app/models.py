@@ -23,7 +23,8 @@ PRIORIDADES = {  # chave -> (rótulo, cor, ordem)
 }
 
 # Status de cada ação (linha da tabela "Ações")
-STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Agendado", "Aguardando", "Aguardando validação",
+STATUS_ACAO = ["Concluído", "Em andamento", "Pendente", "Aguardando aprovação", "Agendado", "Aguardando",
+               "Aguardando validação",
                "Validado pelo zelador"]
 VALIDADO_LOCAL = "Validado pelo zelador"   # exige assinatura de quem recebeu o serviço, colhida no local
 VALIDACAO = "Aguardando validação"   # ação que espera o solicitante confirmar que ficou resolvido
