@@ -1110,8 +1110,11 @@ FOTOS_PUBLICO = 3
 @app.get("/abrir/{slug}", response_class=HTMLResponse)
 def publico_form(request: Request, slug: str, db: Session = Depends(get_db)):
     cli = _cliente_publico(db, slug)
-    return render(request, "publico_abrir.html", cli=cli, max_fotos=FOTOS_PUBLICO,
-                  unidades=[x for x in cli.unidades if x.ativa], v={})
+    unidades = [x for x in cli.unidades if x.ativa]
+    pre = _int(request.query_params.get("unidade"))          # atalho de uma unidade já vem com ela escolhida
+    return render(request, "publico_abrir.html", cli=cli, max_fotos=FOTOS_PUBLICO, unidades=unidades,
+                  v={"unidade_id": pre} if any(x.id == pre for x in unidades) else {},
+                  app_unidade=pre if any(x.id == pre for x in unidades) else None)
 
 
 @app.post("/abrir/{slug}", dependencies=[Depends(limite_publico), Depends(checar_csrf)])
@@ -1831,3 +1834,4 @@ from . import rotas_recibo  # noqa: E402,F401
 from . import rotas_sla  # noqa: E402,F401
 from . import rotas_relatorio_publico  # noqa: E402,F401
 from . import rotas_grupos  # noqa: E402,F401
+from . import rotas_app_desktop  # noqa: E402,F401

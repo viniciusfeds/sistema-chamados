@@ -88,6 +88,16 @@
     <button class="btn peq sec" name="operacao" value="link">{{ 'Desativar link' if cli.abertura_publica else 'Ativar link' }}</button>
     <button class="btn peq sec" name="operacao" value="novo_link" onclick="return confirm('Gerar um novo link? O link atual vai parar de funcionar.')">Gerar novo link</button>
   </form>
+  {% if cli.abertura_publica %}
+  <h3 style="margin:14px 0 4px" id="programa">💻 Programa na área de trabalho (Windows)</h3>
+  <p class="dica" style="margin-top:0">Baixe e rode no computador do cliente (portaria, administração): cria o atalho “Abrir chamado” na área de trabalho, com o ícone da TecnosIT, que abre esta página numa janela própria (sem barra do navegador). Escolhendo a unidade, ela já vem selecionada.</p>
+  <form method="get" action="/abrir/{{ cli.slug_publico }}/atalho.cmd" class="acoes-orc" style="align-items:center">
+    <select name="unidade" style="max-width:320px"><option value="">Todas as unidades (escolhe ao abrir)</option>
+      {% for un in cli.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</select>
+    <button class="btn peq">⬇ Baixar instalador do atalho</button>
+  </form>
+  <p class="dica">No Windows: dê dois cliques no arquivo baixado. Se aparecer “O Windows protegeu o computador”, clique em <b>Mais informações → Executar assim mesmo</b>. Alternativa sem baixar nada: abra o link no Edge ou Chrome e use o botão <b>Instalar</b> que aparece no topo da página.</p>
+  {% endif %}
   <h2 style="margin-top:18px" id="relatorio">Link de relatório de chamados</h2>
   <p class="dica" style="margin-top:0">Página sem login com os chamados do cliente (número, data de abertura, unidade, assunto e status), com filtro de período e PDF. Quem tiver o link vê: envie só aos responsáveis.</p>
   {% if cli.relatorio_token %}

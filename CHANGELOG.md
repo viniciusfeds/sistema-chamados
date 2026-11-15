@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 1.32.0 — 2026-11-15
+- **Link de abertura de chamado como programa na área de trabalho (Windows)**: na ficha do cliente → *Programa na
+  área de trabalho* → **Baixar instalador do atalho** (do cliente ou de uma unidade). Rodando o arquivo no
+  computador do cliente, cria o atalho "Abrir chamado - …" com o ícone da empresa, que abre a página numa janela
+  própria (Edge/Chrome em modo aplicativo, sem barra de endereço); sem Edge/Chrome, cria um atalho de internet
+- A página de abertura virou **app instalável** (Edge, Chrome e celular): aparece o botão **Instalar** no topo;
+  sem internet mostra um aviso em vez de erro
+- `/abrir/{link}?unidade=ID` já abre com a unidade escolhida
+
 ## 1.31.0 — 2026-11-15
 - **Enviar a mensagem do chamado pelo próprio Nexus** (via n8n/Evolution): no chamado, *Link de acompanhamento* →
   **Enviar mensagem pelo WhatsApp** — texto editável, escolhe o **grupo do cliente** ou **quem abriu o chamado** e

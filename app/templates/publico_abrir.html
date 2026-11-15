@@ -2,7 +2,29 @@
 {% from "_macros.html" import campo_fotos %}
 {% block titulo %}Abrir chamado — {{ cli.nome }}{% endblock %}
 {% block cabecalho %}{{ cli.nome }}{% endblock %}
+{% block head_extra %}
+<link rel="manifest" href="/abrir/{{ cli.slug_publico }}/manifest.webmanifest{{ '?unidade=' ~ app_unidade if app_unidade }}">
+<meta name="theme-color" content="#E8670C">
+<link rel="apple-touch-icon" href="/app-icone/192.png">
+{% endblock %}
 {% block conteudo %}
+<div id="app-instalar" class="card aviso-card" style="display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+  <span>💻 Use esta página como um programa no computador ou no celular.</span>
+  <button type="button" class="btn peq" id="btn-instalar">Instalar</button>
+</div>
+<script>
+(function () {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/abrir/{{ cli.slug_publico }}/sw.js', {scope: '/abrir/{{ cli.slug_publico }}'}).catch(function () {});
+  }
+  var pedido = null, caixa = document.getElementById('app-instalar');
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); pedido = e; caixa.style.display = 'flex'; });
+  document.getElementById('btn-instalar').addEventListener('click', function () {
+    if (!pedido) return; pedido.prompt(); pedido.userChoice.finally(function () { caixa.style.display = 'none'; pedido = null; });
+  });
+  window.addEventListener('appinstalled', function () { caixa.style.display = 'none'; });
+})();
+</script>
 <h1>Abrir chamado técnico</h1>
 <p class="muted" style="margin-top:-4px">Preencha os dados abaixo. Você recebe o número do chamado e um link para acompanhar o atendimento.</p>
 <form class="card" method="post" action="/abrir/{{ cli.slug_publico }}" enctype="multipart/form-data">

@@ -3033,3 +3033,28 @@ def test_enviar_mensagem_no_grupo_pelo_n8n(monkeypatch):
         db.add(outro); db.commit(); oid = outro.id
     assert "Escolha um grupo" in adm.post(f"{url}/enviar-grupo", data={"csrf": _csrf(pg), "grupo_id": oid,
                                                                        "texto": "x x x"}).text
+
+
+def test_programa_area_de_trabalho_link_abertura():
+    import base64
+    from app.models import Cliente, Unidade
+    with SessionLocal() as db:
+        cli = db.get(Cliente, IDS["top"]); slug = cli.slug_publico
+        un = db.scalars(select(Unidade).where(Unidade.cliente_id == IDS["top"])).first(); uid, unome = un.id, un.nome
+    anon = TestClient(app)
+    pg = anon.get(f"/abrir/{slug}?unidade={uid}").text
+    assert f'manifest.webmanifest?unidade={uid}' in pg and "serviceWorker" in pg
+    assert re.search(rf'<option value="{uid}" selected>', pg)
+    m = anon.get(f"/abrir/{slug}/manifest.webmanifest?unidade={uid}").json()
+    assert m["display"] == "standalone" and m["start_url"] == f"/abrir/{slug}?unidade={uid}" and unome in m["name"]
+    sw = anon.get(f"/abrir/{slug}/sw.js")
+    assert sw.headers["service-worker-allowed"] == f"/abrir/{slug}" and "fetch" in sw.text
+    assert anon.get("/app-icone/192.png").content[:4] == b"\x89PNG"
+    assert anon.get("/app-icone.ico").content[:4] == b"\x00\x00\x01\x00"
+    r = anon.get(f"/abrir/{slug}/atalho.cmd?unidade={uid}")
+    assert r.status_code == 200 and r.headers["content-disposition"].endswith('.cmd"')
+    cod = re.search(r"-EncodedCommand (\S+)", r.text).group(1)
+    ps = base64.b64decode(cod).decode("utf-16-le")
+    assert f"/abrir/{slug}?unidade={uid}" in ps and "--app=" in ps and "Abrir chamado - " in ps
+    assert anon.get("/abrir/naoexiste/atalho.cmd").status_code == 404
+    assert "Baixar instalador do atalho" in entrar("admin@t.com").get(f"/clientes/{IDS['top']}").text
