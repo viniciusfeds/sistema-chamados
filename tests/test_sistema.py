@@ -3056,5 +3056,9 @@ def test_programa_area_de_trabalho_link_abertura():
     cod = re.search(r"-EncodedCommand (\S+)", r.text).group(1)
     ps = base64.b64decode(cod).decode("utf-16-le")
     assert f"/abrir/{slug}?unidade={uid}" in ps and "--app=" in ps and "Abrir chamado - " in ps
+    assert "if ('0' -eq '1')" in ps and "--window-size" in ps
+    r = anon.get(f"/abrir/{slug}/atalho.cmd?iniciar=1&maximizado=1")
+    ps = base64.b64decode(re.search(r"-EncodedCommand (\S+)", r.text).group(1)).decode("utf-16-le")
+    assert "if ('1' -eq '1')" in ps and "GetFolderPath('Startup')" in ps and "--start-maximized" in ps
     assert anon.get("/abrir/naoexiste/atalho.cmd").status_code == 404
     assert "Baixar instalador do atalho" in entrar("admin@t.com").get(f"/clientes/{IDS['top']}").text

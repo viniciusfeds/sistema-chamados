@@ -94,6 +94,8 @@
   <form method="get" action="/abrir/{{ cli.slug_publico }}/atalho.cmd" class="acoes-orc" style="align-items:center">
     <select name="unidade" style="max-width:320px"><option value="">Todas as unidades (escolhe ao abrir)</option>
       {% for un in cli.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</select>
+    <label class="check" style="margin:0"><input type="checkbox" name="iniciar" value="1" style="width:auto" checked> Abrir sozinho ao ligar o computador</label>
+    <label class="check" style="margin:0"><input type="checkbox" name="maximizado" value="1" style="width:auto"> Abrir em tela inteira</label>
     <button class="btn peq">⬇ Baixar instalador do atalho</button>
   </form>
   <p class="dica">No Windows: dê dois cliques no arquivo baixado. Se aparecer “O Windows protegeu o computador”, clique em <b>Mais informações → Executar assim mesmo</b>. Alternativa sem baixar nada: abra o link no Edge ou Chrome e use o botão <b>Instalar</b> que aparece no topo da página.</p>

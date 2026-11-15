@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 1.32.1 — 2026-11-15
+- Programa na área de trabalho: opções **"Abrir sozinho ao ligar o computador"** (o atalho também vai para a
+  pasta Inicializar do Windows e a janela já abre ao terminar a instalação) e **"Abrir em tela inteira"**
+
 ## 1.32.0 — 2026-11-15
 - **Link de abertura de chamado como programa na área de trabalho (Windows)**: na ficha do cliente → *Programa na
   área de trabalho* → **Baixar instalador do atalho** (do cliente ou de uma unidade). Rodando o arquivo no

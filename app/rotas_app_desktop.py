@@ -118,10 +118,15 @@ if ($nav) {
   $ws  = New-Object -ComObject WScript.Shell
   $lnk = $ws.CreateShortcut((Join-Path $desk ($nome + '.lnk')))
   $lnk.TargetPath = $nav
-  $lnk.Arguments  = '--app=' + $url + ' --window-size=980,900'
+  $lnk.Arguments  = '--app=' + $url + ' __TAMANHO__'
   $lnk.Description = $nome
   if (Test-Path $ico) { $lnk.IconLocation = $ico + ',0' }
   $lnk.Save()
+  if ('__INICIAR__' -eq '1') {
+    $ini = [Environment]::GetFolderPath('Startup')
+    Copy-Item -Force (Join-Path $desk ($nome + '.lnk')) (Join-Path $ini ($nome + '.lnk'))
+    Start-Process -FilePath $nav -ArgumentList ('--app=' + $url + ' __TAMANHO__')
+  }
 } else {
   $txt = "[InternetShortcut]`r`nURL=$url`r`n"
   if (Test-Path $ico) { $txt += "IconFile=$ico`r`nIconIndex=0`r`n" }
@@ -129,12 +134,14 @@ if ($nav) {
 }
 Write-Host ''
 Write-Host ('  Pronto! O atalho "' + $nome + '" foi criado na area de trabalho.') -ForegroundColor Green
+if ('__INICIAR__' -eq '1') { Write-Host '  Ele tambem vai abrir sozinho sempre que o computador for ligado.' -ForegroundColor Green }
 Write-Host ''
 """
 
 
 @app.get("/abrir/{slug}/atalho.cmd")
-def app_atalho(request: Request, slug: str, unidade: str = "", db: Session = Depends(get_db)):
+def app_atalho(request: Request, slug: str, unidade: str = "", iniciar: str = "", maximizado: str = "",
+               db: Session = Depends(get_db)):
     cli = _cliente_publico(db, slug)
     un = db.get(Unidade, _int(unidade)) if _int(unidade) else None
     if un and un.cliente_id != cli.id:
@@ -143,7 +150,8 @@ def app_atalho(request: Request, slug: str, unidade: str = "", db: Session = Dep
     nome = f"Abrir chamado - {un.nome if un else (cli.nome_curto or cli.nome)}"
     nome = "".join(c for c in nome if c not in '\\/:*?"<>|').replace("'", "")[:80]
     ps = (PS.replace("__URL__", base + _inicio(slug, un.id if un else None)).replace("__NOME__", nome)
-          .replace("__ICO__", base + "/app-icone.ico"))
+          .replace("__ICO__", base + "/app-icone.ico").replace("__INICIAR__", "1" if iniciar else "0")
+          .replace("__TAMANHO__", "--start-maximized" if maximizado else "--window-size=980,900"))
     cod = base64.b64encode(ps.encode("utf-16-le")).decode()
     cmd = ("@echo off\r\n"
            f"title Instalando atalho de chamados - {regras.nome_arquivo(config.EMPRESA_NOME).replace('_', ' ')}\r\n"
