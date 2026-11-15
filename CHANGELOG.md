@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.30.0 — 2026-11-14
+- **URA abre chamado para número sem cadastro**: pergunta o nome e o condomínio/empresa, depois o problema, e abre
+  o chamado no cliente **"Sem cadastro (WhatsApp)"** (unidade "Triagem WhatsApp", criada sozinha). Responde com o
+  número e o link de acompanhamento; a equipe é avisada como em qualquer chamado novo e o chamado traz a ação
+  "Número sem cadastro: conferir o cliente/unidade e mover o chamado"
+  - quem não tem cadastro consulta só os próprios chamados (a triagem não dá acesso aos chamados de outras pessoas)
+  - Configurações → WhatsApp → *Número sem cadastro*: "Abrir chamado (triagem)" (padrão) ou "Só avisar a equipe"
+    (comportamento anterior)
+- API: `POST /api/integracao/chamados` com `"triagem": true` (e `"local"`) abre na triagem quando o telefone não
+  tem cadastro
+
 ## 1.29.0 — 2026-11-14
 - Novo status **Aguardando aprovação** nas ações do chamado (ex.: orçamento enviado, esperando o cliente autorizar)
   - o chamado passa a aparecer como **Aguardando aprovação** (cor terracota) no painel, com contador e filtro

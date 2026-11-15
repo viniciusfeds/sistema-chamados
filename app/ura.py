@@ -45,6 +45,26 @@ def _mesmo_numero(a, b):
     return bool(_variantes(a) & _variantes(b))
 
 
+NOME_TRIAGEM = "Sem cadastro (WhatsApp)"
+
+
+def unidade_triagem(db, criar=True):
+    """Unidade onde caem os chamados de números sem cadastro (a equipe depois move para o cliente certo)."""
+    cli = db.scalar(select(Cliente).where(Cliente.nome == NOME_TRIAGEM))
+    if not cli and criar:
+        cli = Cliente(nome=NOME_TRIAGEM, abertura_publica=False)
+        db.add(cli)
+        db.flush()
+    if not cli:
+        return None
+    un = db.scalar(select(Unidade).where(Unidade.cliente_id == cli.id).order_by(Unidade.id))
+    if not un and criar:
+        un = Unidade(cliente_id=cli.id, nome="Triagem WhatsApp")
+        db.add(un)
+        db.flush()
+    return un
+
+
 def identificar(db, tel):
     """Quem é: (nome, cliente_ids, unidade_ids_restritas ou None)."""
     nome, clientes, unidades = None, set(), set()
@@ -70,6 +90,8 @@ def identificar(db, tel):
     if not clientes:                                   # já abriu chamado antes com esse número
         for ch in db.scalars(select(Chamado).where(Chamado.solicitante_contato.is_not(None))
                              .order_by(Chamado.id.desc()).limit(500)).all():
+            if ch.unidade.cliente.nome == NOME_TRIAGEM:  # a triagem não dá acesso aos chamados dos outros
+                continue
             if _mesmo_numero(ch.solicitante_contato, tel):
                 nome = nome or ch.solicitante_nome
                 clientes.add(ch.unidade.cliente_id); unidades.add(ch.unidade_id)
@@ -151,9 +173,13 @@ def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str,
     if etapa == "menu":
         if t == "1":
             if not clientes:
-                return ir("desconhecido", "Não encontrei seu número no nosso cadastro. 🙂\n"
-                                          "Envie numa única mensagem: *nome do condomínio/empresa*, *seu nome* e "
-                                          "*o problema*. Um atendente vai registrar o chamado para você.")
+                if config.URA_SEM_CADASTRO == "atendente":
+                    return ir("desconhecido", "Não encontrei seu número no nosso cadastro. 🙂\n"
+                                              "Envie numa única mensagem: *nome do condomínio/empresa*, *seu nome* e "
+                                              "*o problema*. Um atendente vai registrar o chamado para você.")
+                return ir("sem_local", "Não encontrei seu número no nosso cadastro, mas vou abrir o chamado. 🙂\n"
+                                       "Informe numa mensagem *seu nome* e o *condomínio/empresa* (com o endereço, "
+                                       "se puder).\n\n*0* – voltar ao menu")
             uns = unidades_de(db, clientes, restritas)
             if not uns:
                 return ir(None, "Não encontrei unidades ativas no seu cadastro. Um atendente vai falar com você.")
@@ -208,6 +234,30 @@ def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str,
                                f"Situação: *{_status_txt(ch)}*"
                                + (f"\nÚltima ação: {ult.quando} – {ult.descricao[:160]}" if ult else "")
                                + f"\n\nDetalhes: {base}/acompanhar/{ch.token_publico}\n\nOutro número, ou *0* para o menu.")
+
+    if etapa == "sem_local":
+        if len(texto) < 3 or texto.startswith("["):
+            return ir("sem_local", "Escreva seu nome e o condomínio/empresa, ou *0* para o menu.")
+        return ir("sem_descrever", "Obrigado! Agora descreva o problema numa mensagem (o que aconteceu, onde e "
+                                   "desde quando).", local=texto[:300])
+
+    if etapa == "sem_descrever":
+        if len(texto) < 5 or texto.startswith("["):
+            return ir("sem_descrever", "Descreva o problema em texto (pelo menos algumas palavras), ou *0* para o menu.")
+        if not criar_chamado:
+            return ir(None, "Não consegui registrar agora. Um atendente vai falar com você.")
+        un = unidade_triagem(db)
+        local = dados.get("local") or ""
+        problema = f"{texto}\n\n— Solicitante sem cadastro (WhatsApp {_tel_fmt(telefone)}): {local}"
+        ch = criar_chamado(db, un, nome or "Cliente (WhatsApp)", telefone, problema)
+        ch.acoes.append(Acao(status="Concluído", descricao="Número sem cadastro: conferir o cliente/unidade e mover "
+                                                         f"o chamado. Informado pelo solicitante: {local}"[:1000]))
+        conv.etapa, conv.dados = None, {}
+        db.commit()
+        return (f"✅ Chamado *{ch.numero_fmt}* aberto.\n"
+                f"Acompanhe por aqui: {base}/acompanhar/{ch.token_publico}\n\n"
+                "Nossa equipe vai conferir os dados e avisar as novidades por este WhatsApp. "
+                "Para outro atendimento, mande *menu*.")
 
     if etapa == "desconhecido":
         _avisar_equipe(nome, telefone, texto, clientes, db)

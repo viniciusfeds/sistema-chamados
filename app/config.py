@@ -158,6 +158,7 @@ N8N_URL_ENTRADA = os.environ.get("N8N_URL_ENTRADA", "")          # (modo Meta) r
 N8N_TOKEN = os.environ.get("N8N_TOKEN", "")                      # segredo trocado entre Nexus e n8n
 WHATSAPP_URA = os.environ.get("WHATSAPP_URA", "1").lower() in ("1", "true", "sim")
 URA_SAUDACAO = os.environ.get("URA_SAUDACAO", "Olá{nome}! Aqui é o atendimento da {empresa}.")
+URA_SEM_CADASTRO = os.environ.get("URA_SEM_CADASTRO", "abrir")   # abrir (vai para a triagem) / atendente
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 WHATSAPP_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "")
 WHATSAPP_API_VERSAO = os.environ.get("WHATSAPP_API_VERSAO", "v23.0")

@@ -196,6 +196,10 @@ SECOES = [
         Campo("WHATSAPP_URA", "Atendimento automático (URA)", "bool",
               "Responde quem manda mensagem: abrir chamado, consultar chamado ou falar com atendente."),
         Campo("URA_SAUDACAO", "Saudação da URA", ajuda="{nome} e {empresa} são trocados automaticamente."),
+        Campo("URA_SEM_CADASTRO", "Número sem cadastro", "escolha",
+              "Abrir chamado: pergunta nome, condomínio/empresa e o problema e abre o chamado no cliente "
+              "“Sem cadastro (WhatsApp)” para a equipe mover para o cliente certo.",
+              opcoes={"abrir": "Abrir chamado (triagem)", "atendente": "Só avisar a equipe"}),
         Campo("N8N_URL_ENVIO", "n8n: webhook de envio", ajuda="Ex.: http://host.docker.internal:9600/webhook/nexus-enviar (só no modo n8n)."),
         Campo("N8N_URL_ENTRADA", "n8n: repassar mensagens recebidas", avancado=True,
               ajuda="Opcional, no modo Meta: além da URA, envia cada mensagem recebida para este webhook do n8n."),

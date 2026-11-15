@@ -198,8 +198,13 @@ async def api_abrir(request: Request, db: Session = Depends(get_db)):
             uns = achadas
     elif len(uns) == 1:
         un = uns[0]
+    if not un and not uns and d.get("triagem"):           # número sem cadastro: abre na triagem
+        un = ura.unidade_triagem(db)
+        if d.get("local"):
+            texto += f"\n\n— Solicitante sem cadastro: {str(d['local'])[:300]}"
     if not un:
-        return _json({"erro": "Escolha a unidade." if uns else "Telefone não cadastrado.",
+        return _json({"erro": "Escolha a unidade." if uns else "Telefone não cadastrado (envie \"triagem\": true "
+                                                                "para abrir mesmo assim).",
                       "unidades": [{"id": u.id, "nome": u.nome} for u in uns]}, 409 if uns else 404)
     ch = criar_chamado_whatsapp(db, un, str(d.get("nome") or nome or "Cliente"), tel, texto, _base(request),
                                 assunto=str(d.get("assunto") or ""), prioridade=str(d.get("prioridade") or "normal"))

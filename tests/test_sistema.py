@@ -2481,12 +2481,27 @@ def test_ura_whatsapp_modo_meta(wa, monkeypatch):
     assert f"*Chamado {num}*" in textos()[-1] and "Situação" in textos()[-1]
     # número desconhecido
     _webhook_msg(c, "5511911112222", "1", "x1", nome="Fulano")
-    assert "Não encontrei seu número" in textos()[-1]
-    _webhook_msg(c, "5511911112222", "Condomínio Azul, João, portão travado", "x2", nome="Fulano")
-    assert "Recebido" in textos()[-1]
-    # desconhecido não consulta chamado dos outros
+    assert "Não encontrei seu número" in textos()[-1] and "vou abrir o chamado" in textos()[-1]
+    _webhook_msg(c, "5511911112222", "João, Condomínio Azul - Rua A, 10", "x2", nome="Fulano")
+    assert "descreva o problema" in textos()[-1]
+    _webhook_msg(c, "5511911112222", "Portão da garagem travado", "x2b", nome="Fulano")
+    assert "✅ Chamado" in textos()[-1]
+    num_sem = re.search(r"\*(\d{4})\*", textos()[-1]).group(1)
+    with SessionLocal() as db:
+        from app.models import Chamado as Ch
+        ch = db.scalar(select(Ch).where(Ch.numero == int(num_sem)))
+        assert ch.unidade.cliente.nome == "Sem cadastro (WhatsApp)" and "Condomínio Azul" in ch.problema
+        assert any("conferir o cliente" in (a.descricao or "") for a in ch.acoes)
+    # sem cadastro vê só o próprio chamado, não os outros da triagem nem de clientes
+    _webhook_msg(c, "5511911112222", "menu", "x3a")
     _webhook_msg(c, "5511911112222", "2", "x3")
-    assert "não tem chamados em aberto" in textos()[-1]
+    assert num_sem in textos()[-1] and num not in textos()[-1]
+    _webhook_msg(c, "5511933334444", "1", "y1", nome="Outro")
+    _webhook_msg(c, "5511933334444", "Maria, Edifício Sol", "y2")
+    _webhook_msg(c, "5511933334444", "Interfone mudo", "y3")
+    _webhook_msg(c, "5511933334444", "menu", "y4")
+    _webhook_msg(c, "5511933334444", "2", "y5")
+    assert num_sem not in textos()[-1]
 
 
 def test_integracao_n8n(monkeypatch):
@@ -2558,6 +2573,12 @@ def test_integracao_n8n(monkeypatch):
         r = c.post("/api/integracao/chamados", json={"telefone": "11955550001", "texto": "Teste de unidade",
                                                      "unidade": "nao existe"}, headers=H)
         assert r.status_code == 404 and r.json()["unidades"]
+        # número sem cadastro: 404, ou abre na triagem com "triagem": true
+        r = c.post("/api/integracao/chamados", json={"telefone": "11943218765", "texto": "Câmera sem imagem"}, headers=H)
+        assert r.status_code == 404 and "triagem" in r.json()["erro"]
+        r = c.post("/api/integracao/chamados", json={"telefone": "11943218765", "texto": "Câmera sem imagem",
+                                                     "triagem": True, "local": "Cond. Verde"}, headers=H)
+        assert r.status_code == 201 and r.json()["cliente"] == "Sem cadastro (WhatsApp)"
         # status de entrega informado pelo n8n
         r = c.post("/api/integracao/whatsapp/status", json={"envio_id": avisos[0]["envio_id"], "status": "read"}, headers=H)
         assert r.json()["ok"]
