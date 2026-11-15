@@ -319,6 +319,20 @@ EVENTOS_AVISO = {
 }
 
 
+class GrupoWhatsApp(Base):
+    """Grupo de WhatsApp de um cliente (ou de uma unidade) para mandar a mensagem do chamado pelo n8n."""
+    __tablename__ = "grupos_whatsapp"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), index=True)
+    unidade_id: Mapped[int | None] = mapped_column(ForeignKey("unidades.id", ondelete="SET NULL"), nullable=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    jid: Mapped[str] = mapped_column(String(80))                      # ex.: 120363025246125888@g.us
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente = relationship("Cliente", backref=backref("grupos_whatsapp", order_by="GrupoWhatsApp.nome",
+                                                       cascade="all, delete-orphan"))
+    unidade = relationship("Unidade")
+
+
 class ContatoAviso(Base):
     """Quem recebe os avisos automáticos de WhatsApp de um cliente (todas as unidades) ou de uma unidade."""
     __tablename__ = "contatos_aviso"
@@ -345,7 +359,7 @@ class EnvioWhatsApp(Base):
                                                    nullable=True, index=True)
     evento: Mapped[str] = mapped_column(String(20))
     destino_nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    telefone: Mapped[str] = mapped_column(String(20))
+    telefone: Mapped[str] = mapped_column(String(80))                 # telefone ou id do grupo (…@g.us)
     modelo: Mapped[str] = mapped_column(String(80))
     parametros: Mapped[list | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente/enviado/entregue/lido/falhou

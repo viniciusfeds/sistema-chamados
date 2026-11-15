@@ -250,6 +250,8 @@ def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str,
         local = dados.get("local") or ""
         problema = f"{texto}\n\n— Solicitante sem cadastro (WhatsApp {_tel_fmt(telefone)}): {local}"
         ch = criar_chamado(db, un, nome or "Cliente (WhatsApp)", telefone, problema)
+        primeira = " ".join(texto.split())
+        ch.assunto = ch.titulo = primeira[:80] + ("…" if len(primeira) > 80 else "")
         ch.acoes.append(Acao(status="Concluído", descricao="Número sem cadastro: conferir o cliente/unidade e mover "
                                                          f"o chamado. Informado pelo solicitante: {local}"[:1000]))
         conv.etapa, conv.dados = None, {}

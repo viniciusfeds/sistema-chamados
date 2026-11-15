@@ -76,6 +76,18 @@ número conectado — deve chegar o menu. Em Administração → WhatsApp, *Envi
 Para usar outro provedor (Z-API, WAHA, Meta…), troque só os nós **Responder no WhatsApp**, **Enviar no WhatsApp** e
 **Extrair mensagem**.
 
+## Enviar mensagem para grupos (e para quem abriu) pelo Nexus
+
+1. Reimporte o fluxo atualizado (`n8n/fluxo-ura-nexus.json`): no n8n, **despublique e apague** (ou arquive) o fluxo
+   antigo "Nexus Desk · URA WhatsApp", importe o arquivo novo e clique em **Publish** — dois fluxos com os mesmos
+   webhooks não podem ficar ativos ao mesmo tempo. O fluxo novo traz o webhook `nexus-grupos`, que lista os grupos
+   do número conectado.
+2. O número conectado na Evolution precisa **participar do grupo**.
+3. Na ficha do cliente → **Grupos do WhatsApp** → *Buscar grupos do WhatsApp*, escolha o grupo (e a unidade, se o
+   grupo for de uma unidade só) → *Cadastrar grupo*.
+4. No chamado → *Link de acompanhamento* → **Enviar mensagem pelo WhatsApp**: ajuste o texto, escolha o grupo (ou
+   quem abriu o chamado) e clique em **Enviar**. Fica registrado em "Enviadas".
+
 ## API do Nexus para o n8n
 
 Base: `https://app.tecnosit.com.br` (ou, de dentro do Docker, `http://host.docker.internal:9000`).

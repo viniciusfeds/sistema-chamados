@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.31.0 — 2026-11-15
+- **Enviar a mensagem do chamado pelo próprio Nexus** (via n8n/Evolution): no chamado, *Link de acompanhamento* →
+  **Enviar mensagem pelo WhatsApp** — texto editável, escolhe o **grupo do cliente** ou **quem abriu o chamado** e
+  envia com um clique pelo número da empresa; os envios ficam registrados no chamado
+- **Grupos do WhatsApp** na ficha do cliente: *Buscar grupos do WhatsApp* lista os grupos do número conectado
+  (pelo n8n) para escolher; grupo do cliente inteiro ou de uma unidade
+- Fluxo do n8n (`n8n/fluxo-ura-nexus.json`): novo webhook `nexus-grupos` (lista os grupos pela Evolution) —
+  reimporte e publique
+- URA: chamado de número sem cadastro ficava com o assunto "… — Solicitante sem cadastro (WhatsApp …)"; agora o
+  assunto é só o problema descrito
+
 ## 1.30.0 — 2026-11-14
 - **URA abre chamado para número sem cadastro**: pergunta o nome e o condomínio/empresa, depois o problema, e abre
   o chamado no cliente **"Sem cadastro (WhatsApp)"** (unidade "Triagem WhatsApp", criada sozinha). Responde com o

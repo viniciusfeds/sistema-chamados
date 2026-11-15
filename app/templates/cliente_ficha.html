@@ -136,6 +136,56 @@
 </div>
 {% endif %}
 
+{% if u.papel == 'admin' %}
+<div class="card" id="grupos">
+  <h2>Grupos do WhatsApp</h2>
+  <p class="dica" style="margin-top:0">Grupos para onde a equipe envia a mensagem do chamado com um clique (botão “Enviar no grupo” no chamado). Usa o número conectado no n8n/Evolution, que precisa participar do grupo.</p>
+  {% if cli.grupos_whatsapp %}
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th>Grupo</th><th>Unidade</th><th></th></tr></thead>
+    <tbody>{% for g in cli.grupos_whatsapp %}<tr>
+      <td data-l="Grupo"><b>{{ g.nome }}</b><div class="muted">{{ g.jid }}</div></td>
+      <td data-l="Unidade">{{ g.unidade.nome_curto if g.unidade else 'todas' }}</td>
+      <td><form method="post" action="/admin/clientes/{{ cli.id }}/grupos"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="grupo_id" value="{{ g.id }}"><button class="btn peq perigo" name="operacao" value="excluir">Remover</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum grupo cadastrado.</p>{% endif %}
+  <details {{ 'open' if not cli.grupos_whatsapp }}><summary>+ Adicionar grupo</summary>
+  <form method="post" action="/admin/clientes/{{ cli.id }}/grupos" style="margin-top:10px" id="form-grupo">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="operacao" value="adicionar">
+    <div class="acoes-orc" style="margin-bottom:8px"><button type="button" class="btn peq sec" id="buscar-grupos">🔎 Buscar grupos do WhatsApp</button><span class="dica" id="grupos-msg"></span></div>
+    <div class="grid3">
+      <div class="campo"><label>Grupo</label><select id="grupo-lista" style="display:none"><option value="">— escolha —</option></select>
+        <input name="jid" id="grupo-jid" placeholder="ID do grupo (…@g.us)" required></div>
+      <div class="campo"><label>Nome</label><input name="nome" id="grupo-nome" placeholder="Ex.: TecnosIT · Top Guarulhos"></div>
+      <div class="campo"><label>Unidade</label><select name="unidade_id"><option value="">Todas as unidades</option>
+        {% for un in cli.unidades if un.ativa %}<option value="{{ un.id }}">{{ un.nome }}</option>{% endfor %}</select></div>
+    </div>
+    <button class="btn">Cadastrar grupo</button>
+  </form></details>
+</div>
+<script>
+(function () {
+  var b = document.getElementById('buscar-grupos'); if (!b) return;
+  var sel = document.getElementById('grupo-lista'), msg = document.getElementById('grupos-msg');
+  b.addEventListener('click', function () {
+    msg.textContent = 'Buscando…';
+    fetch('/admin/whatsapp/grupos-disponiveis', {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.erro) { msg.textContent = d.erro; return; }
+      sel.innerHTML = '<option value="">— escolha o grupo —</option>';
+      d.grupos.forEach(function (g) { var o = document.createElement('option'); o.value = g.id; o.textContent = g.nome || g.id; o.dataset.nome = g.nome; sel.appendChild(o); });
+      sel.style.display = ''; msg.textContent = d.grupos.length + ' grupo(s) encontrados.';
+    }).catch(function () { msg.textContent = 'Não consegui falar com o n8n.'; });
+  });
+  sel.addEventListener('change', function () {
+    var o = sel.options[sel.selectedIndex]; document.getElementById('grupo-jid').value = o.value;
+    if (o.dataset.nome) document.getElementById('grupo-nome').value = o.dataset.nome;
+  });
+})();
+</script>
+{% endif %}
+
 <div class="card" id="contatos">
   <h2>Quem recebe aviso no WhatsApp</h2>
   <p class="dica" style="margin-top:0">Avisos automáticos dos chamados (abertura, atualização, conclusão). Sem unidade = recebe de todas as unidades.</p>

@@ -169,6 +169,88 @@
         300
       ],
       "id": "9b98ae2f-1866-4726-a7d3-aefc765193d0"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-grupos",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Nexus pede grupos",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        560
+      ],
+      "webhookId": "62abcc08-e1af-461c-a5d7-d9f1c5a52909",
+      "id": "a374f86a-31f0-4114-95ca-5f27679928f6"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Só o Nexus (com o token) pode listar os grupos\nconst h = $input.first().json.headers || {};\nif ((h['x-nexus-token'] || '') !== $env.NEXUS_TOKEN) throw new Error('Token inválido');\nreturn [{ json: {} }];"
+      },
+      "name": "Conferir token (grupos)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        560
+      ],
+      "id": "f2ad229e-6ecb-4de9-b9e1-e32a31952861"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.EVOLUTION_URL }}/group/fetchAllGroups/{{ $env.EVOLUTION_INSTANCIA }}?getParticipants=false",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_APIKEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Listar grupos (Evolution)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        560
+      ],
+      "id": "d83535d4-a0fb-4b8d-9688-30b98a955c59"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Só id e nome de cada grupo\nconst grupos = $input.all().map(i => i.json).flat()\n  .map(g => ({ id: g.id, subject: g.subject || '' })).filter(g => g.id);\nreturn [{ json: { grupos } }];"
+      },
+      "name": "Montar lista",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        560
+      ],
+      "id": "a28133a0-7626-49a3-9db9-b04bc2aca2f0"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Devolver grupos",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        560
+      ],
+      "id": "29554eda-d9c9-4c21-ac22-2851e7a16b36"
     }
   ],
   "connections": {
@@ -243,6 +325,50 @@
         [
           {
             "node": "Responder ao Nexus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nexus pede grupos": {
+      "main": [
+        [
+          {
+            "node": "Conferir token (grupos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir token (grupos)": {
+      "main": [
+        [
+          {
+            "node": "Listar grupos (Evolution)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar grupos (Evolution)": {
+      "main": [
+        [
+          {
+            "node": "Montar lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar lista": {
+      "main": [
+        [
+          {
+            "node": "Devolver grupos",
             "type": "main",
             "index": 0
           }

@@ -2985,3 +2985,51 @@ def test_status_aguardando_aprovacao():
     assert "Aguardando aprovação" in adm.get(url).text
     assert "Aguardando aprovação" in TestClient(app).get(f"/acompanhar/{token}").text
     assert "Aguardando aprovação" in adm.get("/?status=aprovacao").text
+
+
+def test_enviar_mensagem_no_grupo_pelo_n8n(monkeypatch):
+    import io
+    from app import config, rotas_grupos, whatsapp
+    from app.models import Chamado, EnvioWhatsApp, GrupoWhatsApp
+    monkeypatch.setattr(config, "WHATSAPP_MODO", "n8n")
+    monkeypatch.setattr(config, "N8N_URL_ENVIO", "http://n8n:5678/webhook/nexus-enviar")
+    monkeypatch.setattr(config, "N8N_TOKEN", "x" * 32)
+    enviados = []
+    monkeypatch.setattr(whatsapp, "enviar_n8n", lambda d: enviados.append(d) or {"id": "EVO1"})
+
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(rotas_grupos.urllib.request, "urlopen", lambda req, timeout=20: R(
+        b'{"grupos": [{"id": "120363025246125888@g.us", "subject": "Top Guarulhos - TecnosIT"}, {"id": "x"}]}'))
+    adm = entrar("admin@t.com")
+    r = adm.get("/admin/whatsapp/grupos-disponiveis").json()
+    assert r["grupos"] == [{"id": "120363025246125888@g.us", "nome": "Top Guarulhos - TecnosIT"}]
+    pg = adm.get(f"/clientes/{IDS['top']}").text
+    assert "Grupos do WhatsApp" in pg and "Buscar grupos" in pg
+    assert "inválido" in adm.post(f"/admin/clientes/{IDS['top']}/grupos", data={
+        "csrf": _csrf(pg), "operacao": "adicionar", "jid": "5511999999999", "nome": "x"}).text
+    adm.post(f"/admin/clientes/{IDS['top']}/grupos", data={"csrf": _csrf(pg), "operacao": "adicionar",
+                                                          "jid": "120363025246125888@g.us", "nome": "Top Guarulhos"})
+    with SessionLocal() as db:
+        g = db.scalar(select(GrupoWhatsApp).where(GrupoWhatsApp.cliente_id == IDS["top"]))
+        ch = db.scalar(select(Chamado).where(Chamado.unidade_id == IDS["torre"]))
+        gid, url = g.id, f"/chamados/{ch.numero}"
+        ch.solicitante_contato, ch.solicitante_aceita_whatsapp = "(11) 95555-0009", True
+        db.commit()
+    pg = adm.get(url).text
+    assert "📤 Enviar" in pg and "👥 Top Guarulhos" in pg and 'value="solicitante"' in pg
+    r = adm.post(f"{url}/enviar-grupo", data={"csrf": _csrf(pg), "grupo_id": gid, "texto": "*Ticket* teste ok"})
+    assert "Mensagem enviada para “Top Guarulhos”" in r.text
+    assert enviados[-1]["telefone"] == "120363025246125888@g.us" and enviados[-1]["tipo"] == "grupo"
+    r = adm.post(f"{url}/enviar-grupo", data={"csrf": _csrf(pg), "grupo_id": "solicitante", "texto": "Olá, chegamos"})
+    assert "enviada" in r.text and enviados[-1]["telefone"] == "5511955550009"
+    with SessionLocal() as db:
+        assert db.scalars(select(EnvioWhatsApp).where(EnvioWhatsApp.evento == "grupo")).all()
+    assert "→ Top Guarulhos (enviado)" in adm.get(url).text
+    # grupo de outro cliente não pode ser usado
+    with SessionLocal() as db:
+        outro = GrupoWhatsApp(cliente_id=IDS["sky"], nome="Sky", jid="120363000000000001@g.us")
+        db.add(outro); db.commit(); oid = outro.id
+    assert "Escolha um grupo" in adm.post(f"{url}/enviar-grupo", data={"csrf": _csrf(pg), "grupo_id": oid,
+                                                                       "texto": "x x x"}).text

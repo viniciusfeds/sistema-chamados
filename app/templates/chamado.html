@@ -288,9 +288,28 @@
   <p class="dica" style="margin-top:0">Quem tiver este link vê o andamento e baixa o PDF, sem precisar de login. Ele também é mostrado a quem abriu o chamado pela página pública.</p>
   {{ copiar(link_publico) }}
   {% if u.equipe %}
-  <details style="margin-top:10px"><summary>Ver mensagem para o grupo</summary>
+  {% set gws = ch.unidade.cliente.grupos_whatsapp|selectattr('unidade_id', 'in', [none, ch.unidade_id])|list if ch.unidade.cliente else [] %}
+  {% set tem_sol = ch.solicitante_contato and ch.solicitante_aceita_whatsapp %}
+  {% set pode_env = pode_enviar_grupo() and (gws or tem_sol) %}
+  <details style="margin-top:10px" id="grupo" {{ 'open' if pode_env }}><summary>{{ 'Enviar mensagem pelo WhatsApp' if pode_env else 'Ver mensagem para o grupo' }}</summary>
+    {% if pode_env %}
+    <form method="post" action="/chamados/{{ ch.numero }}/enviar-grupo" style="margin-top:8px">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <textarea name="texto" style="min-height:130px" maxlength="4000">{{ texto_wa }}</textarea>
+      <div class="acoes-orc" style="margin-top:8px;align-items:center">
+        <select name="grupo_id" style="max-width:360px">{% for g in gws %}<option value="{{ g.id }}">👥 {{ g.nome }}{% if g.unidade %} ({{ g.unidade.nome_curto }}){% endif %}</option>{% endfor %}
+          {% if tem_sol %}<option value="solicitante">👤 {{ ch.solicitante_nome or 'Quem abriu' }} · {{ ch.solicitante_contato|parcial('telefone') }}</option>{% endif %}</select>
+        <button class="btn" onclick="this.disabled=true;this.textContent='Enviando…';this.form.submit()">📤 Enviar</button>
+      </div>
+      <div class="dica">Envia pelo número da empresa (n8n), para o grupo do cliente ou direto para quem abriu o chamado. Ajuste o texto antes de enviar; respostas de quem recebe chegam no WhatsApp da empresa.</div>
+    </form>
+    {% else %}
     <textarea readonly style="min-height:130px;margin-top:8px" onclick="this.select()">{{ texto_wa }}</textarea>
-    <div class="dica">O botão “Enviar no WhatsApp” abre o WhatsApp com esta mensagem; é só escolher o grupo.</div>
+    <div class="dica">O botão “Enviar no WhatsApp” abre o WhatsApp com esta mensagem; é só escolher o grupo.
+      {% if u.papel == 'admin' and pode_enviar_grupo() %} Para enviar direto daqui, cadastre o grupo na <a href="/clientes/{{ ch.unidade.cliente_id }}#grupos">ficha do cliente</a>.{% endif %}</div>
+    {% endif %}
+    {% set envs = ch.envios|selectattr('evento', 'equalto', 'grupo')|list %}
+    {% if envs %}<div class="dica" style="margin-top:6px">Enviadas: {% for e in envs[-3:] %}{{ e.criado_em|local }} → {{ e.destino_nome }} ({{ e.status }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
   </details>
   {% endif %}
 </div>
