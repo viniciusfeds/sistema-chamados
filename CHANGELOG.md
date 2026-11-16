@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.33.0 — 2026-11-16
+- **Lista de bloqueio do WhatsApp** (Administração → WhatsApp → *Lista de bloqueio*): números que não recebem
+  nenhuma mensagem automática — avisos de chamado, alertas da equipe e respostas da URA (a URA fica em silêncio).
+  Reconhece o número com ou sem o 9 e com ou sem 55; guarda motivo, quem bloqueou e quando; *Desbloquear* volta
+  ao normal. Envios manuais pelo botão "Enviar" do chamado continuam possíveis
+
 ## 1.32.1 — 2026-11-15
 - Programa na área de trabalho: opções **"Abrir sozinho ao ligar o computador"** (o atalho também vai para a
   pasta Inicializar do Windows e a janela já abre ao terminar a instalação) e **"Abrir em tela inteira"**

@@ -141,6 +141,9 @@ def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str,
     """Recebe a mensagem do cliente e devolve o texto da resposta (ou None para não responder)."""
     if not config.WHATSAPP_URA:
         return None
+    from .whatsapp import esta_bloqueado
+    if esta_bloqueado(db, telefone):                  # lista de bloqueio: a URA não responde
+        return None
     texto = (texto or "").strip()
     conv = db.scalar(select(ConversaURA).where(ConversaURA.telefone == telefone))
     if conv and msg_id and conv.ultima_msg_id == msg_id:

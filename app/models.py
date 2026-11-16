@@ -319,6 +319,17 @@ EVENTOS_AVISO = {
 }
 
 
+class BloqueioWhatsApp(Base):
+    """Lista de bloqueio: números que não recebem nenhuma mensagem automática (avisos e respostas da URA)."""
+    __tablename__ = "bloqueios_whatsapp"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telefone: Mapped[str] = mapped_column(String(20), unique=True)    # normalizado: 55 + DDD + número
+    motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    criado_por = relationship("Usuario")
+
+
 class GrupoWhatsApp(Base):
     """Grupo de WhatsApp de um cliente (ou de uma unidade) para mandar a mensagem do chamado pelo n8n."""
     __tablename__ = "grupos_whatsapp"

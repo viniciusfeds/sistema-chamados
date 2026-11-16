@@ -97,6 +97,29 @@
   </form></details>
 </div>
 
+<div class="card" id="bloqueio">
+  <h2>Lista de bloqueio</h2>
+  <p class="dica" style="margin-top:0">Números que <b>não recebem nenhuma mensagem automática</b>: avisos de chamado, alertas e respostas da URA (a URA fica em silêncio para eles). Envios feitos à mão pelo botão “Enviar” do chamado continuam possíveis.</p>
+  {% if bloqueios %}
+  <table class="resp" style="margin-bottom:12px">
+    <thead><tr><th>Número</th><th>Motivo</th><th>Desde</th><th></th></tr></thead>
+    <tbody>{% for b in bloqueios %}<tr>
+      <td data-l="Número"><b>{{ b.telefone|sens("telefone", "+") }}</b></td>
+      <td data-l="Motivo">{{ b.motivo or '—' }}</td>
+      <td data-l="Desde">{{ b.criado_em|local }}{% if b.criado_por %} · {{ b.criado_por.nome }}{% endif %}</td>
+      <td><form method="post" action="/admin/whatsapp/bloqueio"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="bid" value="{{ b.id }}"><button class="btn peq sec" name="operacao" value="remover">Desbloquear</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted">Nenhum número bloqueado.</p>{% endif %}
+  <form method="post" action="/admin/whatsapp/bloqueio" class="acoes-orc" style="align-items:flex-end">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="operacao" value="adicionar">
+    <div class="campo" style="margin:0"><label>WhatsApp</label><input name="telefone" required inputmode="tel" placeholder="11 91234-5678"></div>
+    <div class="campo" style="margin:0;flex:1"><label>Motivo <span class="muted">(opcional)</span></label><input name="motivo" maxlength="255" placeholder="Ex.: pediu para não receber mensagens"></div>
+    <button class="btn">Bloquear</button>
+  </form>
+</div>
+
 <div class="card" id="historico">
   <h2>Últimos envios</h2>
   {% if envios %}

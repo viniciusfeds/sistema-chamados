@@ -3062,3 +3062,36 @@ def test_programa_area_de_trabalho_link_abertura():
     assert "if ('1' -eq '1')" in ps and "GetFolderPath('Startup')" in ps and "--start-maximized" in ps
     assert anon.get("/abrir/naoexiste/atalho.cmd").status_code == 404
     assert "Baixar instalador do atalho" in entrar("admin@t.com").get(f"/clientes/{IDS['top']}").text
+
+
+def test_lista_de_bloqueio_whatsapp(monkeypatch):
+    from app import config, ura, whatsapp
+    from app.models import BloqueioWhatsApp
+    adm = entrar("admin@t.com")
+    pg = adm.get("/admin/whatsapp").text
+    assert "Lista de bloqueio" in pg
+    assert "inválido" in adm.post("/admin/whatsapp/bloqueio", data={"csrf": _csrf(pg), "operacao": "adicionar",
+                                                                      "telefone": "123"}).text
+    r = adm.post("/admin/whatsapp/bloqueio", data={"csrf": _csrf(pg), "operacao": "adicionar",
+                                                    "telefone": "(11) 95555-0003", "motivo": "pediu para sair"})
+    assert "bloqueado" in r.text and "pediu para sair" in r.text
+    assert "já está" in adm.post("/admin/whatsapp/bloqueio", data={"csrf": _csrf(pg), "operacao": "adicionar",
+                                                                   "telefone": "11 5555-0003"}).text   # sem o 9
+    with SessionLocal() as db:
+        assert whatsapp.esta_bloqueado(db, "5511955550003") and whatsapp.esta_bloqueado(db, "551155550003")
+        assert not whatsapp.esta_bloqueado(db, "5511955550001")
+        # avisos automáticos pulam o número; a URA não responde
+        monkeypatch.setattr(config, "WHATSAPP_URA", True)
+        assert ura.responder(db, "5511955550003", "X", "oi", "http://x") is None
+        assert ura.responder(db, "5511955550001", "Y", "oi", "http://x")
+        monkeypatch.setattr(whatsapp, "configurado", lambda: True)
+        monkeypatch.setattr(whatsapp, "_em_segundo_plano", lambda *a: None)
+        from app.models import Chamado
+        ch = db.scalars(select(Chamado)).first()
+        monkeypatch.setattr(whatsapp, "destinatarios", lambda db_, c, e: [("A", "5511955550003"), ("B", "5511955550001")])
+        ids = whatsapp.disparar(db, ch, "status", "http://x")
+        from app.models import EnvioWhatsApp
+        assert [db.get(EnvioWhatsApp, i).telefone for i in ids] == ["5511955550001"]
+        bid = db.scalars(select(BloqueioWhatsApp)).first().id
+    r = adm.post("/admin/whatsapp/bloqueio", data={"csrf": _csrf(pg), "operacao": "remover", "bid": bid})
+    assert "voltou a receber" in r.text

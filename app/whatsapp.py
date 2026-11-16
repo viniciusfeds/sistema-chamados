@@ -91,6 +91,33 @@ def normalizar_telefone(t: str | None) -> str | None:
     return dig if 12 <= len(dig) <= 15 else None
 
 
+def _variantes(tel):
+    """O mesmo celular com e sem o 9 (e com/sem 55)."""
+    d = re.sub(r"\D", "", tel or "")
+    loc = d[2:] if d.startswith("55") and len(d) in (12, 13) else d
+    v = {loc}
+    if len(loc) == 11 and loc[2] == "9":
+        v.add(loc[:2] + loc[3:])
+    elif len(loc) == 10:
+        v.add(loc[:2] + "9" + loc[2:])
+    return v
+
+
+def bloqueados(db) -> set:
+    from .models import BloqueioWhatsApp
+    out = set()
+    for b in db.scalars(select(BloqueioWhatsApp)).all():
+        out |= _variantes(b.telefone)
+    return out
+
+
+def esta_bloqueado(db, tel, lista=None) -> bool:
+    """True se o número está na lista de bloqueio (não recebe mensagem automática)."""
+    if not tel or "@g.us" in str(tel):
+        return False
+    return bool(_variantes(tel) & (lista if lista is not None else bloqueados(db)))
+
+
 def _p(texto, limite=250) -> str:
     """Parâmetro de modelo: sem quebras de linha/tabs, sem ** e com tamanho limitado (regras da Meta)."""
     t = re.sub(r"\*\*(.+?)\*\*", r"\1", texto or "")
@@ -140,8 +167,9 @@ def disparar(db, ch: Chamado, evento: str, link: str, excluir=None) -> list[int]
     if not configurado():
         return []
     ids = []
+    bloq = bloqueados(db)
     for nome, tel in destinatarios(db, ch, evento):
-        if excluir and tel == excluir:
+        if (excluir and tel == excluir) or esta_bloqueado(db, tel, bloq):
             continue
         env = EnvioWhatsApp(chamado_id=ch.id, evento=evento, destino_nome=nome, telefone=tel,
                             modelo=nome_modelo(evento), parametros=parametros(ch, evento, link))
@@ -169,7 +197,10 @@ def disparar_equipe(db, chamado_id, evento: str, params: list[str]) -> list[int]
     if not configurado():
         return []
     ids = []
+    bloq = bloqueados(db)
     for nome, tel in destinatarios_equipe(db):
+        if esta_bloqueado(db, tel, bloq):
+            continue
         env = EnvioWhatsApp(chamado_id=chamado_id, evento=evento, destino_nome=nome, telefone=tel,
                             modelo=nome_modelo(evento), parametros=[_p(x, 500) for x in params])
         db.add(env); db.flush(); ids.append(env.id)

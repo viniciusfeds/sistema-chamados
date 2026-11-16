@@ -23,7 +23,7 @@ from .auth import (Precisa2FA, PrecisaLogin, SoPonto, limite_publico, checar_csr
                    pode_ver, so_admin, so_equipe, usuario_atual)
 from .db import criar_tabelas, get_db
 from .models import (EVENTOS_AVISO, MODULOS_TECNICO, PAPEIS, PRIORIDADES, STATUS_ACAO, VALIDADO_LOCAL, TIPOS_EQUIPAMENTO, Acao, AcessoSenha,
-                     Anexo, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
+                     Anexo, BloqueioWhatsApp, Chamado, Cliente, ContatoAviso, EnvioWhatsApp, Equipamento, EventoMonitor,
                      STATUS_OCORRENCIA, Agente, Ocorrencia, TipoChamado, Unidade, Usuario, nova_chave_agente,
                      novo_token)
 
@@ -1572,7 +1572,32 @@ def admin_whatsapp(request: Request, u: Usuario = Depends(so_admin), db: Session
                   nome_modelo=whatsapp.nome_modelo, webhook=f"{base_url(request)}/webhook/whatsapp",
                   modo=whatsapp.modo(), token_ok=len(config.N8N_TOKEN or "") >= 16,
                   api_mensagem=f"{base_url(request)}/api/integracao/whatsapp/mensagem",
-                  api_status=f"{base_url(request)}/api/integracao/whatsapp/status")
+                  api_status=f"{base_url(request)}/api/integracao/whatsapp/status",
+                  bloqueios=db.scalars(select(BloqueioWhatsApp).order_by(BloqueioWhatsApp.criado_em.desc())).all())
+
+
+@app.post("/admin/whatsapp/bloqueio", dependencies=[Depends(checar_csrf)])
+def admin_whatsapp_bloqueio(request: Request, operacao: str = Form(...), telefone: str = Form(""),
+                            motivo: str = Form(""), bid: str = Form(""), u: Usuario = Depends(so_admin),
+                            db: Session = Depends(get_db)):
+    if operacao == "remover":
+        b = db.get(BloqueioWhatsApp, _int(bid))
+        if b:
+            db.delete(b)
+            db.commit()
+            flash(request, f"{b.telefone} voltou a receber mensagens automáticas.")
+        return voltar("/admin/whatsapp#bloqueio")
+    tel = whatsapp.normalizar_telefone(telefone)
+    if not tel:
+        flash(request, "Telefone inválido. Use DDD + número, ex.: 11 91234-5678.", "erro")
+        return voltar("/admin/whatsapp#bloqueio")
+    if whatsapp.esta_bloqueado(db, tel):
+        flash(request, "Esse número já está na lista de bloqueio.", "aviso")
+        return voltar("/admin/whatsapp#bloqueio")
+    db.add(BloqueioWhatsApp(telefone=tel, motivo=" ".join(motivo.split())[:255] or None, criado_por_id=u.id))
+    db.commit()
+    flash(request, f"{telefone.strip()} bloqueado: não recebe mais avisos nem respostas automáticas.")
+    return voltar("/admin/whatsapp#bloqueio")
 
 
 @app.post("/admin/whatsapp/contatos", dependencies=[Depends(checar_csrf)])
