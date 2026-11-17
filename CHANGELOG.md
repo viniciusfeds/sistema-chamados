@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.37.0 — 2026-11-17
+- **Reajuste anual dos contratos**: cada contrato tem o índice (IPCA, IGP-M, percentual combinado ou sem
+  reajuste). No aniversário (com a antecedência das Configurações) o contrato aparece em *Reajuste anual a
+  aplicar*, com contador no menu. *Buscar índice* traz o acumulado de 12 meses do Banco Central; ao aplicar, o
+  valor mensal muda para as próximas cobranças, fica no histórico e o cliente pode ser avisado por e-mail
+- **Rentabilidade por cliente** (Financeiro → Rentabilidade): receita de contrato e avulsa do período contra o
+  custo estimado dos chamados (horas × custo da hora + visitas × deslocamento + peças), com resultado e margem —
+  os contratos que menos sobram vêm primeiro. Custos em Configurações → Contratos
+- Chamado: campo **Horas gastas** (junto de prioridade e técnico), usado na rentabilidade
+- As preventivas agendadas por contrato já existiam (menu Preventivas) e seguem como estão
+
 ## 1.36.0 — 2026-11-17
 - **Respostas do WhatsApp no chamado**: depois que a equipe envia uma mensagem para quem abriu o chamado
   (*Enviar mensagem pelo WhatsApp*), o que a pessoa responder nas 48 horas seguintes fica registrado na conversa

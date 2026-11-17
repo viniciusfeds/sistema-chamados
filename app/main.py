@@ -535,11 +535,16 @@ def nova_acao(request: Request, numero: int, descricao: str = Form(...), status:
 
 @app.post("/chamados/{numero}/classificar", dependencies=[Depends(checar_csrf)])
 def classificar(request: Request, numero: int, prioridade: str = Form("normal"), tecnico_id: str = Form(""),
-                tipo_ids: list[str] = Form(default=[]),
+                tipo_ids: list[str] = Form(default=[]), horas_gastas: str = Form(""),
                 u: Usuario = Depends(so_equipe), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
     ch.prioridade = _prioridade(prioridade)
     ch.tecnico_id = _tecnico_valido(db, _int(tecnico_id))
+    try:
+        hg = float(horas_gastas.strip().replace(",", ".")) if horas_gastas.strip() else None
+        ch.horas_gastas = hg if hg is None or 0 <= hg <= 500 else ch.horas_gastas
+    except ValueError:
+        pass
     inativos = [t for t in ch.tipos if not t.ativo]   # tipos desativados continuam no chamado
     ch.tipos = inativos + [t for t in _tipos_escolhidos(db, tipo_ids) if t.ativo]
     db.commit()
@@ -1871,3 +1876,4 @@ from . import rotas_grupos  # noqa: E402,F401
 from . import rotas_app_desktop  # noqa: E402,F401
 from . import rotas_nfe  # noqa: E402,F401
 from . import rotas_atendimento  # noqa: E402,F401
+from . import rotas_contratos_gestao  # noqa: E402,F401

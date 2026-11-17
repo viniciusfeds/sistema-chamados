@@ -214,6 +214,16 @@ SECOES = [
         Campo("FIN_MULTA_PCT", "Multa por atraso (%)", "num", minimo=0, maximo=2),
         Campo("FIN_JUROS_MES_PCT", "Juros por mês de atraso (%)", "num", minimo=0, maximo=10),
     ]),
+    ("contratos", "Contratos: reajuste e rentabilidade",
+     "Aviso do reajuste anual e custos usados no relatório de rentabilidade por cliente (Financeiro → Rentabilidade).", [
+        Campo("REAJUSTE_AVISO_DIAS", "Avisar o reajuste com antecedência de (dias)", "int", minimo=0, maximo=120),
+        Campo("CUSTO_HORA_TECNICO", "Custo da hora do técnico (R$)", "num",
+              "Salário + encargos + benefícios, dividido pelas horas úteis do mês.", minimo=0, maximo=5000),
+        Campo("CUSTO_VISITA", "Custo de deslocamento por visita (R$)", "num",
+              "Combustível, pedágio e tempo de trânsito, em média.", minimo=0, maximo=5000),
+        Campo("HORAS_PADRAO_CHAMADO", "Horas por chamado quando não informadas", "num",
+              "Usado nos chamados sem “Horas gastas” preenchidas.", minimo=0, maximo=100),
+    ]),
     ("inter", "Banco Inter — boleto com PIX",
      "Credenciais da integração criada no Internet Banking PJ. O certificado é enviado em Administração → Integração bancária.", [
         Campo("INTER_ATIVO", "Emissão de boleto pelo Inter ligada", "bool"),

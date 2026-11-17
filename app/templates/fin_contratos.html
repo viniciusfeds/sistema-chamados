@@ -20,6 +20,46 @@
   </div>
 </div>
 
+{% set rea = reajustes_pendentes() %}{% if rea %}
+<div class="card" id="reajustes" style="border-left:4px solid #B07A00">
+  <h2 style="margin-top:0">Reajuste anual a aplicar <span class="muted" style="font-weight:400;font-size:.85rem">· {{ rea|length }} contrato(s)</span></h2>
+  <p class="dica" style="margin-top:0">O aniversário do contrato chegou (ou chega em até {{ config.REAJUSTE_AVISO_DIAS }} dias). Clique em “Buscar índice” para trazer o acumulado de 12 meses do Banco Central, confira e aplique. O novo valor vale para as próximas cobranças geradas; as já lançadas não mudam.</p>
+  <table class="resp">
+    <thead><tr><th>Contrato</th><th class="valor">Valor atual</th><th>Aniversário</th><th>Reajuste</th><th></th></tr></thead>
+    <tbody>{% for cid, desc, cli, valor, quando, indice in rea %}<tr>
+      <td data-l="Contrato"><b>{{ desc }}</b><div class="muted">{{ cli }}</div></td>
+      <td data-l="Valor atual" class="valor">{{ valor|rs }}</td>
+      <td data-l="Aniversário">{{ quando|data }}{% if quando <= hoje %} <span class="selo" style="background:#B3261E">vencido</span>{% endif %}</td>
+      <td data-l="Reajuste" colspan="2"><form method="post" action="/financeiro/contratos/{{ cid }}/reajustar" class="acoes-orc" style="align-items:center" data-valor="{{ valor }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input name="percentual" inputmode="decimal" placeholder="%" style="width:86px" required oninput="prevReajuste(this)">
+        <span class="muted">% ({{ INDICES_REAJUSTE[indice] }})</span>
+        {% if indice in ('ipca', 'igpm') %}<button type="button" class="btn peq sec" onclick="buscarIndice(this, '{{ indice }}')">Buscar índice</button>{% endif %}
+        <span class="muted prev"></span>
+        <label class="check" style="margin:0"><input type="checkbox" name="avisar" value="1" checked style="width:auto"> avisar o cliente por e-mail</label>
+        <button class="btn peq" onclick="return confirm('Aplicar o reajuste neste contrato?')">Aplicar</button>
+      </form></td>
+    </tr>{% endfor %}</tbody>
+  </table>
+</div>
+<script>
+function prevReajuste(i) {
+  var f = i.form, v = parseFloat(i.value.replace('%', '').replace(',', '.')), p = f.querySelector('.prev');
+  if (isNaN(v)) { p.textContent = ''; return; }
+  var novo = Math.round(parseInt(f.dataset.valor, 10) * (1 + v / 100)) / 100;
+  p.textContent = '→ ' + novo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) + '/mês';
+}
+function buscarIndice(b, indice) {
+  var i = b.form.percentual; b.disabled = true; b.textContent = 'Buscando…';
+  fetch('/financeiro/contratos/indice/' + indice).then(function (r) { return r.json(); }).then(function (d) {
+    b.disabled = false;
+    if (d.erro) { b.textContent = 'Buscar índice'; alert(d.erro); return; }
+    i.value = String(d.pct).replace('.', ','); b.textContent = '12 meses até ' + d.ate; prevReajuste(i);
+  }).catch(function () { b.disabled = false; b.textContent = 'Buscar índice'; alert('Não consegui consultar o índice. Digite o percentual.'); });
+}
+</script>
+{% endif %}
+
 <div class="card" style="padding:0;overflow:hidden">
 {% if lista %}
 <table class="resp">
@@ -29,9 +69,9 @@
     <td data-l="Contrato"><a href="/financeiro/contratos/{{ c.id }}"><b>{{ c.descricao }}</b></a>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}
       {% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}{% if not c.precisa_nf %}<span class="tag" title="Não emite nota fiscal: recibo">Recibo</span> {% endif %}{% if c.doc_status %}<span class="selo" style="background:{{ sd[1] }};font-size:.68rem">{{ sd[0] }}</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
     <td data-l="Cliente">{{ c.cliente_fiscal.nome }}</td>
-    <td data-l="Valor/mês" class="valor"><b>{{ c.valor|rs }}</b></td>
+    <td data-l="Valor/mês" class="valor"><b>{{ c.valor|rs }}</b>{% if c.reajustes %}{% set ur = c.reajustes[-1] %}<div class="muted" title="Último reajuste">↑ {{ ('%g'|format(ur.pct)).replace('.', ',') }}% em {{ ur.data[8:10] }}/{{ ur.data[5:7] }}/{{ ur.data[:4] }}</div>{% endif %}</td>
     <td data-l="Vence dia">{{ c.dia_vencimento }}</td>
-    <td data-l="Vigência">{{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}</td>
+    <td data-l="Vigência">{{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}{% set pr = proximo_reajuste(c) %}{% if pr %}<div class="muted">reajuste {{ pr|data }}</div>{% endif %}</td>
     <td><div class="acoes-orc"><a class="btn peq" href="/financeiro/contratos/{{ c.id }}#documento">{{ 'Documento' if c.doc_status else 'Gerar contrato' }}</a>
       <a class="btn peq sec" href="?editar={{ c.id }}#form">Editar</a>
       <form method="post" action="/financeiro/contratos/{{ c.id }}/alternar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn peq sec">{{ 'Encerrar' if c.ativo else 'Reativar' }}</button></form></div></td>
@@ -59,6 +99,12 @@
     <div class="campo"><label>Início</label><input type="date" name="inicio" value="{{ (ed.inicio if ed else hoje).isoformat() }}"></div>
     <div class="campo"><label>Fim <span class="muted">(opcional)</span></label><input type="date" name="fim" value="{{ ed.fim.isoformat() if ed and ed.fim else '' }}"></div>
     <div class="campo"><label>Observações</label><input name="observacoes" value="{{ ed.observacoes or '' if ed else '' }}"></div>
+  </div>
+  <div class="grid3">
+    <div class="campo"><label>Reajuste anual</label><select name="reajuste_indice">{% for k, r in INDICES_REAJUSTE.items() %}<option value="{{ k }}" {{ 'selected' if (ed.reajuste_indice if ed and ed.reajuste_indice else 'ipca') == k }}>{{ r }}</option>{% endfor %}</select>
+      <div class="dica">No aniversário do contrato o Nexus avisa aqui para aplicar o reajuste.</div></div>
+    <div class="campo"><label>Último reajuste em <span class="muted">(opcional)</span></label><input type="date" name="reajuste_base" value="{{ ed.reajuste_base.isoformat() if ed and ed.reajuste_base else '' }}">
+      <div class="dica">Vazio = conta 12 meses a partir do início.</div></div>
   </div>
   <div class="campo"><label>Documento fiscal</label>
     <label class="check"><input type="checkbox" name="emite_nf" value="1" style="width:auto" {{ 'checked' if not ed or ed.precisa_nf }}> Este cliente precisa de nota fiscal (NFS-e)</label>

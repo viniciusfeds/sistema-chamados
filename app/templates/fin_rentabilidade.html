@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Rentabilidade por cliente{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('rentabilidade') }}
+{% set t = r.total %}
+<div class="cab"><div><h1>Rentabilidade por cliente</h1>
+  <div class="muted">Receita com vencimento de {{ ini|data }} a {{ fim|data }} contra o custo estimado dos chamados abertos no período</div></div></div>
+<div class="card">
+  <form class="filtros" method="get">
+    <div><label for="de">De</label><input type="date" id="de" name="de" value="{{ ini.isoformat() }}"></div>
+    <div><label for="ate">Até</label><input type="date" id="ate" name="ate" value="{{ fim.isoformat() }}"></div>
+    <div><button class="btn">Ver</button></div>
+  </form>
+</div>
+{% if not r.configurado %}<div class="card aviso-card">Informe o <b>custo da hora do técnico</b> e o <b>custo de deslocamento por visita</b> em <a href="/admin/configuracoes#contratos">Configurações → Contratos</a>. Sem isso o custo aparece zerado e o resultado é só a receita.</div>{% endif %}
+<div class="cards">
+  <a style="--c:#2E7D4F"><b>{{ t.contrato|rs }}</b><span>Receita de contratos</span></a>
+  <a style="--c:#1F5FA8"><b>{{ t.avulso|rs }}</b><span>Receita avulsa (orçamentos)</span></a>
+  <a style="--c:#B07A00"><b>{{ t.custo|rs }}</b><span>Custo dos chamados · {{ t.chamados }} chamado(s)</span></a>
+  <a style="--c:{{ '#2E7D4F' if t.resultado >= 0 else '#B3261E' }}"><b>{{ t.resultado|rs }}</b><span>Resultado dos contratos{% if t.margem is not none %} · margem {{ ('%.0f'|format(t.margem)) }}%{% endif %}</span></a>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if r.linhas %}
+<table class="resp">
+  <thead><tr><th>Cliente</th><th class="valor">Contrato/mês</th><th class="valor">Receita contrato</th><th class="valor">Avulsa</th><th>Chamados</th><th>Horas</th><th>Visitas</th><th class="valor">Custo</th><th class="valor">Resultado</th><th>Margem</th></tr></thead>
+  <tbody>{% for x in r.linhas %}<tr>
+    <td data-l="Cliente">{% if x.cliente_id %}<a href="/clientes/{{ x.cliente_id }}"><b>{{ x.nome }}</b></a>{% else %}<b>{{ x.nome }}</b>{% endif %}</td>
+    <td data-l="Contrato/mês" class="valor">{{ x.mensal|rs if x.mensal else '—' }}</td>
+    <td data-l="Receita contrato" class="valor">{{ x.contrato|rs }}</td>
+    <td data-l="Avulsa" class="valor">{{ x.avulso|rs if x.avulso else '—' }}</td>
+    <td data-l="Chamados">{{ x.chamados }}{% if x.preventivas %} <span class="muted">({{ x.preventivas }} prev.)</span>{% endif %}</td>
+    <td data-l="Horas">{{ ('%.1f'|format(x.horas)).replace('.', ',') }}{% if x.sem_horas %}<span class="muted" title="{{ x.sem_horas }} chamado(s) sem horas informadas: usei {{ config.HORAS_PADRAO_CHAMADO }} h cada"> *</span>{% endif %}</td>
+    <td data-l="Visitas">{{ x.visitas }}</td>
+    <td data-l="Custo" class="valor" title="Mão de obra {{ x.custo_mo|rs }} · deslocamento {{ x.custo_visitas|rs }} · peças {{ x.pecas|rs }}">{{ x.custo|rs }}{% if x.por_chamado %}<div class="muted">{{ x.por_chamado|rs }}/chamado</div>{% endif %}</td>
+    <td data-l="Resultado" class="valor"><b style="color:{{ '#2E7D4F' if x.resultado >= 0 else '#B3261E' }}">{{ x.resultado|rs }}</b></td>
+    <td data-l="Margem">{% if x.margem is none %}<span class="muted">—</span>{% else %}<b class="{{ 'k-ok' if x.margem >= 40 else ('k-med' if x.margem >= 15 else 'k-ruim') }}">{{ ('%.0f'|format(x.margem)) }}%</b>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Sem cobranças nem chamados no período.</p>{% endif %}
+</div>
+<p class="dica"><b>Como é calculado:</b> resultado = receita de contrato − custo dos chamados. Custo = horas × custo da hora + visitas × deslocamento + peças baixadas do estoque. Horas vêm do campo “Horas gastas” do chamado (* = sem horas informadas, usa o padrão das Configurações). Visitas = dias diferentes com ação registrada pela equipe. A receita avulsa (orçamentos) aparece separada porque não paga o atendimento do contrato. Os primeiros da lista são os contratos que menos sobram — candidatos a reajuste ou revisão de escopo.</p>
+{% endblock %}

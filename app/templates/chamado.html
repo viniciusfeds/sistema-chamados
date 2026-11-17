@@ -73,6 +73,7 @@
     {% for k, p in PRIORIDADES.items() %}<option value="{{ k }}" {{ 'selected' if k == ch.prioridade_ok }}>{{ p[0] }}</option>{% endfor %}</select></div>
   <div><label for="cl_tec">Técnico responsável</label><select id="cl_tec" name="tecnico_id"><option value="">A definir</option>
     {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if t.id == ch.tecnico_id }}>{{ t.nome }}</option>{% endfor %}</select></div>
+  <div><label for="cl_horas" title="Horas de técnico gastas neste chamado (usado na rentabilidade por cliente)">Horas gastas</label><input id="cl_horas" name="horas_gastas" inputmode="decimal" style="width:90px" placeholder="ex.: 1,5" value="{{ ('%g'|format(ch.horas_gastas)).replace('.', ',') if ch.horas_gastas is not none else '' }}"></div>
   <div class="classif-tipos">{{ campo_tipos(tipos, ch.tipos) }}</div>
   <div style="min-width:0"><button class="btn sec">Salvar</button></div>
 </form>

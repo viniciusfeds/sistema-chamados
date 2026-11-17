@@ -3455,3 +3455,81 @@ def test_aprovacao_pelo_link_pausa_sla_e_satisfacao(monkeypatch):
     ind = adm.get("/indicadores").text
     assert "Satisfação do solicitante" in ind and "4,0" in ind
     assert adm.get("/indicadores/pdf").content.startswith(b"%PDF")
+
+
+def test_reajuste_anual_e_rentabilidade(monkeypatch):
+    import io
+    from datetime import timedelta as td
+    from app import config, contratos_gestao as cg, rotas_contratos_gestao as rcg
+    from app.financeiro import somar_meses
+    from app.models import Acao, Chamado, Cliente, ClienteFiscal, Contrato, Titulo, Usuario
+    adm = entrar("admin@t.com")
+    hoje = date.today()
+    with SessionLocal() as db:
+        cf = ClienteFiscal(documento="45543915000181", razao_social="Condomínio Rentável", cliente_id=IDS["top"],
+                           email="sindico@exemplo.com.br")
+        db.add(cf); db.flush()
+        velho = Contrato(cliente_fiscal_id=cf.id, descricao="Manutenção CFTV", valor=100000, dia_vencimento=10,
+                         inicio=somar_meses(hoje, -13))
+        novo = Contrato(cliente_fiscal_id=cf.id, descricao="Contrato recente", valor=50000, inicio=somar_meses(hoje, -2))
+        fixo = Contrato(cliente_fiscal_id=cf.id, descricao="Sem reajuste", valor=30000, inicio=somar_meses(hoje, -30),
+                        reajuste_indice="nenhum")
+        db.add_all([velho, novo, fixo]); db.commit()
+        vid, cfid = velho.id, cf.id
+        pend = [c.descricao for c, _ in cg.pendentes(db, hoje)]
+        assert "Manutenção CFTV" in pend and "Contrato recente" not in pend and "Sem reajuste" not in pend
+    pg = adm.get("/financeiro/contratos").text
+    assert "Reajuste anual a aplicar" in pg and "Buscar índice" in pg and "vencido" in pg
+    # índice do Banco Central (12 meses de 0,5% = 6,17%)
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    cg._cache.clear()
+    monkeypatch.setattr(cg.urllib.request, "urlopen", lambda req, timeout=8: R(
+        ("[" + ",".join('{"data":"01/%02d/2026","valor":"0.50"}' % m for m in range(1, 13)) + "]").encode()))
+    assert adm.get("/financeiro/contratos/indice/ipca").json() == {"pct": 6.17, "ate": "12/2026", "meses": 12}
+    def cai(*a, **k): raise OSError("sem rede")
+    cg._cache.clear()
+    monkeypatch.setattr(cg.urllib.request, "urlopen", cai)
+    assert "erro" in adm.get("/financeiro/contratos/indice/igpm").json()
+    assert "Informe o percentual" in adm.post(f"/financeiro/contratos/{vid}/reajustar", data={"csrf": _csrf(pg), "percentual": ""}).text
+    emails = []
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.exemplo")
+    monkeypatch.setattr(rcg, "enviar_email", lambda para, ass, corpo, anexos=(): emails.append((para, corpo)))
+    r = adm.post(f"/financeiro/contratos/{vid}/reajustar", data={"csrf": _csrf(pg), "percentual": "6,17", "avisar": "1"})
+    assert "Reajuste de 6,17% aplicado" in r.text and "Cliente avisado por e-mail" in r.text
+    assert emails and emails[0][0] == "sindico@exemplo.com.br" and "1.061,70" in emails[0][1]
+    with SessionLocal() as db:
+        c = db.get(Contrato, vid)
+        assert c.valor == 106170 and c.reajustes[-1]["de"] == 100000 and c.reajuste_base == somar_meses(c.inicio, 12)
+        assert cg.proximo_reajuste(c) == somar_meses(c.inicio, 24)
+        assert "Manutenção CFTV" not in [x.descricao for x, _ in cg.pendentes(db, hoje)]
+        # rentabilidade: 1 cobrança de contrato + 1 avulsa; 2 chamados (um com horas, outro no padrão)
+        db.add_all([Titulo(cliente_fiscal_id=cfid, contrato_id=vid, competencia="x", descricao="Mensalidade", valor=106170, vencimento=hoje),
+                    Titulo(cliente_fiscal_id=cfid, descricao="Instalação avulsa", valor=50000, vencimento=hoje)])
+        tec = db.scalar(select(Usuario).where(Usuario.papel == "admin"))
+        a = Chamado(numero=8801, unidade_id=IDS["torre"], titulo="t", assunto="Câmera", problema="p", abertura=hoje, horas_gastas=2.0)
+        a.acoes.append(Acao(descricao="Visita técnica", status="Concluído", data=hoje, autor_id=tec.id))
+        a.acoes.append(Acao(descricao="Retorno", status="Concluído", data=hoje - td(days=1), autor_id=tec.id))
+        b = Chamado(numero=8802, unidade_id=IDS["torre"], titulo="t", assunto="Interfone", problema="p", abertura=hoje)
+        db.add_all([a, b]); db.commit()
+    monkeypatch.setattr(config, "CUSTO_HORA_TECNICO", 0.0)
+    assert "Informe o <b>custo da hora" in adm.get("/financeiro/rentabilidade").text
+    monkeypatch.setattr(config, "CUSTO_HORA_TECNICO", 80.0)
+    monkeypatch.setattr(config, "CUSTO_VISITA", 30.0)
+    monkeypatch.setattr(config, "HORAS_PADRAO_CHAMADO", 1.0)
+    with SessionLocal() as db:
+        r = cg.rentabilidade(db, hoje, hoje)
+        top = next(x for x in r["linhas"] if x["cliente_id"] == IDS["top"])
+        n = top["chamados"]                                   # outros testes também abriram chamados hoje
+        assert top["contrato"] == 106170 and top["avulso"] == 50000 and n >= 2 and top["sem_horas"] == n - 1
+        assert top["custo_mo"] == round((2.0 + (n - 1) * 1.0) * 80 * 100) and top["visitas"] >= 2
+        assert top["resultado"] == top["contrato"] - top["custo"]
+    pg = adm.get("/financeiro/rentabilidade").text
+    assert "Rentabilidade por cliente" in pg and "Margem" in pg and "/chamado" in pg
+    # horas gastas pelo chamado
+    pg = adm.get("/chamados/8802").text
+    assert 'name="horas_gastas"' in pg
+    adm.post("/chamados/8802/classificar", data={"csrf": _csrf(pg), "prioridade": "normal", "horas_gastas": "3,5"})
+    with SessionLocal() as db:
+        assert db.scalar(select(Chamado).where(Chamado.numero == 8802)).horas_gastas == 3.5

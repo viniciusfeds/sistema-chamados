@@ -184,6 +184,7 @@ class Chamado(Base):
     sla_expurgo: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)   # fora do indicador
     sla_expurgo_motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sla_pausas: Mapped[list | None] = mapped_column(JSON, nullable=True)   # [[início ISO, fim ISO ou None], ...] (UTC)
+    horas_gastas: Mapped[float | None] = mapped_column(nullable=True)             # horas de técnico (rentabilidade)
     satisfacao_nota: Mapped[int | None] = mapped_column(Integer, nullable=True)      # 1 a 5, dada pelo solicitante
     satisfacao_obs: Mapped[str | None] = mapped_column(Text, nullable=True)
     satisfacao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -880,6 +881,9 @@ class Contrato(Base):
     doc_enviado_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     doc_concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     emite_nf: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)   # False = só recibo
+    reajuste_indice: Mapped[str | None] = mapped_column(String(10), nullable=True, default="ipca")   # ipca/igpm/manual/nenhum
+    reajuste_base: Mapped[date | None] = mapped_column(Date, nullable=True)     # aniversário do último reajuste
+    reajustes: Mapped[list | None] = mapped_column(JSON, nullable=True)          # [{data, de, para, pct, indice}]
     # informações complementares da NFS-e (vão em cada nota do contrato)
     nfse_doc_tecnico: Mapped[str | None] = mapped_column(String(40), nullable=True)      # ART/RRT/TRT
     nfse_doc_referencia: Mapped[str | None] = mapped_column(String(255), nullable=True)
