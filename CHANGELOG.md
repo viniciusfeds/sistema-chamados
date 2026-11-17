@@ -1,5 +1,9 @@
 # Histórico de versões
 
+## 1.34.6 — 2026-11-17
+- Menu lateral do Financeiro: incluída a opção **NF-e (produtos)** (só aparecia nas abas do celular); "Notas
+  fiscais" passa a se chamar **NFS-e e recibos**, igual às abas
+
 ## 1.34.5 — 2026-11-17
 - NF-e: antes de enviar, o Nexus relê o XML exatamente como vai para a SEFAZ e confere o digest e a assinatura
   com o certificado; se não bater, nada é enviado e o motivo aparece na tela

@@ -3213,6 +3213,7 @@ def test_nfe_produtos_e_danfe(monkeypatch):
         db.commit(); oid, cfid, onum = o.id, cf.id, o.numero
     adm = entrar("admin@t.com")
     assert "Emitir NF-e (produtos)" in adm.get(f"/financeiro/orcamentos/{onum}").text
+    assert 'href="/financeiro/nfe" class="' in adm.get("/financeiro").text.split('class="lat-sub')[1].split("</div>")[0]
     pg = adm.get(f"/financeiro/nfe/nova?orcamento={oid}").text
     assert "Emitir NF-e de teste" in pg and 'value="85258929"' in pg and "Instalação" not in pg.split("<template")[0]
     # desconto do orçamento rateado: produtos 1350 de 1850 → 72,97 de desconto
