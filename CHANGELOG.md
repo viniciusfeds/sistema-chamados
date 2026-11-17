@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.34.2 — 2026-11-17
+- NF-e: corrige a rejeição **297 "Assinatura difere do calculado"**. Ao colocar a NF-e assinada dentro do lote
+  (enviNFe), o `xmlns` da tag `<NFe>` era omitido por ser igual ao do lote, e a SEFAZ confere a assinatura sobre a
+  NF-e isolada. Agora a NF-e (e o evento de cancelamento) vão exatamente como foram assinados; o nfeProc guardado
+  também mantém o `xmlns` na NFe e no protocolo (validado contra o esquema procNFe)
+
 ## 1.34.1 — 2026-11-17
 - NF-e: corrige **"CERTIFICATE_VERIFY_FAILED"** ao falar com a SEFAZ-SP. O servidor da SEFAZ usa certificado da
   ICP-Brasil, que não vem no Linux/Python; o Nexus agora traz as ACs da ICP-Brasil (raízes v5, v10 e v11

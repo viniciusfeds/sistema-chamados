@@ -3128,8 +3128,17 @@ def _sefaz_falsa(monkeypatch, pedidos, rejeitar=None):
                                 etree.tostring(si, method="c14n"), padding.PKCS1v15(), hashes.SHA1())
 
     def soap(servico, amb, corpo, timeout=60):
-        pedidos.append((servico, amb, etree.tostring(corpo)))
-        r = etree.fromstring(etree.tostring(corpo))
+        texto = corpo if isinstance(corpo, str) else etree.tostring(corpo, encoding="unicode")
+        pedidos.append((servico, amb, texto))
+        if servico in ("autorizacao", "evento"):
+            # o elemento assinado vai com o próprio xmlns (a SEFAZ confere a assinatura sobre esse trecho isolado)
+            tag = "<NFe " if servico == "autorizacao" else "<evento "
+            ini = texto.index(tag)
+            fim = texto.index("</NFe>" if servico == "autorizacao" else "</evento>") + (6 if servico == "autorizacao" else 9)
+            trecho = etree.fromstring(texto[ini:fim])
+            assert trecho.nsmap.get(None) == NS
+            conferir_assinatura(trecho, next(e.get("Id") for e in trecho.iter() if e.get("Id")))
+        r = etree.fromstring(texto)
         if servico == "autorizacao":
             _validar_xsd(r, "enviNFe_v4.00.xsd")
             nfe_el = r.find(f"{{{NS}}}NFe")
@@ -3142,7 +3151,7 @@ def _sefaz_falsa(monkeypatch, pedidos, rejeitar=None):
             return etree.fromstring(
                 f'<retEnviNFe xmlns="{NS}" versao="4.00"><tpAmb>2</tpAmb><cStat>104</cStat><xMotivo>Lote processado'
                 f'</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><verAplic>SP_NFE</verAplic><chNFe>{chave}'
-                f'</chNFe><dhRecbto>2026-11-17T10:00:00-03:00</dhRecbto><nProt>135260000000001</nProt><digVal>x</digVal>'
+                f'</chNFe><dhRecbto>2026-11-17T10:00:00-03:00</dhRecbto><nProt>135260000000001</nProt><digVal>bm9yZWFs</digVal>'
                 f'<cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>')
         if servico == "evento":
             _validar_xsd(r, "envEventoCancNFe_v1.00.xsd")
@@ -3205,6 +3214,9 @@ def test_nfe_produtos_e_danfe(monkeypatch):
         assert n.chave[20:22] == "55" and n.chave[22:25] == "002" and len(n.chave) == 44
         x = n.xml_proc
         assert "<nfeProc" in x and "<xNome>NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</xNome>" in x
+        assert f'<NFe xmlns="{nfe.NS}">' in x
+        from lxml import etree as _et
+        _validar_xsd(_et.fromstring(x.encode()), "procNFe_v4.00.xsd")
         assert "<CSOSN>102</CSOSN>" in x and "<orig>2</orig>" in x and "<vNF>1277.03</vNF>" in x and "<CRT>1</CRT>" in x
         assert "<indIEDest>9</indIEDest>" in x and "<vTotTrib>127.70</vTotTrib>" in x and "<tPag>15</tPag>" in x
         nid = n.id

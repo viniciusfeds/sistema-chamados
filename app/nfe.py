@@ -321,7 +321,7 @@ def _soap(servico: str, amb: str, corpo: etree._Element, timeout=60) -> etree._E
     """Envia o XML ao serviço da SEFAZ-SP e devolve o elemento de resposta (retEnviNFe, retConsSitNFe…)."""
     from . import icpbrasil
     arq, wsdl, acao = SERVICOS[servico]
-    msg = etree.tostring(corpo, encoding="unicode")
+    msg = corpo if isinstance(corpo, str) else etree.tostring(corpo, encoding="unicode")
     env = ('<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
            'xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
            f'<soap12:Body><nfeDadosMsg xmlns="{WSDL}{wsdl}">{msg}</nfeDadosMsg></soap12:Body></soap12:Envelope>')
@@ -378,13 +378,17 @@ def status_servico(amb=None) -> tuple[str, str]:
     return _t(r, "cStat"), _t(r, "xMotivo")
 
 
+def _com_ns(el) -> str:
+    """Serializa o elemento sozinho (com o xmlns declarado nele)."""
+    return etree.tostring(etree.fromstring(etree.tostring(el)), encoding="unicode")
+
+
 def _aplicar_protocolo(n, nfe_assinada: etree._Element, prot: etree._Element):
     cstat = _t(prot, "cStat")
     if cstat in ("100", "150"):
-        proc = etree.Element(f"{{{NS}}}nfeProc", nsmap={None: NS}, versao="4.00")
-        proc.append(nfe_assinada)
-        proc.append(prot)
-        n.xml_proc = etree.tostring(proc, xml_declaration=True, encoding="UTF-8").decode()
+        # montado como texto: a NFe e o protNFe mantêm o xmlns próprio (exigência do leiaute)
+        n.xml_proc = ('<?xml version="1.0" encoding="UTF-8"?>'
+                      f'<nfeProc xmlns="{NS}" versao="4.00">{_com_ns(nfe_assinada)}{_com_ns(prot)}</nfeProc>')
         n.protocolo = _t(prot, "nProt")
         n.status, n.erro = "autorizada", None
         n.autorizada_em = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -398,10 +402,10 @@ def _aplicar_protocolo(n, nfe_assinada: etree._Element, prot: etree._Element):
 def transmitir(n):
     nfe = assinar(montar_nfe(n), f"NFe{n.chave}")
     n.xml = etree.tostring(nfe, encoding="unicode")
-    env = etree.Element(f"{{{NS}}}enviNFe", nsmap={None: NS}, versao="4.00")
-    _sub(env, "idLote", str(n.id or n.numero)[-15:])
-    _sub(env, "indSinc", "1")
-    env.append(etree.fromstring(n.xml))
+    # enviNFe como texto: a NFe vai exatamente como foi assinada, com o próprio xmlns (senão a SEFAZ calcula a
+    # assinatura sobre outro texto e recusa com 297 "Assinatura difere do calculado")
+    env = (f'<enviNFe xmlns="{NS}" versao="4.00"><idLote>{str(n.id or n.numero)[-15:]}</idLote>'
+           f'<indSinc>1</indSinc>{n.xml}</enviNFe>')
     n.status, n.erro = "processando", None
     try:
         r = _soap("autorizacao", n.ambiente, env)
@@ -460,9 +464,8 @@ def cancelar(n, justificativa: str):
     _sub(det, "nProt", n.protocolo)
     _sub(det, "xJust", just)
     assinar(ev, ident)
-    env = etree.Element(f"{{{NS}}}envEvento", nsmap={None: NS}, versao="1.00")
-    _sub(env, "idLote", str(n.id or 1))
-    env.append(ev)
+    env = (f'<envEvento xmlns="{NS}" versao="1.00"><idLote>{n.id or 1}</idLote>'
+           f'{etree.tostring(ev, encoding="unicode")}</envEvento>')
     r = _soap("evento", n.ambiente, env)
     ret = r.find(f".//{{{NS}}}retEvento") if r.find(f".//{{{NS}}}retEvento") is not None else r
     cstat = _t(ret, "cStat") if ret is not r else ""
