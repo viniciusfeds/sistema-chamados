@@ -319,21 +319,38 @@ def assinar(raiz, alvo_id: str):
 # ------------------------------------------------------------------ SOAP
 def _soap(servico: str, amb: str, corpo: etree._Element, timeout=60) -> etree._Element:
     """Envia o XML ao serviço da SEFAZ-SP e devolve o elemento de resposta (retEnviNFe, retConsSitNFe…)."""
-    from .nfse import _contexto
+    from . import icpbrasil
     arq, wsdl, acao = SERVICOS[servico]
     msg = etree.tostring(corpo, encoding="unicode")
     env = ('<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
            'xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
            f'<soap12:Body><nfeDadosMsg xmlns="{WSDL}{wsdl}">{msg}</nfeDadosMsg></soap12:Body></soap12:Envelope>')
-    req = urllib.request.Request(HOST[amb] + arq, data=env.encode("utf-8"), method="POST", headers={
-        "Content-Type": f'application/soap+xml; charset=utf-8; action="{WSDL}{wsdl}/{acao}"'})
+
+    def chamar():
+        req = urllib.request.Request(HOST[amb] + arq, data=env.encode("utf-8"), method="POST", headers={
+            "Content-Type": f'application/soap+xml; charset=utf-8; action="{WSDL}{wsdl}/{acao}"'})
+        with urllib.request.urlopen(req, timeout=timeout, context=icpbrasil.contexto()) as r:
+            return r.read()
+
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=_contexto()) as r:
-            resp = r.read()
+        try:
+            resp = chamar()
+        except urllib.error.URLError as e:
+            if "CERTIFICATE_VERIFY_FAILED" not in str(e) or not icpbrasil.pode_tentar_baixar():
+                raise
+            # a SEFAZ usa certificado ICP-Brasil: baixa as ACs oficiais do ITI e tenta de novo (antes de enviar)
+            try:
+                icpbrasil.baixar_iti()
+            except Exception as e2:  # noqa: BLE001
+                raise ErroNfe("O certificado da SEFAZ é da ICP-Brasil e não consegui baixar a cadeia oficial do ITI "
+                              f"({e2}). Coloque os certificados das ACs em certificados/icp-brasil (veja docs/NFE.md).")
+            resp = chamar()
     except urllib.error.HTTPError as e:
         raise ErroNfe(f"SEFAZ respondeu HTTP {e.code}: {e.read()[:300].decode('utf-8', 'replace')}")
-    except (urllib.error.URLError, OSError, ssl.SSLError) as e:
-        raise ErroNfe(f"Sem conexão com a SEFAZ: {e}")
+    except (urllib.error.URLError, OSError, ssl.SSLError, ValueError) as e:
+        dica = (" A cadeia ICP-Brasil não resolveu: confira se o servidor tem acesso a acraiz.icpbrasil.gov.br ou "
+                "coloque os certificados das ACs em certificados/icp-brasil.") if "CERTIFICATE_VERIFY_FAILED" in str(e) else ""
+        raise ErroNfe(f"Sem conexão com a SEFAZ: {e}.{dica}")
     return extrair_resposta(resp)
 
 

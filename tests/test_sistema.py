@@ -3236,3 +3236,18 @@ def test_nfe_produtos_e_danfe(monkeypatch):
     r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", item_ncm=""))
     assert "NCM do item 1" in r.text and len(pedidos) == antes
     certificado.remover()
+
+
+def test_icpbrasil_raizes_oficiais_embutidas():
+    import ssl
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from app import icpbrasil
+    dados = icpbrasil.embutidas()
+    certs = x509.load_pem_x509_certificates(dados)
+    raizes = {c.fingerprint(hashes.SHA256()).hex() for c in certs if c.issuer == c.subject}
+    assert raizes == icpbrasil.RAIZES_OFICIAIS and len(certs) > 100
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cadata=dados.decode())          # o OpenSSL aceita a cadeia
+    nomes = " ".join(c.subject.rfc4514_string() for c in certs)
+    assert "Raiz Brasileira v10" in nomes and "SSL" in nomes

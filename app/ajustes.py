@@ -139,6 +139,9 @@ SECOES = [
         Campo("NFE_TRIBUTOS_PCT", "Tributos aproximados (%)", "num",
               "Lei da Transparência (IBPT). 0 = não informa.", minimo=0, maximo=60),
         Campo("NFE_INFO", "Informações complementares padrão", "texto"),
+        Campo("NFE_SSL_VERIFICAR", "Conferir o certificado da SEFAZ (ICP-Brasil)", "bool",
+              "Deixe ligado. O Nexus baixa sozinho a cadeia oficial da ICP-Brasil (ITI). Desligue só como último "
+              "recurso, se o servidor não conseguir baixá-la.", avancado=True),
     ]),
     ("nfse", "Nota fiscal de serviço (NFS-e Nacional)",
      "Emissão direto na Sefin Nacional com o certificado A1. Comece em homologação (notas de teste, sem valor fiscal).", [

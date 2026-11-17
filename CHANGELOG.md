@@ -1,5 +1,13 @@
 # Histórico de versões
 
+## 1.34.1 — 2026-11-17
+- NF-e: corrige **"CERTIFICATE_VERIFY_FAILED"** ao falar com a SEFAZ-SP. O servidor da SEFAZ usa certificado da
+  ICP-Brasil, que não vem no Linux/Python; o Nexus agora traz as ACs da ICP-Brasil (raízes v5, v10 e v11
+  conferidas pela impressão digital SHA-256 publicada pelo ITI, e as ACs intermediárias com assinatura conferida
+  contra elas). Também usa a cadeia do certificado A1, baixa o pacote oficial do ITI se ainda faltar alguma AC e
+  aceita certificados colocados em `certificados/icp-brasil`
+- Configurações → NF-e (avançado): *Conferir o certificado da SEFAZ* (deixe ligado)
+
 ## 1.34.0 — 2026-11-17
 - **NF-e de produtos (modelo 55) na SEFAZ-SP, com DANFE** (Financeiro → *NF-e (produtos)*)
   - XML 4.00 validado contra os esquemas oficiais (PL_009 e PL_010), assinado com o certificado A1
