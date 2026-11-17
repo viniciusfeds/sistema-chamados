@@ -33,7 +33,7 @@ def aprovar(db, ch, aprovado: bool, nome: str, obs: str = "", autor_id=None) -> 
             a.status = "Concluído"
     obs = (obs or "").strip()
     if aprovado:
-        desc = f"Aprovado por {nome}." + (f" Observação: {obs}" if obs else "") + " Aguardando programação do atendimento."
+        desc = f"Aprovado por {nome}." + (f" Observação: {obs.rstrip('.')}." if obs else "") + " Aguardando programação do atendimento."
         st = "Aguardando"
     else:
         desc = f"{nome} NÃO aprovou." + (f" Motivo: {obs}" if obs else "")

@@ -509,3 +509,15 @@ body.com-menu main{max-width:1600px}
 .conversa-wa .msg.nova{box-shadow:0 0 0 2px #B3261E inset}
 .conversa-wa .msg small{display:block;color:var(--cinza);font-size:.75rem;margin-bottom:2px}
 .sla-pausa{display:inline-block;background:#EEE8FF;color:#4B2E9E;font-weight:700;font-size:.8rem;padding:2px 9px;border-radius:999px;margin-left:8px}
+
+/* fotos antes/depois (v1.38) */
+.tag-momento{display:inline-block;font-size:.7rem;font-weight:800;padding:1px 7px;border-radius:999px;color:#fff;background:#8A94A3}
+.tag-momento.antes{background:#B07A00}.tag-momento.depois{background:#2E7D4F}
+.sel-momento{width:auto;padding:1px 4px;font-size:.75rem;height:auto;min-height:0;display:inline-block}
+
+/* reajuste de contratos (v1.37) */
+.reajuste-linha{display:flex;gap:10px 18px;flex-wrap:wrap;align-items:center;padding:10px 0;border-top:1px solid var(--linha)}
+.reajuste-linha .rl-nome{flex:1 1 260px;min-width:0}
+.reajuste-linha .rl-acoes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.reajuste-linha input[name=percentual]{width:84px;flex:0 0 84px}
+.reajuste-linha .prev{font-weight:700;color:#2E7D4F}

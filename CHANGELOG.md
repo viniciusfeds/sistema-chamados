@@ -1,5 +1,16 @@
 # Histórico de versões
 
+## 1.38.0 — 2026-11-17
+- **Estoque de peças** (menu Operação → Estoque): saldo por produto do catálogo, entrada de compra (atualiza o
+  custo), inventário (corrige o saldo para o contado), estoque mínimo com alerta no menu e histórico de movimentos
+- **Peças usadas no chamado**: o técnico lança a peça e a quantidade no chamado; o estoque é baixado na hora e o
+  custo entra na rentabilidade do cliente. Remover a peça devolve ao estoque. Saldo negativo é avisado
+- Do chamado, o administrador abre um **orçamento** ou uma **NF-e** já com as peças lançadas
+- **Fotos antes e depois**: ao enviar fotos, marque *Antes* ou *Depois do atendimento* (dá para mudar depois em
+  cada foto). No PDF do chamado elas saem em blocos separados
+- A assinatura do cliente no celular do técnico já existia (status *Validado pelo zelador*, com nome, função,
+  documento, assinatura e localização) e segue como está
+
 ## 1.37.0 — 2026-11-17
 - **Reajuste anual dos contratos**: cada contrato tem o índice (IPCA, IGP-M, percentual combinado ou sem
   reajuste). No aniversário (com a antecedência das Configurações) o contrato aparece em *Reajuste anual a

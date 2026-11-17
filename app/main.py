@@ -475,13 +475,18 @@ def detalhe(request: Request, numero: int, u: Usuario = Depends(usuario_atual),
     equip_unidade = db.scalars(select(Equipamento).where(Equipamento.unidade_id == ch.unidade_id,
                                                          Equipamento.ativo).order_by(Equipamento.nome)).all() \
         if u.equipe else []
-    from . import atendimento
+    from . import atendimento, estoque
+    from .models import ItemCatalogo
+    pecas = estoque.pecas_do_chamado(db, ch) if u.equipe else []
+    produtos_estoque = db.scalars(select(ItemCatalogo).where(ItemCatalogo.tipo == "produto", ItemCatalogo.ativo)
+                                  .order_by(ItemCatalogo.descricao)).all() if u.equipe and not ch.cancelado else []
     conversa = atendimento.conversa_do_chamado(ch)
     if u.equipe and any(not m.lida for m in ch.mensagens):       # a equipe abriu: respostas ficam lidas
         for m in ch.mensagens:
             m.lida = True
         db.commit()
     return render(request, "chamado.html", u=u, ch=ch, sit=sit, equip_unidade=equip_unidade, conversa=conversa,
+                  pecas=pecas, produtos_estoque=produtos_estoque,
                   tipos=tipos_chamado(db) if u.equipe else [],
                   grupos=unidades_permitidas(db, u) if u.equipe else [],
                   tecnicos=tecnicos(db) if u.equipe else [],
@@ -556,13 +561,16 @@ def classificar(request: Request, numero: int, prioridade: str = Form("normal"),
 
 
 @app.post("/chamados/{numero}/fotos", dependencies=[Depends(checar_csrf)])
-def adicionar_fotos(request: Request, numero: int, fotos_enviadas: list[UploadFile] = File(default=[]),
+def adicionar_fotos(request: Request, numero: int, fotos_enviadas: list[UploadFile] = File(default=[]), momento: str = Form(""),
                     u: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     ch = buscar_chamado(db, numero, u)
     if ch.cancelado:
         raise HTTPException(400, "Chamado cancelado.")
     novos, erros = fotos.salvar_fotos(ch, fotos_enviadas, origem="equipe" if u.equipe else "unidade",
                                       autor_id=u.id)
+    if momento in ("antes", "depois"):
+        for an in novos:
+            an.momento = momento
     db.commit()
     _flash_erros_fotos(request, erros, f"{len(novos)} foto(s) adicionada(s)." if novos else "Nenhuma foto enviada.")
     return voltar(f"/chamados/{numero}#fotos")
@@ -1877,3 +1885,4 @@ from . import rotas_app_desktop  # noqa: E402,F401
 from . import rotas_nfe  # noqa: E402,F401
 from . import rotas_atendimento  # noqa: E402,F401
 from . import rotas_contratos_gestao  # noqa: E402,F401
+from . import rotas_estoque  # noqa: E402,F401

@@ -311,6 +311,7 @@ class Anexo(Base):
     bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     legenda: Mapped[str | None] = mapped_column(String(200), nullable=True)
     origem: Mapped[str | None] = mapped_column(String(20), nullable=True)   # equipe / unidade / link
+    momento: Mapped[str | None] = mapped_column(String(8), nullable=True)   # antes / depois (do atendimento)
     autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -742,6 +743,8 @@ class ItemCatalogo(Base):
     ctribmun: Mapped[str | None] = mapped_column(String(3), nullable=True)   # código municipal (Guarulhos: 011…)
     nbs: Mapped[str | None] = mapped_column(String(9), nullable=True)
     aliquota_iss: Mapped[float | None] = mapped_column(nullable=True)
+    estoque: Mapped[float | None] = mapped_column(nullable=True, default=0)       # saldo atual (produtos)
+    estoque_minimo: Mapped[float | None] = mapped_column(nullable=True)           # avisa quando o saldo chega aqui
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -1481,3 +1484,23 @@ class MensagemWhatsApp(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     chamado = relationship("Chamado", back_populates="mensagens")
+
+
+class MovimentoEstoque(Base):
+    """Entrada, saída (peça usada em chamado), estorno ou ajuste de inventário de um produto do catálogo."""
+    __tablename__ = "estoque_movimentos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    catalogo_id: Mapped[int] = mapped_column(ForeignKey("catalogo.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(8))                        # entrada / saida / estorno / ajuste
+    quantidade: Mapped[float] = mapped_column()                         # sempre positiva (no ajuste: a diferença, com sinal)
+    saldo_apos: Mapped[float] = mapped_column(default=0)
+    custo_unitario: Mapped[int | None] = mapped_column(Integer, nullable=True)   # centavos, na data do movimento
+    chamado_id: Mapped[int | None] = mapped_column(ForeignKey("chamados.id", ondelete="SET NULL"), nullable=True, index=True)
+    observacao: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    autor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    item = relationship("ItemCatalogo")
+    chamado = relationship("Chamado")
+    autor = relationship("Usuario")

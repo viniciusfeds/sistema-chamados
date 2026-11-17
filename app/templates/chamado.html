@@ -272,16 +272,48 @@
 
 <div class="card" id="fotos">
   <h2>Fotos {% if ch.anexos %}<span class="muted" style="font-weight:400">({{ ch.anexos|length }})</span>{% endif %}</h2>
-  {% if ch.anexos %}{{ galeria(ch.anexos, '/fotos/', csrf, ('/chamados/' ~ ch.numero ~ '/fotos/') if u.equipe else None) }}
+  {% if ch.anexos %}{{ galeria(ch.anexos, '/fotos/', csrf, ('/chamados/' ~ ch.numero ~ '/fotos/') if u.equipe else None, u.equipe) }}
   {% else %}<p class="muted">Nenhuma foto ainda.</p>{% endif %}
   {% if not ch.cancelado %}
   <form method="post" action="/chamados/{{ ch.numero }}/fotos" enctype="multipart/form-data" style="margin-top:10px">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     {{ campo_fotos(rotulo="Adicionar fotos") }}
+    {% if u.equipe %}<div class="campo" style="max-width:320px"><label>Estas fotos são</label><select name="momento"><option value="">Do atendimento (sem marcar)</option><option value="antes">Antes do atendimento</option><option value="depois">Depois do atendimento</option></select>
+      <div class="dica">Marcadas como antes/depois, saem lado a lado no PDF do chamado.</div></div>{% endif %}
     <button class="btn sec">Enviar fotos</button>
   </form>
   {% endif %}
 </div>
+
+{% if u.equipe and (pecas or produtos_estoque) %}
+<div class="card" id="pecas">
+  <h2>Peças usadas</h2>
+  {% if pecas %}
+  <table class="resp">
+    <thead><tr><th>Peça</th><th>Qtd</th>{% if u.papel == 'admin' %}<th class="valor">Custo</th><th class="valor">Venda</th>{% endif %}<th></th></tr></thead>
+    <tbody>{% for p in pecas %}<tr>
+      <td data-l="Peça"><b>{{ p.item.descricao }}</b>{% if p.item.codigo %} <span class="muted">{{ p.item.codigo }}</span>{% endif %}</td>
+      <td data-l="Qtd">{{ '%g'|format(p.qtd) }} {{ p.item.unidade }}</td>
+      {% if u.papel == 'admin' %}<td data-l="Custo" class="valor">{{ p.custo|rs }}</td><td data-l="Venda" class="valor">{{ (p.qtd * p.item.preco)|round|int|rs }}</td>{% endif %}
+      <td class="acoes"><form method="post" action="/chamados/{{ ch.numero }}/pecas" onsubmit="return confirm('Tirar esta peça do chamado e devolver ao estoque?')"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="operacao" value="remover"><input type="hidden" name="catalogo_id" value="{{ p.item.id }}"><button class="btn peq sec">Remover</button></form></td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% if u.papel == 'admin' %}<div class="acoes-orc" style="margin-top:8px">
+    <a class="btn peq" href="/financeiro/orcamentos/novo?chamado={{ ch.numero }}&pecas=1">🧾 Orçamento com estas peças</a>
+    <a class="btn peq sec" href="/financeiro/nfe/nova?chamado={{ ch.numero }}">Emitir NF-e destas peças</a>
+  </div>{% endif %}
+  {% else %}<p class="muted" style="margin-top:0">Nenhuma peça lançada neste chamado.</p>{% endif %}
+  {% if produtos_estoque %}
+  <form method="post" action="/chamados/{{ ch.numero }}/pecas" class="acoes-orc" style="margin-top:10px;align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo" style="flex:1;min-width:220px;margin:0"><label>Peça</label><select name="catalogo_id" required><option value="">—</option>{% for p in produtos_estoque %}<option value="{{ p.id }}">{{ p.descricao }} (estoque: {{ '%g'|format(p.estoque or 0) }} {{ p.unidade }})</option>{% endfor %}</select></div>
+    <div class="campo" style="width:110px;margin:0"><label>Quantidade</label><input name="quantidade" inputmode="decimal" value="1" required></div>
+    <button class="btn sec">+ Lançar peça</button>
+  </form>
+  <div class="dica">Lançar a peça dá baixa no estoque e entra no custo do chamado (rentabilidade do cliente).</div>
+  {% endif %}
+</div>
+{% endif %}
 
 {{ caixa_status(ch, sit, texto_padrao) }}
 

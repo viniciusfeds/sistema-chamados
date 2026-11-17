@@ -24,23 +24,20 @@
 <div class="card" id="reajustes" style="border-left:4px solid #B07A00">
   <h2 style="margin-top:0">Reajuste anual a aplicar <span class="muted" style="font-weight:400;font-size:.85rem">· {{ rea|length }} contrato(s)</span></h2>
   <p class="dica" style="margin-top:0">O aniversário do contrato chegou (ou chega em até {{ config.REAJUSTE_AVISO_DIAS }} dias). Clique em “Buscar índice” para trazer o acumulado de 12 meses do Banco Central, confira e aplique. O novo valor vale para as próximas cobranças geradas; as já lançadas não mudam.</p>
-  <table class="resp">
-    <thead><tr><th>Contrato</th><th class="valor">Valor atual</th><th>Aniversário</th><th>Reajuste</th><th></th></tr></thead>
-    <tbody>{% for cid, desc, cli, valor, quando, indice in rea %}<tr>
-      <td data-l="Contrato"><b>{{ desc }}</b><div class="muted">{{ cli }}</div></td>
-      <td data-l="Valor atual" class="valor">{{ valor|rs }}</td>
-      <td data-l="Aniversário">{{ quando|data }}{% if quando <= hoje %} <span class="selo" style="background:#B3261E">vencido</span>{% endif %}</td>
-      <td data-l="Reajuste" colspan="2"><form method="post" action="/financeiro/contratos/{{ cid }}/reajustar" class="acoes-orc" style="align-items:center" data-valor="{{ valor }}">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        <input name="percentual" inputmode="decimal" placeholder="%" style="width:86px" required oninput="prevReajuste(this)">
-        <span class="muted">% ({{ INDICES_REAJUSTE[indice] }})</span>
-        {% if indice in ('ipca', 'igpm') %}<button type="button" class="btn peq sec" onclick="buscarIndice(this, '{{ indice }}')">Buscar índice</button>{% endif %}
-        <span class="muted prev"></span>
-        <label class="check" style="margin:0"><input type="checkbox" name="avisar" value="1" checked style="width:auto"> avisar o cliente por e-mail</label>
-        <button class="btn peq" onclick="return confirm('Aplicar o reajuste neste contrato?')">Aplicar</button>
-      </form></td>
-    </tr>{% endfor %}</tbody>
-  </table>
+  {% for cid, desc, cli, valor, quando, indice in rea %}
+  <form method="post" action="/financeiro/contratos/{{ cid }}/reajustar" class="reajuste-linha" data-valor="{{ valor }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="rl-nome"><b>{{ desc }}</b><div class="muted">{{ cli }} · {{ valor|rs }}/mês · aniversário {{ quando|data }}{% if quando <= hoje %} <span class="selo" style="background:#B3261E">vencido</span>{% endif %}</div></div>
+    <div class="rl-acoes">
+      <input name="percentual" inputmode="decimal" placeholder="%" required oninput="prevReajuste(this)" aria-label="Percentual do reajuste">
+      <span class="muted">% · {{ INDICES_REAJUSTE[indice] }}</span>
+      {% if indice in ('ipca', 'igpm') %}<button type="button" class="btn peq sec" onclick="buscarIndice(this, '{{ indice }}')">Buscar índice</button>{% endif %}
+      <span class="prev"></span>
+      <label class="check" style="margin:0"><input type="checkbox" name="avisar" value="1" checked style="width:auto"> avisar o cliente por e-mail</label>
+      <button class="btn peq" onclick="return confirm('Aplicar o reajuste neste contrato?')">Aplicar</button>
+    </div>
+  </form>
+  {% endfor %}
 </div>
 <script>
 function prevReajuste(i) {
@@ -60,7 +57,7 @@ function buscarIndice(b, indice) {
 </script>
 {% endif %}
 
-<div class="card" style="padding:0;overflow:hidden">
+<div class="card" style="padding:0;overflow-x:auto">
 {% if lista %}
 <table class="resp">
   <thead><tr><th>Contrato</th><th>Cliente</th><th class="valor">Valor/mês</th><th>Vence dia</th><th>Vigência</th><th></th></tr></thead>
@@ -69,7 +66,7 @@ function buscarIndice(b, indice) {
     <td data-l="Contrato"><a href="/financeiro/contratos/{{ c.id }}"><b>{{ c.descricao }}</b></a>{% if not c.ativo %} <span class="tag cinza">encerrado</span>{% endif %}
       {% set sd = STATUS_DOC.get(c.doc_status, STATUS_DOC[None]) %}{% if not c.precisa_nf %}<span class="tag" title="Não emite nota fiscal: recibo">Recibo</span> {% endif %}{% if c.doc_status %}<span class="selo" style="background:{{ sd[1] }};font-size:.68rem">{{ sd[0] }}</span>{% endif %}{% if c.observacoes %}<div class="muted">{{ c.observacoes }}</div>{% endif %}</td>
     <td data-l="Cliente">{{ c.cliente_fiscal.nome }}</td>
-    <td data-l="Valor/mês" class="valor"><b>{{ c.valor|rs }}</b>{% if c.reajustes %}{% set ur = c.reajustes[-1] %}<div class="muted" title="Último reajuste">↑ {{ ('%g'|format(ur.pct)).replace('.', ',') }}% em {{ ur.data[8:10] }}/{{ ur.data[5:7] }}/{{ ur.data[:4] }}</div>{% endif %}</td>
+    <td data-l="Valor/mês" class="valor"><b>{{ c.valor|rs }}</b>{% if c.reajustes %}{% set ur = c.reajustes[-1] %}<div class="muted" title="Último reajuste, em {{ ur.data[8:10] }}/{{ ur.data[5:7] }}/{{ ur.data[:4] }}">↑ {{ ('%g'|format(ur.pct)).replace('.', ',') }}%</div>{% endif %}</td>
     <td data-l="Vence dia">{{ c.dia_vencimento }}</td>
     <td data-l="Vigência">{{ c.inicio|data }}{{ ' a ' ~ (c.fim|data) if c.fim else ' em diante' }}{% set pr = proximo_reajuste(c) %}{% if pr %}<div class="muted">reajuste {{ pr|data }}</div>{% endif %}</td>
     <td><div class="acoes-orc"><a class="btn peq" href="/financeiro/contratos/{{ c.id }}#documento">{{ 'Documento' if c.doc_status else 'Gerar contrato' }}</a>

@@ -234,11 +234,10 @@ def _bloco_validacoes(ch):
     return out + [Spacer(1, 4)]
 
 
-def _bloco_fotos(ch, maximo=9):
-    """Miniaturas das fotos do chamado (3 por linha)."""
+def _grade_fotos(anexos, titulo):
     from .fotos import FotoInvalida, caminho
     itens = []
-    for an in ch.anexos[:maximo]:
+    for an in anexos:
         try:
             p = caminho(an, mini=True)
         except FotoInvalida:
@@ -262,8 +261,19 @@ def _bloco_fotos(ch, maximo=9):
     t = Table(linhas, colWidths=[(LARG) / 3] * 3)
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    return [KeepTogether([Paragraph(titulo, sSec), t]), Spacer(1, 10)]
+
+
+def _bloco_fotos(ch, maximo=9):
+    """Miniaturas das fotos do chamado (3 por linha). Com fotos marcadas, separa Antes e Depois do atendimento."""
+    antes = [a for a in ch.anexos if a.momento == "antes"]
+    depois = [a for a in ch.anexos if a.momento == "depois"]
+    if antes or depois:
+        outras = [a for a in ch.anexos if a.momento not in ("antes", "depois")]
+        return (_grade_fotos(antes[:6], "Antes do atendimento") + _grade_fotos(depois[:6], "Depois do atendimento")
+                + _grade_fotos(outras[:6], "Outras fotos"))
     extra = f" (mostrando {maximo} de {len(ch.anexos)})" if len(ch.anexos) > maximo else ""
-    return [KeepTogether([Paragraph(f"Fotos{extra}", sSec), t]), Spacer(1, 10)]
+    return _grade_fotos(ch.anexos[:maximo], f"Fotos{extra}")
 
 
 def pdf_relatorio(chamados, periodo: str, subtitulo_extra: str = "", cliente_nome: str = "") -> bytes:

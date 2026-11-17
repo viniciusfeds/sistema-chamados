@@ -148,7 +148,7 @@ def _editor(request, u, db, o, **extra):
 
 
 @app.get("/financeiro/orcamentos/novo", response_class=HTMLResponse)
-def orc_novo(request: Request, chamado: str = "", cliente: str = "", u: Usuario = Depends(so_admin),
+def orc_novo(request: Request, chamado: str = "", cliente: str = "", pecas: str = "", u: Usuario = Depends(so_admin),
              db: Session = Depends(get_db)):
     o = Orcamento(numero=0, titulo="", status="rascunho", emissao=hoje(), validade_dias=config.ORC_VALIDADE_DIAS,
                   condicoes=config.ORC_CONDICOES, garantia=config.ORC_GARANTIA, observacoes=config.ORC_OBSERVACOES,
@@ -163,6 +163,13 @@ def orc_novo(request: Request, chamado: str = "", cliente: str = "", u: Usuario 
                                                      ClienteFiscal.unidade_id.is_(None), ClienteFiscal.ativo))
         if cf:
             o.cliente_fiscal_id = cf.id
+        if pecas:                                       # peças lançadas no chamado viram itens do orçamento
+            from . import estoque
+            for k, p in enumerate(estoque.pecas_do_chamado(db, ch)):
+                it = p["item"]
+                o.itens.append(ItemOrcamento(catalogo_id=it.id, ordem=k, tipo="produto", descricao=it.descricao,
+                                             unidade=it.unidade, quantidade=p["qtd"], valor_unitario=it.preco,
+                                             custo_unitario=it.custo, margem=it.margem))
     if _int(cliente):
         o.cliente_fiscal_id = _int(cliente)
     return _editor(request, u, db, o)

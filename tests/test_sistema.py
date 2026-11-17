@@ -3533,3 +3533,80 @@ def test_reajuste_anual_e_rentabilidade(monkeypatch):
     adm.post("/chamados/8802/classificar", data={"csrf": _csrf(pg), "prioridade": "normal", "horas_gastas": "3,5"})
     with SessionLocal() as db:
         assert db.scalar(select(Chamado).where(Chamado.numero == 8802)).horas_gastas == 3.5
+
+
+def test_estoque_pecas_no_chamado_e_fotos_antes_depois(monkeypatch):
+    from app import config, contratos_gestao as cg, estoque, pdf
+    from app.models import Anexo, Chamado, ItemCatalogo, MovimentoEstoque
+    adm = entrar("admin@t.com")
+    hoje = date.today()
+    with SessionLocal() as db:
+        fonte = ItemCatalogo(tipo="produto", descricao="Fonte 12V 5A", unidade="UN", preco=9000, custo=4000, ncm="85044021",
+                             codigo="FT12")
+        db.add(fonte)
+        ch = Chamado(numero=9901, unidade_id=IDS["torre"], titulo="Câmera sem imagem", assunto="Câmera sem imagem",
+                     problema="p", abertura=hoje)
+        db.add(ch); db.commit(); fid, cid = fonte.id, ch.id
+    pg = adm.get("/estoque").text
+    assert "Estoque de peças" in pg and "Fonte 12V 5A" in pg and "Lançar entrada ou inventário" in pg
+    tok = _csrf(pg)
+    assert "Informe a quantidade" in adm.post("/estoque/movimentar", data={"csrf": tok, "operacao": "entrada", "catalogo_id": fid, "quantidade": "0"}).text
+    r = adm.post("/estoque/movimentar", data={"csrf": tok, "operacao": "entrada", "catalogo_id": fid, "quantidade": "10",
+                                              "custo": "45,00", "observacao": "NF 123"})
+    assert "Entrada lançada: Fonte 12V 5A — saldo 10" in r.text
+    adm.post("/estoque/movimentar", data={"csrf": tok, "operacao": "minimo", "catalogo_id": fid, "minimo": "8"})
+    # peça usada no chamado: baixa, custo do chamado e alerta de mínimo
+    pg = adm.get("/chamados/9901").text
+    assert "Peças usadas" in pg and "Fonte 12V 5A (estoque: 10 UN)" in pg
+    r = adm.post("/chamados/9901/pecas", data={"csrf": _csrf(pg), "catalogo_id": fid, "quantidade": "2"})
+    assert "lançada no chamado. Saldo em estoque: 8" in r.text and "Orçamento com estas peças" in r.text
+    with SessionLocal() as db:
+        it, ch = db.get(ItemCatalogo, fid), db.get(Chamado, cid)
+        assert it.estoque == 8 and it.custo == 4500
+        pecas = estoque.pecas_do_chamado(db, ch)
+        assert pecas[0]["qtd"] == 2 and pecas[0]["custo"] == 9000
+        assert estoque.custo_por_chamado(db, hoje, hoje) == {cid: 9000}
+        assert [i.id for i in estoque.abaixo_do_minimo(db)] == [fid]
+        r = cg.rentabilidade(db, hoje, hoje, estoque.custo_por_chamado(db, hoje, hoje))
+        assert next(x for x in r["linhas"] if x["cliente_id"] == IDS["top"])["pecas"] == 9000
+    assert "repor" in adm.get("/estoque").text and 'badge-alerta" title="Produtos no estoque mínimo">1<' in adm.get("/").text
+    # orçamento e NF-e já com as peças
+    orc = adm.get("/financeiro/orcamentos/novo?chamado=9901&pecas=1").text
+    assert "Fonte 12V 5A" in orc.split("<template")[0] and "Câmera sem imagem" in orc
+    nf = adm.get("/financeiro/nfe/nova?chamado=9901").text
+    assert 'value="85044021"' in nf and "Ref. chamado nº" in nf
+    # tirar a peça devolve ao estoque; inventário corrige o saldo
+    r = adm.post("/chamados/9901/pecas", data={"csrf": _csrf(pg), "operacao": "remover", "catalogo_id": fid})
+    assert "2 devolvida(s) ao estoque" in r.text and "Nenhuma peça lançada" in r.text
+    r = adm.post("/estoque/movimentar", data={"csrf": tok, "operacao": "ajuste", "catalogo_id": fid, "quantidade": "7"})
+    assert "saldo 7" in r.text
+    with SessionLocal() as db:
+        assert db.get(ItemCatalogo, fid).estoque == 7
+        assert [m.tipo for m in db.scalars(select(MovimentoEstoque).order_by(MovimentoEstoque.id))] == [
+            "entrada", "saida", "estorno", "ajuste"]
+    # usar mais do que tem: avisa saldo negativo
+    r = adm.post("/chamados/9901/pecas", data={"csrf": _csrf(pg), "catalogo_id": fid, "quantidade": "9"})
+    assert "saldo ficou negativo" in r.text and "saldo negativo" in adm.get("/estoque").text
+    # técnico vê o estoque mas não lança entrada
+    tec = entrar("tec@t.com")
+    pt = tec.get("/estoque")
+    if pt.status_code == 200:
+        assert "Lançar entrada ou inventário" not in pt.text
+    # fotos antes e depois
+    pg = adm.get("/chamados/9901").text
+    assert "Estas fotos são" in pg
+    adm.post("/chamados/9901/fotos", data={"csrf": _csrf(pg), "momento": "antes"},
+             files=[("fotos_enviadas", ("a.jpg", _foto("red"), "image/jpeg"))])
+    adm.post("/chamados/9901/fotos", data={"csrf": _csrf(pg)},
+             files=[("fotos_enviadas", ("b.jpg", _foto("green"), "image/jpeg"))])
+    with SessionLocal() as db:
+        a, b = db.scalars(select(Anexo).where(Anexo.chamado_id == cid).order_by(Anexo.id)).all()
+        assert a.momento == "antes" and b.momento is None; bid = b.id
+    adm.post(f"/chamados/9901/fotos/{bid}/momento", data={"csrf": _csrf(pg), "momento": "depois"})
+    pg = adm.get("/chamados/9901").text
+    assert 'tag-momento antes">Antes' in pg and 'tag-momento depois">Depois' in pg
+    titulos = []
+    real = pdf._grade_fotos
+    monkeypatch.setattr(pdf, "_grade_fotos", lambda anexos, t: titulos.append((t, len(anexos))) or real(anexos, t))
+    assert adm.get("/chamados/9901/pdf").content.startswith(b"%PDF")
+    assert titulos == [("Antes do atendimento", 1), ("Depois do atendimento", 1), ("Outras fotos", 0)]

@@ -249,7 +249,7 @@ def nfe_inutilizar(request: Request, numero_ini: str = Form(""), numero_fim: str
 
 
 @app.get("/financeiro/nfe/nova", response_class=HTMLResponse)
-def nfe_nova(request: Request, orcamento: str = "", cliente: str = "", refazer: str = "",
+def nfe_nova(request: Request, orcamento: str = "", cliente: str = "", refazer: str = "", chamado: str = "",
              u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
     o = db.get(Orcamento, _int(orcamento)) if _int(orcamento) else None
     r = db.get(NotaProduto, _int(refazer)) if _int(refazer) else None
@@ -263,6 +263,18 @@ def nfe_nova(request: Request, orcamento: str = "", cliente: str = "", refazer: 
     cf = r.cliente_fiscal if r else (o.cliente_fiscal if o else (db.get(ClienteFiscal, _int(cliente)) if _int(cliente) else None))
     itens = r.itens if r else (itens_do_orcamento(o) if o else [])
     info = r.info_complementar if r else (config.NFE_INFO + (f" Ref. orçamento nº {o.numero_fmt}." if o else ""))
+    if _int(chamado) and not (o or r):                 # peças lançadas no chamado
+        from . import estoque
+        from .models import Chamado
+        ch = db.scalar(select(Chamado).where(Chamado.numero == _int(chamado)))
+        if ch:
+            cf = cf or db.scalar(select(ClienteFiscal).where(ClienteFiscal.unidade_id == ch.unidade_id, ClienteFiscal.ativo)) \
+                or db.scalar(select(ClienteFiscal).where(ClienteFiscal.cliente_id == ch.unidade.cliente_id,
+                                                         ClienteFiscal.unidade_id.is_(None), ClienteFiscal.ativo))
+            itens = [{"descricao": p["item"].descricao, "unidade": p["item"].unidade or "UN", "qtd": p["qtd"],
+                      "vunit": p["item"].preco, "vprod": round(p["qtd"] * p["item"].preco), "vdesc": 0,
+                      **_item_catalogo(p["item"])} for p in estoque.pecas_do_chamado(db, ch)]
+            info = config.NFE_INFO + f" Ref. chamado nº {ch.numero_fmt}."
     produtos = db.scalars(select(ItemCatalogo).where(ItemCatalogo.tipo == "produto", ItemCatalogo.ativo.is_(True))
                           .order_by(ItemCatalogo.descricao)).all()
     catalogo_js = {p.id: {"descricao": p.descricao, "unidade": p.unidade or "UN", "vunit": p.preco,

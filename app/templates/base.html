@@ -54,6 +54,7 @@
     {% if u.equipe and (u.pode('inventario') or u.papel == 'admin') %}
     <div class="lat-grupo">Operação</div>
     {% if u.pode('inventario') %}<a href="/inventario" class="{{ 'ativo' if p.startswith('/inventario') }}" title="Inventário">{{ ico('inventario') }}<span>Inventário</span>{% if alerta_oc and alerta_oc[0] %}<b class="badge-alerta" id="badge-oc">{{ alerta_oc[0] }}</b>{% endif %}</a>{% endif %}
+    <a href="/estoque" class="{{ 'ativo' if p.startswith('/estoque') }}" title="Estoque de peças">{{ ico('inventario') }}<span>Estoque</span>{% set nest = estoque_alerta() %}{% if nest %}<b class="badge-alerta" title="Produtos no estoque mínimo">{{ nest }}</b>{% endif %}</a>
     {% if u.papel == 'admin' %}<a href="/clientes" class="{{ 'ativo' if p.startswith('/clientes') }}" title="Clientes">{{ ico('clientes') }}<span>Clientes</span></a>{% endif %}
     {% endif %}
     {% endif %}

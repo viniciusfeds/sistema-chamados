@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block titulo %}Estoque de peças{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><h1>Estoque de peças</h1>
+  <div class="muted">{{ produtos|length }} produto(s) do catálogo{% if u.papel == 'admin' %} · {{ valor|rs }} em estoque (pelo custo){% endif %}</div></div>
+  {% if u.papel == 'admin' %}<a class="btn sec" href="/financeiro/catalogo?tipo=produto">Cadastrar produtos</a>{% endif %}</div>
+{% if baixos %}<div class="card aviso-card" style="border-color:#B07A00">⚠ <b>{{ baixos|length }} produto(s) no estoque mínimo ou abaixo</b> — hora de repor.</div>{% endif %}
+{% if negativos %}<div class="card aviso-card" style="border-color:#B3261E"><b>{{ negativos }} produto(s) com saldo negativo</b>: foram usados em chamados sem a entrada lançada. Lance a entrada ou ajuste o inventário.</div>{% endif %}
+{% if u.papel == 'admin' and produtos %}
+<div class="card">
+  <h2 style="margin-top:0">Lançar entrada ou inventário</h2>
+  <form method="post" action="/estoque/movimentar" class="grid3" style="align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>Produto</label><select name="catalogo_id" required><option value="">—</option>{% for p in produtos %}<option value="{{ p.id }}">{{ p.descricao }} (saldo {{ '%g'|format(p.estoque or 0) }} {{ p.unidade }})</option>{% endfor %}</select></div>
+    <div class="campo"><label>Operação</label><select name="operacao" onchange="this.form.querySelector('.rot-q').textContent = this.value == 'ajuste' ? 'Quantidade contada' : 'Quantidade que entrou'; this.form.custo.disabled = this.value == 'ajuste'">
+      <option value="entrada">Entrada (compra / recebimento)</option><option value="ajuste">Inventário (corrigir o saldo para o contado)</option></select></div>
+    <div class="campo"><label class="rot-q">Quantidade que entrou</label><input name="quantidade" inputmode="decimal" required></div>
+    <div class="campo"><label>Custo unitário <span class="muted">(opcional — atualiza o custo do produto)</span></label><input name="custo" inputmode="decimal" placeholder="R$"></div>
+    <div class="campo"><label>Observação</label><input name="observacao" maxlength="200" placeholder="Ex.: NF 1234 do fornecedor"></div>
+    <div><button class="btn">Lançar</button></div>
+  </form>
+</div>
+{% endif %}
+<div class="card" style="padding:0;overflow:hidden">
+{% if produtos %}
+<table class="resp">
+  <thead><tr><th>Produto</th><th>Saldo</th><th>Mínimo</th>{% if u.papel == 'admin' %}<th class="valor">Custo</th><th class="valor">Em estoque</th>{% endif %}<th></th></tr></thead>
+  <tbody>{% for p in produtos %}{% set s = p.estoque or 0 %}<tr>
+    <td data-l="Produto"><b>{{ p.descricao }}</b>{% if p.codigo %}<div class="muted">{{ p.codigo }}</div>{% endif %}</td>
+    <td data-l="Saldo"><b style="color:{{ '#B3261E' if s < 0 else ('#B07A00' if p.id in baixos else 'inherit') }}">{{ '%g'|format(s) }}</b> {{ p.unidade }}{% if p.id in baixos %} <span class="selo" style="background:#B07A00">repor</span>{% endif %}</td>
+    <td data-l="Mínimo">{% if u.papel == 'admin' %}<form method="post" action="/estoque/movimentar" style="display:flex;gap:4px"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="operacao" value="minimo"><input type="hidden" name="catalogo_id" value="{{ p.id }}"><input name="minimo" inputmode="decimal" style="width:70px" value="{{ '%g'|format(p.estoque_minimo) if p.estoque_minimo is not none else '' }}" placeholder="—"><button class="btn peq sec">ok</button></form>{% else %}{{ '%g'|format(p.estoque_minimo) if p.estoque_minimo is not none else '—' }}{% endif %}</td>
+    {% if u.papel == 'admin' %}<td data-l="Custo" class="valor">{{ p.custo|rs if p.custo is not none else '—' }}</td>
+    <td data-l="Em estoque" class="valor">{{ ((s if s > 0 else 0) * (p.custo or 0))|round|int|rs }}</td>{% endif %}
+    <td class="acoes"><a class="btn peq sec" href="/estoque?item={{ p.id }}#movimentos">Histórico</a></td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhum produto no catálogo. Cadastre as peças em Financeiro → Produtos e serviços (tipo “produto”) e lance aqui a entrada.</p>{% endif %}
+</div>
+<div class="card" id="movimentos" style="padding:0;overflow:hidden">
+  <h2 style="padding:14px 16px 0">Movimentos{% if filtro %} deste produto <a class="btn peq sec" href="/estoque#movimentos">ver todos</a>{% endif %}</h2>
+  {% if movs %}
+  <table class="resp">
+    <thead><tr><th>Quando</th><th>Produto</th><th>Movimento</th><th>Qtd</th><th>Saldo</th><th>Quem</th></tr></thead>
+    <tbody>{% for m in movs %}<tr>
+      <td data-l="Quando">{{ m.criado_em|local }}</td><td data-l="Produto">{{ m.item.descricao }}</td>
+      <td data-l="Movimento">{{ TIPOS_ESTOQUE[m.tipo] }}{% if m.chamado %} · <a href="/chamados/{{ m.chamado.numero }}#pecas">{{ m.chamado.numero_fmt }}</a>{% endif %}{% if m.observacao %}<div class="muted">{{ m.observacao }}</div>{% endif %}</td>
+      <td data-l="Qtd"><b>{{ '-' if m.tipo == 'saida' else ('+' if m.quantidade > 0 else '') }}{{ '%g'|format(m.quantidade) }}</b></td>
+      <td data-l="Saldo">{{ '%g'|format(m.saldo_apos) }}</td><td data-l="Quem">{{ m.autor.nome if m.autor else '—' }}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="muted" style="padding:16px">Nenhum movimento ainda.</p>{% endif %}
+</div>
+{% endblock %}
