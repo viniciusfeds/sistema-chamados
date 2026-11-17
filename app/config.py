@@ -62,6 +62,9 @@ SLA_URGENTE = os.environ.get("SLA_URGENTE", "1/4/8")
 SLA_ALTA = os.environ.get("SLA_ALTA", "2/8/24")
 SLA_NORMAL = os.environ.get("SLA_NORMAL", "4/24/48")
 SLA_BAIXA = os.environ.get("SLA_BAIXA", "8/48/96")
+SLA_PAUSA_PENDENTE = os.environ.get("SLA_PAUSA_PENDENTE", "1") == "1"     # relógio para enquanto está Pendente
+SLA_PAUSA_APROVACAO = os.environ.get("SLA_PAUSA_APROVACAO", "1") == "1"   # ... e enquanto aguarda aprovação do cliente
+PESQUISA_SATISFACAO = os.environ.get("PESQUISA_SATISFACAO", "1") == "1"   # nota de 1 a 5 ao concluir o chamado
 
 ALERTA_HORAS = {"urgente": int(os.environ.get("ALERTA_HORAS_URGENTE", "4")),
                 "alta": int(os.environ.get("ALERTA_HORAS_ALTA", "12")),

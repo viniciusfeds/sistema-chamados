@@ -3026,7 +3026,26 @@ def test_enviar_mensagem_no_grupo_pelo_n8n(monkeypatch):
     assert "enviada" in r.text and enviados[-1]["telefone"] == "5511955550009"
     with SessionLocal() as db:
         assert db.scalars(select(EnvioWhatsApp).where(EnvioWhatsApp.evento == "grupo")).all()
-    assert "→ Top Guarulhos (enviado)" in adm.get(url).text
+    pg2 = adm.get(url).text
+    assert "para Top Guarulhos" in pg2 and "*Ticket* teste ok" in pg2 and 'class="conversa-wa"' in pg2
+    # a resposta de quem abriu entra no histórico do chamado (mesmo com a URA desligada)
+    from app import ura
+    from app.models import MensagemWhatsApp
+    monkeypatch.setattr(config, "WHATSAPP_URA", False)
+    with SessionLocal() as db:
+        r1 = ura.responder(db, "5511955550009", "Síndico Zé", "Pode vir amanhã às 9h", "http://x", "m1")
+        r2 = ura.responder(db, "5511955550009", "Síndico Zé", "Portaria avisada", "http://x", "m2")
+        assert ura.responder(db, "5511955550009", "Síndico Zé", "Portaria avisada", "http://x", "m2") is None   # repetida
+    assert "registrada no chamado" in r1 and r2 is None
+    assert ">1</b>" in adm.get("/").text.split('href="/respostas-whatsapp"')[1][:400] or "badge-alerta" in adm.get("/").text
+    lista = adm.get("/respostas-whatsapp").text
+    assert "Pode vir amanhã às 9h" in lista and "nova" in lista
+    pg2 = adm.get(url).text
+    assert "Pode vir amanhã às 9h" in pg2 and "Portaria avisada" in pg2 and "Síndico Zé" in pg2
+    with SessionLocal() as db:
+        assert all(m.lida for m in db.scalars(select(MensagemWhatsApp)).all())     # abrir o chamado marca como lida
+        assert ura.responder(db, "5511955550009", "Zé", "menu", "http://x", "m3") is None   # saiu da conversa; URA desligada
+        assert db.scalar(select(func.count(MensagemWhatsApp.id))) == 2
     # grupo de outro cliente não pode ser usado
     with SessionLocal() as db:
         outro = GrupoWhatsApp(cliente_id=IDS["sky"], nome="Sky", jid="120363000000000001@g.us")
@@ -3357,3 +3376,82 @@ def test_icpbrasil_raizes_oficiais_embutidas():
     ctx.load_verify_locations(cadata=dados.decode())          # o OpenSSL aceita a cadeia
     nomes = " ".join(c.subject.rfc4514_string() for c in certs)
     assert "Raiz Brasileira v10" in nomes and "SSL" in nomes
+
+
+def test_aprovacao_pelo_link_pausa_sla_e_satisfacao(monkeypatch):
+    from datetime import datetime as dt, timedelta as td
+    from app import atendimento, config, regras, sla, ura, whatsapp
+    from app.models import Acao, Chamado, ConversaURA
+    monkeypatch.setattr(config, "SLA_HORARIO", "24x7")
+    adm = entrar("admin@t.com")
+    with SessionLocal() as db:
+        ch = Chamado(numero=7701, unidade_id=IDS["torre"], titulo="Troca de câmera", assunto="Troca de câmera",
+                     problema="Câmera queimada", abertura=date.today(), solicitante_nome="Maria Síndica",
+                     solicitante_contato="(11) 96666-0001", solicitante_aceita_whatsapp=True)
+        ch.acoes.append(Acao(descricao="Orçamento enviado: troca da câmera por R$ 450,00", status="Aguardando aprovação"))
+        db.add(ch); db.commit()
+        token, cid = ch.token_publico, ch.id
+        assert ch.sla_pausas and ch.sla_pausas[-1][1] is None and sla.pausado(ch)       # relógio parou
+    pub = TestClient(app)
+    pg = pub.get(f"/acompanhar/{token}").text
+    assert "precisa da sua aprovação" in pg and "Orçamento enviado: troca da câmera" in pg
+    assert "Conte o motivo" in pub.post(f"/acompanhar/{token}/aprovar", data={"csrf": _csrf(pg), "resposta": "nao", "nome": "Maria"}).text
+    r = pub.post(f"/acompanhar/{token}/aprovar", data={"csrf": _csrf(pg), "resposta": "sim", "nome": "Maria Síndica", "obs": "Pode fazer"})
+    assert "Aprovado! A equipe vai programar" in r.text and "precisa da sua aprovação" not in r.text
+    with SessionLocal() as db:
+        ch = db.get(Chamado, cid)
+        assert regras.status_geral(ch) == "aberto" and any("Aprovado por Maria Síndica (pelo link" in a.descricao for a in ch.acoes)
+        assert ch.sla_pausas[-1][1] is not None and not sla.pausado(ch)                 # relógio voltou
+        # 3 h de pausa descontadas da solução (não do 1º atendimento)
+        ini = ch.criado_em
+        ch.sla_pausas = [[(ini + td(hours=1)).isoformat(), (ini + td(hours=4)).isoformat()]]
+        ch.sla_solucao_em = ini + td(hours=6)
+        av = sla.avaliar(ch, agora=ini + td(hours=7))
+        assert av["marcos"]["solucao"]["min"] == 180 and av["marcos"]["solucao"]["pausa"] == 180
+        db.rollback()
+    # recusa: fica Pendente com o motivo (e a equipe pode registrar pelo chamado)
+    with SessionLocal() as db:
+        ch = db.get(Chamado, cid)
+        ch.acoes.append(Acao(descricao="Novo orçamento: R$ 390,00", status="Aguardando aprovação")); db.commit()
+    pg = adm.get("/chamados/7701").text
+    assert "Aguardando aprovação do cliente" in pg and "Cliente não aprovou" in pg
+    r = adm.post("/chamados/7701/aprovar", data={"csrf": _csrf(pg), "resposta": "nao", "obs": "Vai trocar de fornecedor"})
+    assert "ficou Pendente" in r.text
+    with SessionLocal() as db:
+        ch = db.get(Chamado, cid)
+        assert regras.status_geral(ch) == "pendente" and any("NÃO aprovou" in a.descricao for a in ch.acoes)
+        assert sla.pausado(ch)
+        monkeypatch.setattr(config, "SLA_PAUSA_PENDENTE", False)
+        ch.acoes.append(Acao(descricao="x", status="Pendente")); db.flush()
+        assert not sla.pausado(ch)                                                    # pausa desligada: fecha
+        db.rollback()
+    monkeypatch.setattr(config, "SLA_PAUSA_PENDENTE", True)
+    # conclusão: pesquisa de satisfação pelo WhatsApp (n8n) e pelo link
+    monkeypatch.setattr(config, "WHATSAPP_MODO", "n8n")
+    monkeypatch.setattr(config, "N8N_URL_ENVIO", "http://n8n/x")
+    textos = []
+    monkeypatch.setattr(whatsapp, "enviar_texto", lambda tel, txt: textos.append((tel, txt)))
+    monkeypatch.setattr(whatsapp, "_em_segundo_plano", lambda fn, *a: fn(*a))
+    with SessionLocal() as db:
+        ch = db.get(Chamado, cid)
+        for a in ch.acoes:
+            a.status = "Concluído"
+        db.commit()
+        assert atendimento.pedir_pesquisa(db, ch) is True
+        assert textos and textos[-1][0] == "5511966660001" and "De *1* a *5*" in textos[-1][1]
+        assert "Obrigado pela nota" in ura.responder(db, "5511966660001", "Maria", "5", "http://x", "p1")
+        assert "Comentário registrado" in ura.responder(db, "5511966660001", "Maria", "Técnico muito atencioso", "http://x", "p2")
+        ch = db.get(Chamado, cid)
+        assert ch.satisfacao_nota == 5 and ch.satisfacao_obs == "Técnico muito atencioso"
+        assert atendimento.pedir_pesquisa(db, ch) is False                            # já avaliou
+        ch.satisfacao_nota = ch.satisfacao_obs = None; db.commit()
+    pg = pub.get(f"/acompanhar/{token}").text
+    assert "Como foi o atendimento?" in pg
+    assert "Escolha uma nota" in pub.post(f"/acompanhar/{token}/avaliar", data={"csrf": _csrf(pg), "nota": "9"}).text
+    r = pub.post(f"/acompanhar/{token}/avaliar", data={"csrf": _csrf(pg), "nota": "4", "obs": "Demorou um pouco"})
+    assert "Obrigado pela avaliação" in r.text and "Sua avaliação" in r.text and "Como foi o atendimento?" not in r.text
+    pg = adm.get("/chamados/7701").text
+    assert "Avaliação do solicitante" in pg and "Demorou um pouco" in pg
+    ind = adm.get("/indicadores").text
+    assert "Satisfação do solicitante" in ind and "4,0" in ind
+    assert adm.get("/indicadores/pdf").content.startswith(b"%PDF")

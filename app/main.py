@@ -194,6 +194,9 @@ def avisar_whatsapp(request, db, ch, antes=None):
         evento = "conclusao" if depois == "concluido" else "status"
     try:
         whatsapp.disparar(db, ch, evento, link_acompanhar(request, ch))
+        if evento == "conclusao":
+            from . import atendimento
+            atendimento.pedir_pesquisa(db, ch)
     except Exception as e:  # o aviso nunca impede o registro do chamado
         import logging
         logging.getLogger("chamados").warning("Falha ao preparar aviso de WhatsApp: %s", e)
@@ -472,7 +475,13 @@ def detalhe(request: Request, numero: int, u: Usuario = Depends(usuario_atual),
     equip_unidade = db.scalars(select(Equipamento).where(Equipamento.unidade_id == ch.unidade_id,
                                                          Equipamento.ativo).order_by(Equipamento.nome)).all() \
         if u.equipe else []
-    return render(request, "chamado.html", u=u, ch=ch, sit=sit, equip_unidade=equip_unidade,
+    from . import atendimento
+    conversa = atendimento.conversa_do_chamado(ch)
+    if u.equipe and any(not m.lida for m in ch.mensagens):       # a equipe abriu: respostas ficam lidas
+        for m in ch.mensagens:
+            m.lida = True
+        db.commit()
+    return render(request, "chamado.html", u=u, ch=ch, sit=sit, equip_unidade=equip_unidade, conversa=conversa,
                   tipos=tipos_chamado(db) if u.equipe else [],
                   grupos=unidades_permitidas(db, u) if u.equipe else [],
                   tecnicos=tecnicos(db) if u.equipe else [],
@@ -1861,3 +1870,4 @@ from . import rotas_relatorio_publico  # noqa: E402,F401
 from . import rotas_grupos  # noqa: E402,F401
 from . import rotas_app_desktop  # noqa: E402,F401
 from . import rotas_nfe  # noqa: E402,F401
+from . import rotas_atendimento  # noqa: E402,F401

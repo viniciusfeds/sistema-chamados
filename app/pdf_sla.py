@@ -75,6 +75,15 @@ def pdf_indicadores(ind, cliente_nome: str, periodo: str, horario: str, metas: d
                     + (" — horas de expediente (horário comercial)" if horario == "comercial" else " — horas corridas (24x7)")
                     + ". Manutenções preventivas programadas não entram no cálculo.", sCorpo)]
 
+    sat = g.get("satisfacao") or {}
+    if sat.get("respostas"):
+        E += [Spacer(1, 4), Paragraph(
+            f"Satisfação do solicitante: <b>{str(sat['media']).replace('.', ',')} de 5</b> "
+            f"({sat['respostas']} avaliação(ões) — "
+            + ", ".join(f"{q} nota {n}" for n, q in sat["dist"].items() if q) + ").", sCorpo)]
+    if any(c.sla_pausas for c in ind["lista"]):
+        E += [Paragraph("O tempo em que o chamado ficou pendente de peça, acesso ou aprovação do cliente não conta "
+                        "na chegada nem na solução.", sNota)]
     if ind["por_prioridade"]:
         E += [Spacer(1, 8), Paragraph("Por prioridade", sSec),
               _tabela_blocos("Prioridade", [(nome, b) for _, nome, b in ind["por_prioridade"]])]

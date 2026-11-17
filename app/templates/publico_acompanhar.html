@@ -46,6 +46,33 @@
 </form>
 {% endif %}
 
+{% if sit == 'aprovacao' %}
+<form class="card validar" method="post" action="/acompanhar/{{ ch.token_publico }}/aprovar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Este atendimento precisa da sua aprovação</h2>
+  <p style="margin-top:0">{{ motivo(ch, sit) }}</p>
+  <div class="campo"><label>Seu nome</label><input name="nome" value="{{ ch.solicitante_nome or '' }}" maxlength="120" required></div>
+  <div class="campo"><label>Observação <span class="muted">(obrigatória se não aprovar)</span></label>
+    <textarea name="obs" rows="2"></textarea></div>
+  <div class="acoes-orc">
+    <button class="btn" name="resposta" value="sim">✔ Aprovar</button>
+    <button class="btn perigo" name="resposta" value="nao">Não aprovar</button>
+  </div>
+</form>
+{% endif %}
+
+{% if pode_avaliar(ch) %}
+<form class="card validar" method="post" action="/acompanhar/{{ ch.token_publico }}/avaliar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Como foi o atendimento?</h2>
+  <div class="estrelas">{% for n in range(5, 0, -1) %}<input type="radio" name="nota" id="nota{{ n }}" value="{{ n }}" required><label for="nota{{ n }}" title="{{ n }}">★</label>{% endfor %}</div>
+  <div class="campo"><label>Comentário <span class="muted">(opcional)</span></label><textarea name="obs" rows="2" maxlength="1000"></textarea></div>
+  <button class="btn">Enviar avaliação</button>
+</form>
+{% elif ch.satisfacao_nota %}
+<div class="card"><b>Sua avaliação:</b> <span class="estrelas-fixas">{{ '★' * ch.satisfacao_nota }}{{ '☆' * (5 - ch.satisfacao_nota) }}</span>{% if ch.satisfacao_obs %} — {{ ch.satisfacao_obs }}{% endif %}</div>
+{% endif %}
+
 <div class="card">
   <h2>Andamento</h2>
   {{ tabela_acoes(ch) }}

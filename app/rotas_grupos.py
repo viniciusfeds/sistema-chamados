@@ -122,6 +122,9 @@ def enviar_grupo(request: Request, numero: int, grupo_id: str = Form(""), texto:
         resp = whatsapp.enviar_n8n({"tipo": "grupo", "telefone": g.jid, "texto": texto, "envio_id": env.id,
                                     "chamado": ch.numero})
         env.status, env.wamid = "enviado", str(resp.get("id") or "")[:160] or None
+        if grupo_id == "solicitante":                  # as respostas dele passam a entrar no histórico do chamado
+            from . import atendimento
+            atendimento.abrir_conversa(db, g.jid, ch)
         flash(request, f"Mensagem enviada para “{g.nome}”.")
     except whatsapp.ErroAPI as e:
         env.status, env.erro = "falhou", str(e)[:1000]

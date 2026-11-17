@@ -38,6 +38,15 @@
   {% for k, rot in MARCOS %}{% set pc = g[k].pct %}<a style="--c:{{ '#8A94A3' if pc is none else ('#2E7D4F' if pc >= 90 else ('#B07A00' if pc >= 75 else '#B3261E')) }}" title="Tempo médio: {{ fmt_min(g[k].medio) }}"><b>{{ '—' if pc is none else ('%.0f'|format(pc)) ~ '%' }}</b><span>{{ rot }} no prazo · médio {{ fmt_min(g[k].medio) }}</span></a>{% endfor %}
 </div>
 
+{% set sat = g.satisfacao %}{% if sat.respostas %}
+<div class="card"><h2 style="margin-top:0">Satisfação do solicitante</h2>
+  <div style="display:flex;gap:26px;align-items:center;flex-wrap:wrap">
+    <div><b style="font-size:2rem">{{ ('%.1f'|format(sat.media)).replace('.', ',') }}</b> <span class="muted">de 5</span><div class="estrelas-fixas">{{ '★' * (sat.media|round|int) }}{{ '☆' * (5 - (sat.media|round|int)) }}</div><div class="muted">{{ sat.respostas }} avaliação(ões) em {{ g.concluidos }} solucionado(s)</div></div>
+    <div style="flex:1;min-width:220px">{% for n, q in sat.dist.items() %}<div style="display:flex;gap:8px;align-items:center;font-size:.9rem"><span style="width:26px">{{ n }} ★</span><div style="flex:1;background:#EEE;border-radius:6px;height:9px"><div style="width:{{ (100 * q / sat.respostas)|round|int }}%;background:#F2A900;height:9px;border-radius:6px"></div></div><span class="muted" style="width:22px;text-align:right">{{ q }}</span></div>{% endfor %}</div>
+  </div>
+  {% set coment = ind.lista|selectattr('satisfacao_obs')|list %}{% if coment %}<div style="margin-top:10px">{% for c in coment[:8] %}<div class="dica"><a href="/chamados/{{ c.numero }}">{{ c.numero_fmt }}</a> · {{ '★' * (c.satisfacao_nota or 0) }} — “{{ c.satisfacao_obs[:240] }}”</div>{% endfor %}</div>{% endif %}
+</div>{% endif %}
+
 {% if ind.por_prioridade %}<div class="card"><h2>Por prioridade</h2>
 <table class="resp">
   <thead><tr><th>Prioridade</th><th>Chamados</th>{% for k, rot in MARCOS %}<th>{{ rot }}</th>{% endfor %}<th>Tempo médio solução</th><th>Meta (h)</th></tr></thead>

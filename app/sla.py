@@ -155,6 +155,44 @@ def atualizar(ch, novo=False, agora=None, acao_equipe=False):
             ch.sla_atendimento_em = min(ch.sla_chegada_em, ch.sla_solucao_em)
     elif ch.sla_solucao_em:                         # reabriu
         ch.sla_solucao_em = None
+    _pausar(ch, st, agora)
+
+
+def status_pausam() -> set:
+    return ({"pendente"} if config.SLA_PAUSA_PENDENTE else set()) | ({"aprovacao"} if config.SLA_PAUSA_APROVACAO else set())
+
+
+def _pausar(ch, st, agora):
+    """Abre a pausa quando o chamado entra em Pendente/Aguardando aprovação e fecha quando sai."""
+    pausas = [list(p) for p in (ch.sla_pausas or [])]
+    aberta = bool(pausas) and pausas[-1][1] is None
+    if st in status_pausam() and not aberta:
+        pausas.append([agora.isoformat(timespec="seconds"), None])
+    elif st not in status_pausam() and aberta:
+        pausas[-1][1] = agora.isoformat(timespec="seconds")
+    else:
+        return
+    ch.sla_pausas = pausas
+
+
+def minutos_pausados(ch, ini, fim, horario) -> int:
+    """Minutos (no relógio do SLA) em que o chamado ficou pausado dentro de [ini, fim]."""
+    total = 0
+    for p in ch.sla_pausas or []:
+        try:
+            a = datetime.fromisoformat(p[0])
+            b = datetime.fromisoformat(p[1]) if p[1] else fim
+        except (TypeError, ValueError, IndexError):
+            continue
+        a, b = max(a, ini), min(b, fim)
+        if b > a:
+            total += minutos(a, b, horario)
+    return total
+
+
+def pausado(ch) -> bool:
+    p = ch.sla_pausas or []
+    return bool(p) and p[-1][1] is None and not ch.sla_solucao_em
 
 
 def _ouvir_alteracoes(session, flush_context, instances):
@@ -219,7 +257,7 @@ def avaliar(ch, agora=None) -> dict:
     horario = horario_cliente(cli)
     meta_h = metas_cliente(cli)[ch.prioridade_ok]
     ini = inicio(ch) or agora
-    res = {"horario": horario, "expurgo": bool(ch.sla_expurgo), "marcos": {}}
+    res = {"horario": horario, "expurgo": bool(ch.sla_expurgo), "marcos": {}, "pausado": pausado(ch)}
     for i, (k, rot) in enumerate(MARCOS):
         fim = getattr(ch, f"sla_{k}_em")
         meta = int(meta_h[i] * 60)
@@ -227,11 +265,14 @@ def avaliar(ch, agora=None) -> dict:
             res["marcos"][k] = {"rotulo": rot, "meta": meta, "min": None, "sit": "sem", "em": fim}
             continue
         dec = minutos(ini, fim or agora, horario)
+        pausa = minutos_pausados(ch, ini, fim or agora, horario) if k != "atendimento" else 0
+        dec = max(dec - pausa, 0)
         if fim:
             sit = "ok" if dec <= meta else "fora"
         else:
             sit = "fora" if dec > meta else ("em_risco" if dec >= meta * 0.8 else "em_curso")
-        res["marcos"][k] = {"rotulo": rot, "meta": meta, "min": dec, "sit": sit, "em": fim, "restante": meta - dec}
+        res["marcos"][k] = {"rotulo": rot, "meta": meta, "min": dec, "sit": sit, "em": fim, "restante": meta - dec,
+                            "pausa": pausa}
     res["estourado"] = any(m["sit"] == "fora" for m in res["marcos"].values()) and not ch.sla_expurgo
     return res
 
@@ -278,6 +319,9 @@ def indicadores(chamados, agora=None) -> dict:
     for c in validos:
         unidades.setdefault(c.unidade.nome, []).append(c)
     por_un = sorted(((n, bloco(cs)) for n, cs in unidades.items()), key=lambda x: (-x[1]["total"], x[0]))
+    notas = [c.satisfacao_nota for c in lista if c.satisfacao_nota]
+    geral["satisfacao"] = {"media": round(sum(notas) / len(notas), 1) if notas else None, "respostas": len(notas),
+                           "dist": {n: notas.count(n) for n in range(5, 0, -1)}}
     return {"geral": geral, "por_prioridade": [x for x in por_prio if x[2]["total"]], "por_unidade": por_un,
             "avaliacoes": av, "expurgados": sum(1 for c in lista if c.sla_expurgo), "lista": lista}
 

@@ -1,5 +1,19 @@
 # Histórico de versões
 
+## 1.36.0 — 2026-11-17
+- **Respostas do WhatsApp no chamado**: depois que a equipe envia uma mensagem para quem abriu o chamado
+  (*Enviar mensagem pelo WhatsApp*), o que a pessoa responder nas 48 horas seguintes fica registrado na conversa
+  do chamado. A equipe é avisada por e-mail, o menu lateral ganha *Respostas WhatsApp* com o contador de não
+  lidas, e abrir o chamado marca como lida. Funciona mesmo com a URA desligada; *menu* volta ao atendimento normal
+- **Aprovar ou recusar pelo link**: com o chamado em *Aguardando aprovação*, o link de acompanhamento mostra os
+  botões *Aprovar* e *Não aprovar* (com motivo). Aprovado, o chamado volta para a fila; recusado, fica Pendente
+  com o motivo. A equipe é avisada e também pode registrar a resposta pelo chamado
+- **Pausa do SLA**: o relógio da chegada e da solução para enquanto o chamado está Pendente ou aguardando
+  aprovação do cliente (liga/desliga em Configurações → SLA). O tempo pausado aparece no chamado
+- **Pesquisa de satisfação**: ao concluir, o solicitante dá uma nota de 1 a 5 (e um comentário) pelo link de
+  acompanhamento ou respondendo no WhatsApp (modo n8n). A nota aparece no chamado; a média, a distribuição e os
+  comentários aparecem em Indicadores e no PDF mensal do cliente
+
 ## 1.35.0 — 2026-11-17
 - **NF-e: inutilização de numeração** (Financeiro → NF-e → *Inutilizar numeração*): informa a faixa e o motivo, o
   Nexus registra na SEFAZ, guarda o protocolo e a numeração seguinte pula a faixa. Número que já é de nota

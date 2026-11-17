@@ -25,6 +25,27 @@
 <div class="flash erro">⏱ Chamado sem nova ação há {{ horas }}h, acima do prazo da prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}.</div>
 {% endif %}
 
+{% if sit == 'aprovacao' %}
+<form class="card validar" method="post" action="/chamados/{{ ch.numero }}/aprovar">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if u.equipe %}
+  <h2>Aguardando aprovação do cliente</h2>
+  <p class="muted" style="margin-top:0">O cliente aprova ou recusa pelo link de acompanhamento. Se ele respondeu por telefone ou WhatsApp, registre aqui:</p>
+  {% else %}
+  <h2>Este atendimento precisa da sua aprovação</h2>
+  <p style="margin-top:0">{{ motivo(ch, sit) }}</p>
+  {% endif %}
+  <div class="campo"><label>Observação <span class="muted">(obrigatória se não aprovar)</span></label><textarea name="obs" rows="2"></textarea></div>
+  <div class="acoes-orc">
+    <button class="btn" name="resposta" value="sim">✔ {{ 'Cliente aprovou' if u.equipe else 'Aprovar' }}</button>
+    <button class="btn perigo" name="resposta" value="nao">{{ 'Cliente não aprovou' if u.equipe else 'Não aprovar' }}</button>
+  </div>
+</form>
+{% endif %}
+{% if ch.satisfacao_nota %}
+<div class="card"><b>Avaliação do solicitante:</b> <span class="estrelas-fixas">{{ '★' * ch.satisfacao_nota }}{{ '☆' * (5 - ch.satisfacao_nota) }}</span> <span class="muted">{{ ch.satisfacao_em|local }}</span>{% if ch.satisfacao_obs %}<div style="margin-top:4px">“{{ ch.satisfacao_obs }}”</div>{% endif %}</div>
+{% endif %}
+
 {% if sit == 'validacao' %}
 <form class="card validar" method="post" action="/chamados/{{ ch.numero }}/validar">
   <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -59,7 +80,7 @@
 
 {% if u.equipe and not ch.cancelado and ch.origem != 'preventiva' %}{% set sv = sla_avaliar(ch) %}
 <div class="card sla-card" id="sla">
-  <div class="sla-cab"><h2 style="margin:0">SLA <span class="muted" style="font-weight:400;font-size:.85rem">{{ 'horário comercial' if sv.horario == 'comercial' else '24x7' }} · prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}</span></h2>
+  <div class="sla-cab"><h2 style="margin:0">SLA <span class="muted" style="font-weight:400;font-size:.85rem">{{ 'horário comercial' if sv.horario == 'comercial' else '24x7' }} · prioridade {{ PRIORIDADES[ch.prioridade_ok][0]|lower }}</span>{% if sv.pausado %}<span class="sla-pausa" title="O relógio da chegada e da solução está parado enquanto o chamado depende do cliente">⏸ relógio pausado</span>{% endif %}</h2>
     {% if not ch.sla_chegada_em %}<form method="post" action="/chamados/{{ ch.numero }}/chegada" id="form-chegada">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lat"><input type="hidden" name="lng">
       <button class="btn peq" type="button" onclick="(function(f){var b=f.querySelector('button');b.disabled=true;b.textContent='Registrando…';
@@ -68,7 +89,7 @@
   {% if ch.sla_expurgo %}<div class="dica">Desconsiderado dos indicadores: {{ ch.sla_expurgo_motivo }}</div>{% endif %}
   <div class="sla-marcos">{% for k, rot in SLA_MARCOS %}{% set m = sv.marcos[k] %}
     <div class="sla-m sla-{{ m.sit }}"><div class="muted">{{ rot }}</div>
-      <b>{{ sla_fmt(m.min) }}</b> <span class="muted">/ meta {{ sla_fmt(m.meta) }}</span>
+      <b>{{ sla_fmt(m.min) }}</b> <span class="muted">/ meta {{ sla_fmt(m.meta) }}</span>{% if m.pausa %} <span class="muted" title="Tempo pausado (Pendente / aguardando aprovação), já descontado">⏸ {{ sla_fmt(m.pausa) }}</span>{% endif %}
       <div class="sla-sit">{% if m.em %}{{ m.em|local }} · {{ 'no prazo' if m.sit == 'ok' else 'fora do prazo' }}{% elif m.sit == 'fora' %}estourado há {{ sla_fmt(-m.restante) }}{% else %}faltam {{ sla_fmt(m.restante) }}{% endif %}</div></div>
   {% endfor %}</div>
   {% if u.papel == 'admin' %}
@@ -301,15 +322,14 @@
           {% if tem_sol %}<option value="solicitante">👤 {{ ch.solicitante_nome or 'Quem abriu' }} · {{ ch.solicitante_contato|parcial('telefone') }}</option>{% endif %}</select>
         <button class="btn" onclick="this.disabled=true;this.textContent='Enviando…';this.form.submit()">📤 Enviar</button>
       </div>
-      <div class="dica">Envia pelo número da empresa (n8n), para o grupo do cliente ou direto para quem abriu o chamado. Ajuste o texto antes de enviar; respostas de quem recebe chegam no WhatsApp da empresa.</div>
+      <div class="dica">Envia pelo número da empresa (n8n), para o grupo do cliente ou direto para quem abriu o chamado. Ajuste o texto antes de enviar; o que quem abriu o chamado responder (até 48 h depois) fica registrado aqui no chamado; respostas em grupo continuam só no WhatsApp da empresa.</div>
     </form>
     {% else %}
     <textarea readonly style="min-height:130px;margin-top:8px" onclick="this.select()">{{ texto_wa }}</textarea>
     <div class="dica">O botão “Enviar no WhatsApp” abre o WhatsApp com esta mensagem; é só escolher o grupo.
       {% if u.papel == 'admin' and pode_enviar_grupo() %} Para enviar direto daqui, cadastre o grupo na <a href="/clientes/{{ ch.unidade.cliente_id }}#grupos">ficha do cliente</a>.{% endif %}</div>
     {% endif %}
-    {% set envs = ch.envios|selectattr('evento', 'equalto', 'grupo')|list %}
-    {% if envs %}<div class="dica" style="margin-top:6px">Enviadas: {% for e in envs[-3:] %}{{ e.criado_em|local }} → {{ e.destino_nome }} ({{ e.status }}){{ ', ' if not loop.last }}{% endfor %}</div>{% endif %}
+    {% if conversa %}<div class="conversa-wa">{% for m in conversa %}<div class="msg {{ m.de }}{{ ' nova' if m.nova }}"><small>{{ m.quando|local }} · {{ 'para ' if m.de == 'equipe' }}{{ m.nome }}{% if m.de == 'equipe' and m.status == 'falhou' %} · <b style="color:#B3261E">não enviada</b>{% endif %}{% if m.nova %} · <b style="color:#B3261E">nova</b>{% endif %}</small>{{ m.texto }}</div>{% endfor %}</div>{% endif %}
   </details>
   {% endif %}
 </div>

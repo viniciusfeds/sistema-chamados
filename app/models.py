@@ -183,6 +183,10 @@ class Chamado(Base):
     sla_chegada_lng: Mapped[float | None] = mapped_column(nullable=True)
     sla_expurgo: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)   # fora do indicador
     sla_expurgo_motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sla_pausas: Mapped[list | None] = mapped_column(JSON, nullable=True)   # [[início ISO, fim ISO ou None], ...] (UTC)
+    satisfacao_nota: Mapped[int | None] = mapped_column(Integer, nullable=True)      # 1 a 5, dada pelo solicitante
+    satisfacao_obs: Mapped[str | None] = mapped_column(Text, nullable=True)
+    satisfacao_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(),
@@ -193,6 +197,8 @@ class Chamado(Base):
     tecnico = relationship("Usuario", foreign_keys=[tecnico_id])
     anexos = relationship("Anexo", back_populates="chamado", cascade="all, delete-orphan",
                           order_by="Anexo.id")
+    mensagens = relationship("MensagemWhatsApp", back_populates="chamado", cascade="all, delete-orphan",
+                             order_by="MensagemWhatsApp.id")
     envios = relationship("EnvioWhatsApp", back_populates="chamado", cascade="all, delete-orphan",
                           order_by="EnvioWhatsApp.id")
     acoes = relationship("Acao", back_populates="chamado", cascade="all, delete-orphan",
@@ -1456,3 +1462,18 @@ class InutilizacaoNfe(Base):
     xml: Mapped[str | None] = mapped_column(Text, nullable=True)
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class MensagemWhatsApp(Base):
+    """Resposta do cliente pelo WhatsApp, registrada no chamado em que a equipe estava conversando com ele."""
+    __tablename__ = "mensagens_whatsapp"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    chamado_id: Mapped[int] = mapped_column(ForeignKey("chamados.id", ondelete="CASCADE"), index=True)
+    telefone: Mapped[str] = mapped_column(String(20))
+    nome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    texto: Mapped[str] = mapped_column(Text)
+    lida: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    chamado = relationship("Chamado", back_populates="mensagens")

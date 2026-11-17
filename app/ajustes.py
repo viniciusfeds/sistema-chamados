@@ -115,6 +115,12 @@ SECOES = [
         Campo("SLA_ALTA", "Metas — Alta (h)", ajuda="Ex.: 2/8/24"),
         Campo("SLA_NORMAL", "Metas — Normal (h)", ajuda="Ex.: 4/24/48"),
         Campo("SLA_BAIXA", "Metas — Baixa (h)", ajuda="Ex.: 8/48/96"),
+        Campo("SLA_PAUSA_PENDENTE", "Pausar o relógio enquanto o chamado está Pendente", "bool",
+              "O tempo parado esperando peça, acesso ou resposta não conta na chegada nem na solução."),
+        Campo("SLA_PAUSA_APROVACAO", "Pausar o relógio enquanto aguarda aprovação do cliente", "bool"),
+        Campo("PESQUISA_SATISFACAO", "Pesquisa de satisfação ao concluir o chamado", "bool",
+              "O solicitante dá uma nota de 1 a 5 pelo link de acompanhamento ou respondendo no WhatsApp (modo n8n). "
+              "A média aparece nos Indicadores e no relatório mensal."),
     ]),
     ("nfe", "Nota fiscal de produto (NF-e / DANFE)",
      "Venda de mercadoria na SEFAZ-SP com o certificado A1. Comece em homologação (notas de teste).", [

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block titulo %}Respostas do WhatsApp{% endblock %}
+{% block conteudo %}
+<div class="cab"><div><h1>Respostas do WhatsApp</h1><div class="muted">O que os clientes responderam às mensagens enviadas pelos chamados. Abrir o chamado marca como lida.</div></div></div>
+<div class="card" style="padding:0;overflow:hidden">
+{% if msgs %}
+<table class="resp">
+  <thead><tr><th>Quando</th><th>Chamado</th><th>De</th><th>Mensagem</th></tr></thead>
+  <tbody>{% for m in msgs %}<tr style="{{ 'font-weight:700' if not m.lida }}">
+    <td data-l="Quando">{{ m.criado_em|local }}{% if not m.lida %} <span class="selo" style="background:#B3261E">nova</span>{% endif %}</td>
+    <td data-l="Chamado"><a href="/chamados/{{ m.chamado.numero }}#grupo">{{ m.chamado.numero_fmt }}</a><div class="muted">{{ m.chamado.unidade.nome }}</div></td>
+    <td data-l="De">{{ m.nome or m.telefone|parcial('telefone') }}</td>
+    <td data-l="Mensagem" style="white-space:pre-wrap">{{ m.texto[:400] }}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhuma resposta ainda. Quando você envia uma mensagem para quem abriu o chamado (no chamado, “Enviar mensagem pelo WhatsApp”), o que a pessoa responder nas 48 horas seguintes aparece aqui e no próprio chamado.</p>{% endif %}
+</div>
+{% endblock %}

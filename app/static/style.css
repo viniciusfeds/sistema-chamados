@@ -495,3 +495,17 @@ body.com-menu main{max-width:1600px}
 .sla-em_risco{border-left-color:#B07A00;background:#FFF8EA}.sla-em_curso{border-left-color:#1F5FA8}
 .sla-ok-txt,.k-ok{color:#2E7D4F}.sla-fora-txt,.k-ruim{color:#B3261E}.sla-em_risco-txt,.k-med{color:#B07A00}
 .card.k .muted{font-size:.78rem}
+
+/* pesquisa de satisfação e conversa do WhatsApp (v1.36) */
+.estrelas{display:inline-flex;flex-direction:row-reverse;gap:4px;margin:4px 0 10px}
+.estrelas input{position:absolute;opacity:0;width:1px;height:1px}
+.estrelas label{font-size:2.4rem;line-height:1;color:#D0D0CC;cursor:pointer;padding:0 2px}
+.estrelas input:checked~label,.estrelas label:hover,.estrelas label:hover~label{color:#F2A900}
+.estrelas input:focus-visible+label{outline:2px solid var(--laranja);border-radius:6px}
+.estrelas-fixas{color:#F2A900;font-size:1.15rem;letter-spacing:1px}
+.conversa-wa{display:flex;flex-direction:column;gap:6px;margin:10px 0;max-height:340px;overflow:auto}
+.conversa-wa .msg{max-width:82%;padding:7px 11px;border-radius:12px;background:#F0F0EE;white-space:pre-wrap;word-break:break-word}
+.conversa-wa .msg.equipe{align-self:flex-end;background:#E3F2E6}
+.conversa-wa .msg.nova{box-shadow:0 0 0 2px #B3261E inset}
+.conversa-wa .msg small{display:block;color:var(--cinza);font-size:.75rem;margin-bottom:2px}
+.sla-pausa{display:inline-block;background:#EEE8FF;color:#4B2E9E;font-weight:700;font-size:.8rem;padding:2px 9px;border-radius:999px;margin-left:8px}

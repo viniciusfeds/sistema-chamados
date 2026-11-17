@@ -136,11 +136,66 @@ def _status_txt(ch):
     return regras.rotulo(regras.status_geral(ch))
 
 
+ETAPAS_CHAMADO = ("chamado", "pesquisa", "pesquisa_obs")
+EXPIRA_CHAMADO = timedelta(hours=48)
+_SEGUIR = object()
+
+
+def _conversa_chamado(db, conv, telefone, nome_perfil, texto, msg_id):
+    """Resposta a uma mensagem da equipe (entra no histórico do chamado) ou à pesquisa de satisfação."""
+    from . import atendimento
+    t = texto.lower()
+    ch = atendimento.chamado_da_conversa(db, conv)
+    vencida = conv.atualizado_em and _agora() - conv.atualizado_em > EXPIRA_CHAMADO
+    if not ch or vencida or t in SAIR:
+        conv.etapa, conv.dados = None, {}
+        db.commit()
+        return _SEGUIR
+    conv.ultima_msg_id = msg_id or conv.ultima_msg_id
+    dados = dict(conv.dados or {})
+    if conv.etapa == "pesquisa":
+        if t not in ("1", "2", "3", "4", "5"):
+            conv.etapa, conv.dados = None, {}          # escreveu outra coisa: segue o atendimento normal
+            db.commit()
+            return _SEGUIR
+        atendimento.registrar_satisfacao(ch, int(t))
+        conv.etapa, conv.atualizado_em = "pesquisa_obs", _agora()
+        db.commit()
+        return ("Obrigado pela nota! 🙏\nSe quiser, escreva um comentário sobre o atendimento "
+                "(ou mande *0* para encerrar).")
+    if conv.etapa == "pesquisa_obs":
+        if len(texto) >= 2 and not texto.startswith("["):
+            ch.satisfacao_obs = texto[:1000]
+        conv.etapa, conv.dados = None, {}
+        db.commit()
+        return "Comentário registrado. Obrigado! 😊"
+    # etapa "chamado": resposta para a equipe
+    if not texto:
+        return None
+    atendimento.registrar_resposta(db, ch, telefone, nome_perfil, texto)
+    primeira = not dados.get("confirmado")
+    conv.dados, conv.atualizado_em = {**dados, "confirmado": True}, _agora()
+    db.commit()
+    if primeira:
+        _avisar_resposta(ch, nome_perfil, telefone, texto)
+        return (f"Recebido! ✅ Sua resposta foi registrada no chamado *{ch.numero_fmt}* e a equipe já foi avisada. "
+                "Pode continuar escrevendo por aqui. Para outro atendimento, mande *menu*.")
+    return None
+
+
+def _avisar_resposta(ch, nome, telefone, texto):
+    from . import avisos
+    try:
+        avisos.avisar_equipe(f"[WhatsApp] Resposta no chamado {ch.numero_fmt} — {ch.unidade.nome}",
+                             f"{nome or ch.solicitante_nome or _tel_fmt(telefone)} respondeu pelo WhatsApp:\n\n{texto}\n\n"
+                             f"Veja e responda pelo chamado: {config.URL_PUBLICA or ''}/chamados/{ch.numero}#grupo\n")
+    except Exception as e:  # noqa: BLE001
+        log.warning("Aviso de resposta não enviado: %s", e)
+
+
 def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str, msg_id: str = "",
               criar_chamado=None) -> str | None:
     """Recebe a mensagem do cliente e devolve o texto da resposta (ou None para não responder)."""
-    if not config.WHATSAPP_URA:
-        return None
     from .whatsapp import esta_bloqueado
     if esta_bloqueado(db, telefone):                  # lista de bloqueio: a URA não responde
         return None
@@ -148,6 +203,12 @@ def responder(db, telefone: str, nome_perfil: str | None, texto: str, base: str,
     conv = db.scalar(select(ConversaURA).where(ConversaURA.telefone == telefone))
     if conv and msg_id and conv.ultima_msg_id == msg_id:
         return None                                    # a Meta reenviou a mesma mensagem
+    if conv and conv.etapa in ETAPAS_CHAMADO:          # conversa ligada a um chamado (vale mesmo com a URA desligada)
+        r = _conversa_chamado(db, conv, telefone, nome_perfil, texto, msg_id)
+        if r is not _SEGUIR:
+            return r
+    if not config.WHATSAPP_URA:
+        return None
     if not conv:
         conv = ConversaURA(telefone=telefone, etapa=None, dados={})
         db.add(conv)
