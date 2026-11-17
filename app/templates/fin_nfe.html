@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}NF-e{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('nfe') }}
+<div class="cab">
+  <div><h1>NF-e de produtos</h1><div class="muted">SEFAZ-SP · série {{ config.NFE_SERIE }} · {{ lista|length }} nota(s)</div></div>
+  <div class="acoes-orc"><a class="btn sec" href="/financeiro/nfe/status-sefaz">Status da SEFAZ</a><a class="btn" href="/financeiro/nfe/nova">+ Emitir NF-e</a></div>
+</div>
+{% if ambiente == 'desligado' %}<div class="card aviso-card">A emissão de NF-e está <b>desligada</b>. Ligue em <a href="/admin/configuracoes#nfe">Configurações → Nota fiscal de produto</a>.</div>
+{% elif ambiente == 'homologacao' %}<div class="card aviso-card">🧪 <b>Homologação:</b> as NF-e vão para o ambiente de testes da SEFAZ-SP e <b>não têm valor fiscal</b>. Passando nos testes, mude para Produção em <a href="/admin/configuracoes#nfe">Configurações</a>.</div>{% endif %}
+{% if falta %}<div class="card aviso-card" style="border-color:#B3261E">Para emitir falta: <b>{{ falta|join('; ') }}</b>.</div>{% endif %}
+{% if sem_ncm %}<div class="card aviso-card">{{ sem_ncm }} produto(s) do catálogo sem NCM — <a href="/financeiro/catalogo?tipo=produto">preencher</a> (NCM é obrigatório na NF-e).</div>{% endif %}
+<div class="card" style="padding:0;overflow:hidden">
+{% if lista %}
+<table class="resp">
+  <thead><tr><th>NF-e</th><th>Cliente</th><th class="valor">Valor</th><th>Situação</th><th></th></tr></thead>
+  <tbody>{% for n in lista %}<tr class="{{ 'inativo' if n.status == 'cancelada' }}">
+    <td data-l="NF-e"><a href="/financeiro/nfe/{{ n.id }}"><b>{{ n.rotulo }}</b></a><div class="muted">série {{ n.serie }} · {{ n.criado_em|local }}</div></td>
+    <td data-l="Cliente">{{ n.cliente_fiscal.nome }}{% if n.orcamento %}<div class="muted">orçamento {{ n.orcamento.numero_fmt }}</div>{% endif %}</td>
+    <td data-l="Valor" class="valor"><b>{{ n.valor_total|rs }}</b></td>
+    <td data-l="Situação"><span class="selo" style="background:{{ STATUS_NFE[n.status][1] }}">{{ STATUS_NFE[n.status][0] }}</span>
+      {% if n.status in ('rejeitada', 'processando', 'denegada') and n.erro %}<div style="color:#B3261E;font-size:.85rem">{{ n.erro[:160] }}</div>{% endif %}</td>
+    <td class="acoes">{% if n.status in ('autorizada', 'cancelada') %}<a class="btn peq sec" href="/financeiro/nfe/{{ n.id }}/danfe" target="_blank">DANFE</a> <a class="btn peq sec" href="/financeiro/nfe/{{ n.id }}/xml">XML</a>
+      {% elif n.status == 'rejeitada' %}<a class="btn peq" href="/financeiro/nfe/nova?refazer={{ n.id }}">Corrigir</a>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="muted" style="padding:16px">Nenhuma NF-e ainda. Emita a partir de um orçamento com produtos (botão “Emitir NF-e”) ou aqui em “+ Emitir NF-e”.</p>{% endif %}
+</div>
+{% endblock %}

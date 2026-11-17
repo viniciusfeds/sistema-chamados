@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}Emitir NF-e{% endblock %}
+{% macro linha(i) %}
+<tr class="nfe-item">
+  <td data-l="Produto"><input name="item_descricao" value="{{ i.descricao or '' }}" maxlength="120" required placeholder="Descrição">
+    <input type="hidden" name="item_codigo" value="{{ i.codigo or '' }}"><input type="hidden" name="item_cest" value="{{ i.cest or '' }}"></td>
+  <td data-l="NCM"><input name="item_ncm" value="{{ i.ncm or '' }}" inputmode="numeric" maxlength="8" style="width:92px" required></td>
+  <td data-l="CFOP"><input name="item_cfop" value="{{ i.cfop or config.NFE_CFOP_PADRAO }}" inputmode="numeric" maxlength="4" style="width:64px"></td>
+  <td data-l="Origem / CSOSN"><select name="item_origem" style="width:62px">{% for k, v in ORIGENS.items() %}<option value="{{ k }}" title="{{ v }}" {{ 'selected' if (i.origem or '0') == k }}>{{ k }}</option>{% endfor %}</select>
+    <select name="item_csosn" style="width:70px">{% for k, v in CSOSN.items() %}<option value="{{ k }}" title="{{ v }}" {{ 'selected' if (i.csosn or config.NFE_CSOSN_PADRAO) == k }}>{{ k }}</option>{% endfor %}</select></td>
+  <td data-l="Un"><input name="item_unidade" value="{{ i.unidade or 'UN' }}" maxlength="6" style="width:52px"></td>
+  <td data-l="Qtd"><input name="item_qtd" value="{{ ('%g'|format(i.qtd)).replace('.', ',') if i.qtd else '1' }}" inputmode="decimal" style="width:64px"></td>
+  <td data-l="Unitário (R$)"><input name="item_vunit" value="{{ ('%.4f'|format(i.vunit / 100)).rstrip('0').rstrip('.').replace('.', ',') if i.vunit else '' }}" inputmode="decimal" style="width:96px" required></td>
+  <td data-l="Desconto (R$)"><input name="item_vdesc" value="{{ (i.vdesc|brl_num) if i.vdesc else '' }}" inputmode="decimal" style="width:84px"></td>
+  <td><button type="button" class="btn peq sec" onclick="this.closest('tr').remove()" title="Remover">✕</button></td>
+</tr>
+{% endmacro %}
+{% block conteudo %}
+{{ abas_financeiro('nfe') }}
+<div class="cab">
+  <div><h1>{{ 'Corrigir e reenviar NF-e' if r else 'Emitir NF-e' }}</h1><div class="muted">{% if o %}Produtos do orçamento {{ o.numero_fmt }} — {{ o.titulo }}{% else %}NF-e avulsa{% endif %}</div></div>
+  <a class="btn sec" href="/financeiro/nfe">Voltar</a>
+</div>
+{% if ambiente == 'homologacao' %}<div class="card aviso-card">🧪 Homologação: NF-e de <b>teste</b>, sem valor fiscal.</div>
+{% elif ambiente == 'desligado' %}<div class="card aviso-card">A emissão de NF-e está desligada em <a href="/admin/configuracoes#nfe">Configurações</a>.</div>{% endif %}
+{% if r and r.erro %}<div class="card aviso-card" style="border-color:#B3261E"><b>Motivo da recusa:</b> {{ r.erro }}</div>{% endif %}
+<form method="post" action="/financeiro/nfe/emitir" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="orcamento_id" value="{{ o.id if o else '' }}"><input type="hidden" name="refazer_id" value="{{ r.id if r else '' }}">
+  <div class="grid2">
+    <div class="campo"><label>Destinatário</label><select name="cliente_fiscal_id" required><option value="">— escolha —</option>
+      {% for c in clientes %}<option value="{{ c.id }}" {{ 'selected' if cf and cf.id == c.id }}>{{ c.nome }} · {{ c.documento_fmt|parcial("documento") }}{{ ' · IE ' ~ c.ie if c.ie }}</option>{% endfor %}</select>
+      <div class="dica">Com IE preenchida, sai como contribuinte do ICMS; sem IE, como não contribuinte (condomínio, pessoa física).</div></div>
+    <div class="campo"><label>Forma de pagamento</label><select name="forma">{% for k, v in PAGAMENTOS.items() %}<option value="{{ k }}" {{ 'selected' if forma == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <h2>Produtos</h2>
+  <table class="resp quebra" id="nfe-itens">
+    <thead><tr><th>Produto</th><th>NCM</th><th>CFOP</th><th>Origem / CSOSN</th><th>Un</th><th>Qtd</th><th>Unitário (R$)</th><th>Desconto (R$)</th><th></th></tr></thead>
+    <tbody>{% for i in itens %}{{ linha(i) }}{% endfor %}</tbody>
+  </table>
+  <template id="nfe-modelo">{{ linha({}) }}</template>
+  <div class="acoes-orc" style="margin:8px 0 14px">
+    <select id="nfe-cat" style="max-width:380px"><option value="">+ Adicionar produto do catálogo…</option>
+      {% for p in produtos %}<option value="{{ p.id }}">{{ p.descricao }}{{ '' if p.ncm else ' (sem NCM)' }}</option>{% endfor %}</select>
+    <button type="button" class="btn peq sec" id="nfe-vazio">+ Linha em branco</button>
+    <span class="muted" id="nfe-total"></span>
+  </div>
+  <div class="campo"><label>Informações complementares</label><textarea name="info" rows="3" maxlength="5000">{{ info or '' }}</textarea></div>
+  <button class="btn" {{ 'disabled' if ambiente == 'desligado' }} onclick="this.disabled=true;this.textContent='Enviando à SEFAZ…';this.form.submit()">{{ 'Emitir NF-e de teste' if ambiente == 'homologacao' else 'Emitir NF-e' }}</button>
+</form>
+<script>
+(function () {
+  var C = {{ catalogo_js|tojson }}, tb = document.querySelector('#nfe-itens tbody'), mod = document.getElementById('nfe-modelo');
+  function num(v) { v = String(v || '').replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+  function total() { var t = 0; tb.querySelectorAll('tr').forEach(function (tr) {
+      t += num(tr.querySelector('[name=item_qtd]').value) * num(tr.querySelector('[name=item_vunit]').value) - num(tr.querySelector('[name=item_vdesc]').value); });
+    document.getElementById('nfe-total').textContent = 'Total: ' + t.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+  function nova(d) { var tr = mod.content.firstElementChild.cloneNode(true); tb.appendChild(tr);
+    if (d) { ['descricao', 'codigo', 'cest', 'ncm', 'cfop', 'unidade'].forEach(function (k) { tr.querySelector('[name=item_' + k + ']').value = d[k] || ''; });
+      tr.querySelector('[name=item_origem]').value = d.origem || '0'; tr.querySelector('[name=item_csosn]').value = d.csosn;
+      tr.querySelector('[name=item_vunit]').value = (d.vunit / 100).toFixed(2).replace('.', ','); }
+    total(); return tr; }
+  document.getElementById('nfe-cat').addEventListener('change', function () { if (C[this.value]) nova(C[this.value]); this.value = ''; });
+  document.getElementById('nfe-vazio').addEventListener('click', function () { nova(null).querySelector('input').focus(); });
+  tb.addEventListener('input', total); total();
+})();
+</script>
+{% endblock %}

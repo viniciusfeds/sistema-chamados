@@ -1377,3 +1377,64 @@ class Recibo(Base):
     @property
     def numero_fmt(self):
         return f"{self.numero:04d}"
+
+
+STATUS_NFE = {
+    "processando": ("Enviando", "#B07000"),
+    "autorizada": ("Autorizada", "#1E7B34"),
+    "rejeitada": ("Rejeitada", "#B3261E"),
+    "denegada": ("Denegada", "#6B1D1D"),
+    "cancelada": ("Cancelada", "#8A94A3"),
+}
+
+
+class NotaProduto(Base):
+    """NF-e modelo 55 (venda de mercadoria) e o DANFE."""
+    __tablename__ = "nfe"
+    __table_args__ = (UniqueConstraint("ambiente", "serie", "numero", name="uq_nfe_numero"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ambiente: Mapped[str] = mapped_column(String(12), default="homologacao", index=True)
+    serie: Mapped[int] = mapped_column(Integer, default=1)
+    numero: Mapped[int] = mapped_column(Integer)
+    chave: Mapped[str] = mapped_column(String(44), unique=True)
+    status: Mapped[str] = mapped_column(String(12), default="processando", index=True)
+    natureza: Mapped[str] = mapped_column(String(60), default="Venda de mercadoria")
+    cliente_fiscal_id: Mapped[int] = mapped_column(ForeignKey("clientes_fiscais.id"), index=True)
+    orcamento_id: Mapped[int | None] = mapped_column(ForeignKey("orcamentos.id", ondelete="SET NULL"), nullable=True, index=True)
+    titulo_id: Mapped[int | None] = mapped_column(ForeignKey("titulos.id", ondelete="SET NULL"), nullable=True, index=True)
+    itens: Mapped[list] = mapped_column(JSON, default=list)   # [{codigo, descricao, ncm, cest, cfop, csosn, origem, unidade, qtd, vunit, vprod, vdesc, vtrib}]
+    valor_total: Mapped[int] = mapped_column(Integer, default=0)      # centavos
+    forma_pagamento: Mapped[str | None] = mapped_column(String(2), nullable=True)   # tPag
+    info_complementar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    xml: Mapped[str | None] = mapped_column(Text, nullable=True)       # NFe assinada
+    xml_proc: Mapped[str | None] = mapped_column(Text, nullable=True)  # nfeProc (NFe + protocolo)
+    xml_cancelamento: Mapped[str | None] = mapped_column(Text, nullable=True)
+    protocolo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recibo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    erro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    autorizada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_cancelamento: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    cliente_fiscal = relationship("ClienteFiscal")
+    orcamento = relationship("Orcamento", backref=backref("notas_produto", order_by="NotaProduto.id"))
+    titulo = relationship("Titulo")
+    criado_por = relationship("Usuario")
+
+    @property
+    def homologacao(self):
+        return self.ambiente != "producao"
+
+    @property
+    def dest_contribuinte(self):
+        ie = "".join(c for c in (self.cliente_fiscal.ie or "") if c.isdigit()) if self.cliente_fiscal else ""
+        return bool(ie)
+
+    @property
+    def rotulo(self):
+        return f"NF-e {self.numero}" + (" (teste)" if self.homologacao else "")
+
+    @property
+    def chave_fmt(self):
+        return " ".join(self.chave[i:i + 4] for i in range(0, 44, 4))

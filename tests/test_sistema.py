@@ -3095,3 +3095,144 @@ def test_lista_de_bloqueio_whatsapp(monkeypatch):
         bid = db.scalars(select(BloqueioWhatsApp)).first().id
     r = adm.post("/admin/whatsapp/bloqueio", data={"csrf": _csrf(pg), "operacao": "remover", "bid": bid})
     assert "voltou a receber" in r.text
+
+
+_XSD_NFE = os.environ.get("XSD_NFE", "")   # pasta com os XSD oficiais (PL_010) para validar o XML nos testes
+
+
+def _validar_xsd(xml_el, arquivo):
+    if not _XSD_NFE:
+        return
+    from lxml import etree
+    esq = etree.XMLSchema(etree.parse(os.path.join(_XSD_NFE, arquivo)))
+    if not esq.validate(xml_el):
+        raise AssertionError(str(esq.error_log))
+
+
+def _sefaz_falsa(monkeypatch, pedidos, rejeitar=None):
+    import base64 as b64, hashlib
+    from lxml import etree
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from app import certificado, nfe
+    _, crt, _ = certificado.carregar()
+    NS, DS = nfe.NS, nfe.DS
+
+    def conferir_assinatura(raiz, alvo_id):
+        sig = raiz.find(f"{{{DS}}}Signature")
+        alvo = next(e for e in raiz.iter() if e.get("Id") == alvo_id)
+        dig = b64.b64encode(hashlib.sha1(etree.tostring(alvo, method="c14n")).digest()).decode()
+        assert sig.find(f".//{{{DS}}}DigestValue").text == dig
+        si = sig.find(f"{{{DS}}}SignedInfo")
+        crt.public_key().verify(b64.b64decode(sig.find(f"{{{DS}}}SignatureValue").text),
+                                etree.tostring(si, method="c14n"), padding.PKCS1v15(), hashes.SHA1())
+
+    def soap(servico, amb, corpo, timeout=60):
+        pedidos.append((servico, amb, etree.tostring(corpo)))
+        r = etree.fromstring(etree.tostring(corpo))
+        if servico == "autorizacao":
+            _validar_xsd(r, "enviNFe_v4.00.xsd")
+            nfe_el = r.find(f"{{{NS}}}NFe")
+            chave = nfe_el.find(f"{{{NS}}}infNFe").get("Id")[3:]
+            conferir_assinatura(nfe_el, "NFe" + chave)
+            assert nfe.dv_chave(chave[:43]) == chave[-1]
+            if rejeitar:
+                return etree.fromstring(f'<retEnviNFe xmlns="{NS}" versao="4.00"><tpAmb>2</tpAmb><cStat>{rejeitar[0]}'
+                                        f'</cStat><xMotivo>{rejeitar[1]}</xMotivo></retEnviNFe>')
+            return etree.fromstring(
+                f'<retEnviNFe xmlns="{NS}" versao="4.00"><tpAmb>2</tpAmb><cStat>104</cStat><xMotivo>Lote processado'
+                f'</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><verAplic>SP_NFE</verAplic><chNFe>{chave}'
+                f'</chNFe><dhRecbto>2026-11-17T10:00:00-03:00</dhRecbto><nProt>135260000000001</nProt><digVal>x</digVal>'
+                f'<cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>')
+        if servico == "evento":
+            _validar_xsd(r, "envEventoCancNFe_v1.00.xsd")
+            ev = r.find(f"{{{NS}}}evento")
+            conferir_assinatura(ev, ev.find(f"{{{NS}}}infEvento").get("Id"))
+            return etree.fromstring(f'<retEnvEvento xmlns="{NS}" versao="1.00"><cStat>128</cStat><xMotivo>Lote</xMotivo>'
+                                    f'<retEvento versao="1.00"><infEvento><cStat>135</cStat><xMotivo>Evento registrado'
+                                    f'</xMotivo><nProt>135260000000002</nProt></infEvento></retEvento></retEnvEvento>')
+        if servico == "consulta":
+            _validar_xsd(r, "consSitNFe_v4.00.xsd")
+            return etree.fromstring(f'<retConsSitNFe xmlns="{NS}" versao="4.00"><cStat>100</cStat>'
+                                    f'<xMotivo>Autorizado o uso da NF-e</xMotivo></retConsSitNFe>')
+        if servico == "status":
+            _validar_xsd(r, "consStatServ_v4.00.xsd")
+            return etree.fromstring(f'<retConsStatServ xmlns="{NS}" versao="4.00"><cStat>107</cStat>'
+                                    f'<xMotivo>Servico em Operacao</xMotivo></retConsStatServ>')
+    monkeypatch.setattr(nfe, "_soap", soap)
+
+
+def test_nfe_produtos_e_danfe(monkeypatch):
+    from app import certificado, config, nfe
+    from app.models import ClienteFiscal, ItemCatalogo, ItemOrcamento, NotaProduto, Orcamento
+    certificado.salvar(_gerar_pfx(), "1234", "empresa.pfx")
+    for k, v in {"EMPRESA_CNPJ": "32.402.010/0001-40", "EMPRESA_IE": "336.123.456.110", "EMPRESA_CEP": "07115-000",
+                 "EMPRESA_IBGE": "3518800", "EMPRESA_UF": "SP", "NFE_AMBIENTE": "homologacao", "NFE_SERIE": 2,
+                 "NFE_TRIBUTOS_PCT": 10.0}.items():
+        monkeypatch.setattr(config, k, v)
+    pedidos = []
+    _sefaz_falsa(monkeypatch, pedidos)
+    assert nfe.dv_chave("3526113240201000014055002000000001123456780") in "0123456789"
+    with SessionLocal() as db:
+        cf = ClienteFiscal(documento="20619971000121", razao_social="Condomínio Top", cep="07115000", logradouro="Rua A",
+                           numero="10", bairro="Centro", municipio="Guarulhos", uf="SP", ibge="3518800")
+        cam = ItemCatalogo(tipo="produto", descricao="Câmera IP 4MP", unidade="UN", preco=45000, ncm="85258929",
+                           cfop="5102", csosn="102", origem="2")
+        db.add_all([cf, cam]); db.flush()
+        o = Orcamento(numero=9901, cliente_fiscal_id=cf.id, titulo="Câmeras", emissao=date(2026, 11, 17), desconto=10000,
+                      imposto_produtos_pct=0)
+        db.add(o); db.flush()
+        db.add_all([ItemOrcamento(orcamento_id=o.id, catalogo_id=cam.id, tipo="produto", descricao="Câmera IP 4MP",
+                                  quantidade=3, valor_unitario=45000),
+                    ItemOrcamento(orcamento_id=o.id, tipo="servico", descricao="Instalação", quantidade=1,
+                                  valor_unitario=50000)])
+        db.commit(); oid, cfid, onum = o.id, cf.id, o.numero
+    adm = entrar("admin@t.com")
+    assert "Emitir NF-e (produtos)" in adm.get(f"/financeiro/orcamentos/{onum}").text
+    pg = adm.get(f"/financeiro/nfe/nova?orcamento={oid}").text
+    assert "Emitir NF-e de teste" in pg and 'value="85258929"' in pg and "Instalação" not in pg.split("<template")[0]
+    # desconto do orçamento rateado: produtos 1350 de 1850 → 72,97 de desconto
+    assert 'name="item_vdesc" value="72,97"' in pg
+    form = {"csrf": _csrf(pg), "orcamento_id": oid, "cliente_fiscal_id": cfid, "forma": "15", "info": "Teste",
+            "item_descricao": "Câmera IP 4MP", "item_codigo": "P1", "item_cest": "", "item_ncm": "85258929",
+            "item_cfop": "5102", "item_origem": "2", "item_csosn": "102", "item_unidade": "UN", "item_qtd": "3",
+            "item_vunit": "450,00", "item_vdesc": "72,97"}
+    r = adm.post("/financeiro/nfe/emitir", data=form)
+    assert "NF-e 1 (teste) autorizada" in r.text, re.findall(r'class="flash[^"]*">([^<]*)', r.text)
+    with SessionLocal() as db:
+        n = db.scalars(select(NotaProduto)).one()
+        assert n.status == "autorizada" and n.protocolo == "135260000000001" and n.valor_total == 135000 - 7297
+        assert n.chave[20:22] == "55" and n.chave[22:25] == "002" and len(n.chave) == 44
+        x = n.xml_proc
+        assert "<nfeProc" in x and "<xNome>NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL</xNome>" in x
+        assert "<CSOSN>102</CSOSN>" in x and "<orig>2</orig>" in x and "<vNF>1277.03</vNF>" in x and "<CRT>1</CRT>" in x
+        assert "<indIEDest>9</indIEDest>" in x and "<vTotTrib>127.70</vTotTrib>" in x and "<tPag>15</tPag>" in x
+        nid = n.id
+    pdf = adm.get(f"/financeiro/nfe/{nid}/danfe")
+    assert pdf.content.startswith(b"%PDF") and pdf.headers["content-type"] == "application/pdf"
+    if os.environ.get("DANFE_OUT"):
+        open(os.environ["DANFE_OUT"], "wb").write(pdf.content)
+    assert b"<nfeProc" in adm.get(f"/financeiro/nfe/{nid}/xml").content
+    assert "NF-e 1 (teste)" in adm.get(f"/financeiro/orcamentos/{onum}").text
+    pg = adm.get(f"/financeiro/nfe/{nid}").text
+    assert "135260000000001" in pg and "Câmera IP 4MP" in pg
+    assert "100" in adm.post(f"/financeiro/nfe/{nid}/consultar", data={"csrf": _csrf(pg)}).text
+    assert "107" in adm.get("/financeiro/nfe/status-sefaz").text
+    assert "pelo menos 15" in adm.post(f"/financeiro/nfe/{nid}/cancelar", data={"csrf": _csrf(pg), "justificativa": "x"}).text
+    r = adm.post(f"/financeiro/nfe/{nid}/cancelar", data={"csrf": _csrf(pg), "justificativa": "Pedido cancelado pelo cliente"})
+    assert "cancelada na SEFAZ" in r.text
+    # rejeição: fica rejeitada e o reenvio usa o mesmo número
+    _sefaz_falsa(monkeypatch, pedidos, rejeitar=("225", "Falha no Schema XML"))
+    r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id=""))
+    assert "rejeitada: 225: Falha no Schema XML" in r.text
+    with SessionLocal() as db:
+        rej = db.scalars(select(NotaProduto).where(NotaProduto.status == "rejeitada")).one()
+        assert rej.numero == 2; rid = rej.id
+    _sefaz_falsa(monkeypatch, pedidos)
+    r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", refazer_id=rid))
+    assert "NF-e 2 (teste) autorizada" in r.text
+    # sem NCM não envia
+    antes = len(pedidos)
+    r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", item_ncm=""))
+    assert "NCM do item 1" in r.text and len(pedidos) == antes
+    certificado.remover()

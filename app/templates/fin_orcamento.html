@@ -12,6 +12,9 @@
   </div>
   {% if o.id %}<div class="acoes-orc">
     <a class="btn sec" href="/financeiro/orcamentos/{{ o.numero }}/pdf" target="_blank">📄 PDF</a>
+    {% if nfe_ligada() and o.total_produtos %}{% set nfp = (o.notas_produto or [])|selectattr('status', 'in', ['autorizada', 'processando'])|list %}
+    {% if nfp %}<a class="btn sec" href="/financeiro/nfe/{{ nfp[-1].id }}">🧾 {{ nfp[-1].rotulo }}</a>
+    {% else %}<a class="btn sec" href="/financeiro/nfe/nova?orcamento={{ o.id }}" title="Nota fiscal dos produtos deste orçamento">🧾 Emitir NF-e (produtos)</a>{% endif %}{% endif %}
     <form method="post" action="/financeiro/orcamentos/{{ o.numero }}/duplicar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">Duplicar</button></form>
   </div>{% endif %}
 </div>

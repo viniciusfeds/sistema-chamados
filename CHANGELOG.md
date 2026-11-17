@@ -1,5 +1,21 @@
 # Histórico de versões
 
+## 1.34.0 — 2026-11-17
+- **NF-e de produtos (modelo 55) na SEFAZ-SP, com DANFE** (Financeiro → *NF-e (produtos)*)
+  - XML 4.00 validado contra os esquemas oficiais (PL_009 e PL_010), assinado com o certificado A1
+    (RSA-SHA1, padrão da NF-e) e enviado síncrono à SEFAZ-SP; guarda o nfeProc (NF-e + protocolo)
+  - Simples Nacional (CRT 1): CSOSN 102/103/300/400/500, origem, NCM, CEST e CFOP por produto (do catálogo),
+    PIS/COFINS 49, tributos aproximados (opcional), forma de pagamento, informações complementares
+  - destinatário com IE sai como contribuinte (indIEDest 1); sem IE, como não contribuinte (condomínio, CPF)
+  - **a partir do orçamento** (botão *Emitir NF-e (produtos)*): leva só os produtos, com o acréscimo de impostos
+    e a parte proporcional do desconto; os serviços continuam na NFS-e. Também **NF-e avulsa** com produtos do
+    catálogo
+  - **DANFE em PDF** (retrato, com canhoto, código de barras da chave e protocolo), **XML** para download,
+    **Consultar** na SEFAZ, **cancelamento** (evento 110111) e **Status da SEFAZ**
+  - começa em **homologação**; série própria do Nexus (padrão 2) e próximo número configuráveis, para não
+    colidir com o outro emissor
+- Abas do financeiro: "NFS-e e recibos" e "NF-e (produtos)"
+
 ## 1.33.0 — 2026-11-16
 - **Lista de bloqueio do WhatsApp** (Administração → WhatsApp → *Lista de bloqueio*): números que não recebem
   nenhuma mensagem automática — avisos de chamado, alertas da equipe e respostas da URA (a URA fica em silêncio).

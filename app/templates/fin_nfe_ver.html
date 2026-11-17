@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import abas_financeiro with context %}
+{% block titulo %}{{ n.rotulo }}{% endblock %}
+{% block conteudo %}
+{{ abas_financeiro('nfe') }}
+<div class="cab">
+  <div><h1>{{ n.rotulo }} <span class="selo" style="background:{{ STATUS_NFE[n.status][1] }};vertical-align:middle">{{ STATUS_NFE[n.status][0] }}</span></h1>
+    <div class="muted">{{ 'Homologação (teste, sem valor fiscal)' if n.homologacao else 'Produção' }} · série {{ n.serie }}{% if n.protocolo %} · protocolo {{ n.protocolo }}{% endif %}{% if n.autorizada_em %} · {{ n.autorizada_em|local }}{% endif %}</div></div>
+  <div class="acoes-orc">
+    {% if n.status in ('autorizada', 'cancelada') %}<a class="btn" href="/financeiro/nfe/{{ n.id }}/danfe" target="_blank">📄 DANFE</a>
+    <a class="btn sec" href="/financeiro/nfe/{{ n.id }}/xml">⬇ XML</a>{% endif %}
+    {% if n.status == 'rejeitada' %}<a class="btn" href="/financeiro/nfe/nova?refazer={{ n.id }}">Corrigir e reenviar</a>{% endif %}
+    <form method="post" action="/financeiro/nfe/{{ n.id }}/consultar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">↻ Consultar</button></form>
+    <a class="btn sec" href="/financeiro/nfe">Voltar</a>
+  </div>
+</div>
+{% if n.erro %}<div class="card aviso-card" style="border-color:#B3261E">{{ n.erro }}</div>{% endif %}
+{% if n.status == 'cancelada' %}<div class="card aviso-card">Cancelada em {{ n.cancelada_em|local }} — {{ n.motivo_cancelamento }}</div>{% endif %}
+<div class="card">
+  <div class="grid3">
+    <div><div class="muted">Destinatário</div><b>{{ n.cliente_fiscal.razao_social }}</b><div>{{ n.cliente_fiscal.documento_fmt|sens("documento") }}</div><div class="muted">{{ n.cliente_fiscal.endereco_fmt }}</div></div>
+    <div><div class="muted">Valor da nota</div><b style="font-size:1.3rem">{{ n.valor_total|rs }}</b><div class="muted">{{ PAGAMENTOS.get(n.forma_pagamento, '') }}</div></div>
+    <div><div class="muted">Chave de acesso</div><span style="word-break:break-all">{{ n.chave_fmt }}</span>{% if n.orcamento %}<div class="muted" style="margin-top:6px">Orçamento <a href="/financeiro/orcamentos/{{ n.orcamento.numero }}">{{ n.orcamento.numero_fmt }}</a></div>{% endif %}</div>
+  </div>
+  <table class="resp" style="margin-top:12px">
+    <thead><tr><th>Produto</th><th>NCM</th><th>CFOP</th><th>CSOSN</th><th>Qtd</th><th class="valor">Unitário</th><th class="valor">Total</th></tr></thead>
+    <tbody>{% for i in n.itens %}<tr>
+      <td data-l="Produto">{{ i.descricao }}<div class="muted">{{ i.codigo }}</div></td><td data-l="NCM">{{ i.ncm }}</td><td data-l="CFOP">{{ i.cfop }}</td>
+      <td data-l="CSOSN">{{ i.origem }}{{ i.csosn }}</td><td data-l="Qtd">{{ i.qtd|qtd }} {{ i.unidade }}</td>
+      <td data-l="Unitário" class="valor">{{ (i.vunit|round)|int|rs }}</td><td data-l="Total" class="valor">{{ (i.vprod - (i.vdesc or 0))|rs }}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% if n.info_complementar %}<p class="dica" style="white-space:pre-wrap">{{ n.info_complementar }}</p>{% endif %}
+</div>
+{% if n.status == 'autorizada' %}
+<details class="card"><summary><b>Cancelar esta NF-e</b></summary>
+  <form method="post" action="/financeiro/nfe/{{ n.id }}/cancelar" style="margin-top:10px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>Justificativa (mín. 15 caracteres)</label><input name="justificativa" minlength="15" maxlength="255" required></div>
+    <p class="dica">Em SP, o cancelamento é aceito em até 24 horas da autorização e se a mercadoria não circulou.</p>
+    <button class="btn perigo" onclick="return confirm('Cancelar a NF-e na SEFAZ? Não dá para desfazer.')">Cancelar NF-e</button>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

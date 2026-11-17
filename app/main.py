@@ -1860,3 +1860,4 @@ from . import rotas_sla  # noqa: E402,F401
 from . import rotas_relatorio_publico  # noqa: E402,F401
 from . import rotas_grupos  # noqa: E402,F401
 from . import rotas_app_desktop  # noqa: E402,F401
+from . import rotas_nfe  # noqa: E402,F401

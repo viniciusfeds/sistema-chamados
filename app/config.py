@@ -39,6 +39,18 @@ DADOS_DIR = Path(os.environ.get("DADOS_DIR", BASE_DIR / "dados"))
 ANEXOS_DIR = DADOS_DIR / "anexos"
 
 # Alerta de chamado parado: horas sem nova ação (por prioridade)
+# NF-e (produtos) na SEFAZ-SP
+NFE_AMBIENTE = os.environ.get("NFE_AMBIENTE", "homologacao")     # desligado / homologacao / producao
+NFE_SERIE = int(os.environ.get("NFE_SERIE", "2"))
+NFE_PROXIMO_NUMERO = int(os.environ.get("NFE_PROXIMO_NUMERO", "1"))
+NFE_CRT = os.environ.get("NFE_CRT", "1")                         # 1 Simples Nacional / 4 MEI
+NFE_CSOSN_PADRAO = os.environ.get("NFE_CSOSN_PADRAO", "102")
+NFE_CFOP_PADRAO = os.environ.get("NFE_CFOP_PADRAO", "5102")
+NFE_NATUREZA = os.environ.get("NFE_NATUREZA", "Venda de mercadoria")
+NFE_TRIBUTOS_PCT = float(os.environ.get("NFE_TRIBUTOS_PCT", "0"))  # % aproximado (Lei da Transparência); 0 = não informa
+NFE_INFO = os.environ.get("NFE_INFO", "Documento emitido por ME ou EPP optante pelo Simples Nacional. "
+                                      "Não gera direito a crédito fiscal de IPI.")
+
 # SLA: relógio e metas padrão (horas: 1º atendimento / chegada / solução)
 SLA_HORARIO = os.environ.get("SLA_HORARIO", "comercial")          # comercial / 24x7
 SLA_EXPEDIENTE = os.environ.get("SLA_EXPEDIENTE", "08:00-18:00")  # segunda a sexta
