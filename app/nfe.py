@@ -404,12 +404,33 @@ def _aplicar_protocolo(n, nfe_assinada: etree._Element, prot: etree._Element):
         n.status, n.erro = "denegada", f"{cstat}: {_t(prot, 'xMotivo')}"
         n.protocolo = _t(prot, "nProt")
     else:
-        n.status, n.erro = "rejeitada", f"{cstat}: {_t(prot, 'xMotivo')}"
+        n.status, n.erro = "rejeitada", f"{cstat}: {_t(prot, 'xMotivo')} (Nexus v{config.VERSAO})"
+
+
+def conferir_assinatura(texto: str):
+    """Relê o XML exatamente como vai ser enviado e confere digest e assinatura (como a SEFAZ faz)."""
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography import x509
+    raiz = etree.fromstring(texto.encode("utf-8"))
+    sig = raiz.find(f"{{{DS}}}Signature")
+    alvo_id = sig.find(f".//{{{DS}}}Reference").get("URI")[1:]
+    alvo = next(e for e in raiz.iter() if e.get("Id") == alvo_id)
+    if base64.b64encode(hashlib.sha1(_c14n(alvo)).digest()).decode() != sig.find(f".//{{{DS}}}DigestValue").text:
+        raise ErroNfe("Conferência interna: o digest da assinatura não bate com o XML. Nada foi enviado.")
+    crt = x509.load_der_x509_certificate(base64.b64decode(sig.find(f".//{{{DS}}}X509Certificate").text))
+    try:
+        crt.public_key().verify(base64.b64decode(sig.find(f"{{{DS}}}SignatureValue").text),
+                                _c14n(sig.find(f"{{{DS}}}SignedInfo")), padding.PKCS1v15(), hashes.SHA1())
+    except Exception:  # noqa: BLE001
+        raise ErroNfe("Conferência interna: a assinatura não confere com o certificado A1 (a chave privada não é a "
+                      "do certificado?). Nada foi enviado.")
 
 
 def transmitir(n):
     nfe = assinar(montar_nfe(n), f"NFe{n.chave}")
     n.xml = etree.tostring(nfe, encoding="unicode")
+    conferir_assinatura(n.xml)
     # enviNFe como texto: a NFe vai exatamente como foi assinada, com o próprio xmlns (senão a SEFAZ calcula a
     # assinatura sobre outro texto e recusa com 297 "Assinatura difere do calculado")
     env = (f'<enviNFe xmlns="{NS}" versao="4.00"><idLote>{str(n.id or n.numero)[-15:]}</idLote>'
@@ -428,7 +449,7 @@ def transmitir(n):
         n.recibo = _t(r, "nRec")
         n.erro = "Lote recebido; aguardando processamento. Clique em “Consultar”."
     else:
-        n.status, n.erro = "rejeitada", f"{cstat}: {_t(r, 'xMotivo')}"
+        n.status, n.erro = "rejeitada", f"{cstat}: {_t(r, 'xMotivo')} (Nexus v{config.VERSAO})"
     return n
 
 

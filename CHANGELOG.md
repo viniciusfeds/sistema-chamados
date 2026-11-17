@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.34.5 — 2026-11-17
+- NF-e: antes de enviar, o Nexus relê o XML exatamente como vai para a SEFAZ e confere o digest e a assinatura
+  com o certificado; se não bater, nada é enviado e o motivo aparece na tela
+- NF-e: a mensagem de rejeição passa a mostrar a versão do Nexus que fez o envio (ex.: *(Nexus v1.34.5)*), para
+  confirmar que o servidor está na versão atual
+
 ## 1.34.4 — 2026-11-17
 - NF-e: botão **Descartar** na NF-e rejeitada que não vai ser reenviada (nunca autorizada). O registro sai do
   sistema e o número volta a ser usado na próxima NF-e, sem deixar falha na numeração. Se já houver nota com número
