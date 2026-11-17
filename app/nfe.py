@@ -5,6 +5,7 @@ Monta o XML, assina (XMLDSig RSA-SHA1, C14N — padrão da NF-e) com o certifica
 Também: consulta pela chave, cancelamento (evento 110111) e status do serviço.
 """
 import base64
+import copy
 import hashlib
 import random
 import re
@@ -286,7 +287,11 @@ def montar_nfe(n, agora=None) -> etree._Element:
 
 
 def _c14n(el) -> bytes:
-    return etree.tostring(el, method="c14n", exclusive=False, with_comments=False)
+    """C14N 1.0 inclusiva do elemento como na referência XMLDSig.
+
+    O lxml canonicaliza um elemento que não é raiz com xmlns="" nos filhos (difere do padrão e da SEFAZ: 297);
+    uma cópia como raiz leva os namespaces herdados e sai igual ao xmlsec."""
+    return etree.tostring(copy.deepcopy(el), method="c14n", exclusive=False, with_comments=False)
 
 
 def assinar(raiz, alvo_id: str):
@@ -297,6 +302,9 @@ def assinar(raiz, alvo_id: str):
     if not cert:
         raise ErroNfe("Envie o certificado A1 em Administração → Configurações.")
     chave, crt, _ = cert
+    # Reler o XML: elementos criados sem namespace sob um pai com xmlns ficariam com xmlns="" na canonicalização,
+    # e a SEFAZ (que lê o texto) calcularia outro digest -> rejeição 297.
+    raiz = etree.fromstring(etree.tostring(raiz))
     alvo = next((e for e in raiz.iter() if e.get("Id") == alvo_id), None)
     digest = base64.b64encode(hashlib.sha1(_c14n(alvo)).digest()).decode()
     d = lambda pai, tag, **at: etree.SubElement(pai, f"{{{DS}}}{tag}", **at)  # noqa: E731
@@ -463,7 +471,7 @@ def cancelar(n, justificativa: str):
     _sub(det, "descEvento", "Cancelamento")
     _sub(det, "nProt", n.protocolo)
     _sub(det, "xJust", just)
-    assinar(ev, ident)
+    ev = assinar(ev, ident)
     env = (f'<envEvento xmlns="{NS}" versao="1.00"><idLote>{n.id or 1}</idLote>'
            f'{etree.tostring(ev, encoding="unicode")}</envEvento>')
     r = _soap("evento", n.ambiente, env)

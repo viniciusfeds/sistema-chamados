@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 1.34.3 — 2026-11-17
+- NF-e: corrige de vez a rejeição **297 "Assinatura difere do calculado"**. O digest do `infNFe` era calculado
+  sobre uma canonicalização em que os campos internos saíam com `xmlns=""` (comportamento do lxml ao canonicalizar
+  um trecho do XML), diferente do que a SEFAZ calcula sobre o texto enviado. Agora a canonicalização segue o padrão
+  XMLDSig (resultado idêntico ao da biblioteca xmlsec); vale também para o evento de cancelamento
+- Testes: a assinatura da NF-e passa a ser conferida de forma independente (e com o xmlsec, quando instalado)
+
 ## 1.34.2 — 2026-11-17
 - NF-e: corrige a rejeição **297 "Assinatura difere do calculado"**. Ao colocar a NF-e assinada dentro do lote
   (enviNFe), o `xmlns` da tag `<NFe>` era omitido por ser igual ao do lote, e a SEFAZ confere a assinatura sobre a

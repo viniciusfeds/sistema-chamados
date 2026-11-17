@@ -3121,15 +3121,30 @@ def _sefaz_falsa(monkeypatch, pedidos, rejeitar=None):
     def conferir_assinatura(raiz, alvo_id):
         sig = raiz.find(f"{{{DS}}}Signature")
         alvo = next(e for e in raiz.iter() if e.get("Id") == alvo_id)
-        dig = b64.b64encode(hashlib.sha1(etree.tostring(alvo, method="c14n")).digest()).decode()
+        # canonicalização independente: cópia como raiz (igual ao xmlsec/SEFAZ), sem usar o código do Nexus
+        import copy as _cp
+        dig = b64.b64encode(hashlib.sha1(etree.tostring(_cp.deepcopy(alvo), method="c14n")).digest()).decode()
         assert sig.find(f".//{{{DS}}}DigestValue").text == dig
+        assert b'xmlns=""' not in etree.tostring(_cp.deepcopy(alvo), method="c14n")
         si = sig.find(f"{{{DS}}}SignedInfo")
         crt.public_key().verify(b64.b64decode(sig.find(f"{{{DS}}}SignatureValue").text),
-                                etree.tostring(si, method="c14n"), padding.PKCS1v15(), hashes.SHA1())
+                                etree.tostring(_cp.deepcopy(si), method="c14n"), padding.PKCS1v15(), hashes.SHA1())
+        try:
+            import xmlsec
+        except ImportError:
+            return
+        doc = etree.fromstring(etree.tostring(raiz))
+        xmlsec.tree.add_ids(doc, ["Id"])
+        ctx = xmlsec.SignatureContext()
+        ctx.key = xmlsec.Key.from_memory(crt.public_bytes(__import__("cryptography.hazmat.primitives.serialization",
+                                         fromlist=["x"]).Encoding.PEM), xmlsec.constants.KeyDataFormatCertPem)
+        ctx.verify(doc.find(f"{{{DS}}}Signature"))
 
     def soap(servico, amb, corpo, timeout=60):
         texto = corpo if isinstance(corpo, str) else etree.tostring(corpo, encoding="unicode")
         pedidos.append((servico, amb, texto))
+        if os.environ.get("NFE_DUMP") and servico == "autorizacao":
+            open(os.environ["NFE_DUMP"], "w", encoding="utf-8").write(texto)
         if servico in ("autorizacao", "evento"):
             # o elemento assinado vai com o próprio xmlns (a SEFAZ confere a assinatura sobre esse trecho isolado)
             tag = "<NFe " if servico == "autorizacao" else "<evento "
