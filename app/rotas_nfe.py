@@ -7,12 +7,15 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from . import config, nfe, regras
-from .auth import checar_csrf, so_admin
+import hashlib
+import hmac
+
+from . import config, nfe, regras, whatsapp
+from .auth import checar_csrf, limite_publico, so_admin
 from .db import get_db
 from .financeiro import centavos
-from .main import _int, app, flash, render, tpl, voltar
-from .models import STATUS_NFE, ClienteFiscal, ItemCatalogo, NotaProduto, Orcamento, Usuario
+from .main import _int, app, base_url, flash, render, tpl, voltar
+from .models import STATUS_NFE, ClienteFiscal, InutilizacaoNfe, ItemCatalogo, NotaProduto, Orcamento, Usuario
 from .rotas_financeiro import _clientes_fiscais
 
 log = logging.getLogger("chamados.nfe")
@@ -28,7 +31,9 @@ def _nota(db, nid) -> NotaProduto:
 
 def proximo_numero(db, amb, serie) -> int:
     ult = db.scalar(select(func.max(NotaProduto.numero)).where(NotaProduto.ambiente == amb, NotaProduto.serie == serie)) or 0
-    return max(ult + 1, config.NFE_PROXIMO_NUMERO if amb == "producao" else 1)
+    inut = db.scalar(select(func.max(InutilizacaoNfe.numero_fim)).where(InutilizacaoNfe.ambiente == amb,
+                                                                       InutilizacaoNfe.serie == serie)) or 0
+    return max(ult + 1, inut + 1, config.NFE_PROXIMO_NUMERO if amb == "producao" else 1)
 
 
 def _item_catalogo(cat: ItemCatalogo | None) -> dict:
@@ -101,7 +106,9 @@ def emitir(db, u, cf, itens, *, forma, info, orcamento=None, refazer: NotaProdut
         raise nfe.ErroNfe("Falta: " + "; ".join(falta) + ".")
     if refazer and refazer.status != "rejeitada":
         raise nfe.ErroNfe("Só NF-e rejeitada pode ser corrigida e reenviada.")
+    fora, contrib = nfe.fora_do_estado(cf), bool(regras_dig(cf.ie))
     for it in itens:
+        it["cfop"] = nfe.ajustar_cfop(it.get("cfop") or config.NFE_CFOP_PADRAO, fora, contrib)
         it["vtrib"] = round((it["vprod"] - (it.get("vdesc") or 0)) * config.NFE_TRIBUTOS_PCT / 100)
     n = refazer if refazer and refazer.ambiente == amb else NotaProduto(ambiente=amb, serie=config.NFE_SERIE,
                                                                         criado_por_id=u.id if u else None)
@@ -129,6 +136,71 @@ def emitir(db, u, cf, itens, *, forma, info, orcamento=None, refazer: NotaProdut
     return n
 
 
+# ------------------------------------------------------------------ envio ao cliente
+def token_danfe(n: NotaProduto) -> str:
+    return hmac.new(config.SECRET_KEY.encode(), f"danfe:{n.chave}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def link_danfe(n: NotaProduto, base: str) -> str:
+    return f"{base}/nfe-danfe/{n.chave}/{token_danfe(n)}"
+
+
+def enviar_ao_cliente(db, n: NotaProduto, base: str, manual=False) -> str:
+    """DANFE + XML por e-mail e link do DANFE por WhatsApp. Automático só em produção; devolve o que foi feito."""
+    if n.status != "autorizada" or (n.homologacao and not manual):
+        return ""
+    from .pdf_danfe import pdf_danfe
+    from .rotas_financeiro import enviar_email
+    cf, feito = n.cliente_fiscal, []
+    para = (cf.email or "").strip()
+    if (manual or config.NFE_ENVIAR_EMAIL) and para and config.SMTP_HOST:
+        texto = (f"Olá,\n\nSegue a nota fiscal eletrônica (NF-e) nº {n.numero} de "
+                 f"{config.EMPRESA_RAZAO or config.EMPRESA_NOME}.\n\nValor: {financeiro_brl(n.valor_total)}\n"
+                 f"Chave de acesso: {n.chave_fmt}\n\nEm anexo: o DANFE (PDF) e o arquivo XML da nota.\n"
+                 f"Consulta: https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo\n")
+        try:
+            enviar_email(para, f"NF-e {n.numero} — {config.EMPRESA_NOME}", texto,
+                         [(f"DANFE_{n.numero}.pdf", pdf_danfe(n), "application/pdf"),
+                          (f"{n.chave}-nfe.xml", (n.xml_proc or n.xml).encode(), "application/xml")])
+            feito.append(f"e-mail para {para}")
+        except Exception as e:  # noqa: BLE001
+            feito.append(f"e-mail não enviado ({e})")
+    elif manual and not para:
+        feito.append("cliente sem e-mail no cadastro")
+    elif manual and not config.SMTP_HOST:
+        feito.append("e-mail (SMTP) não configurado")
+    tel = whatsapp.normalizar_telefone(cf.telefone)
+    if (manual or config.NFE_ENVIAR_WHATSAPP) and tel and whatsapp.configurado():
+        if whatsapp.esta_bloqueado(db, tel):
+            feito.append("WhatsApp na lista de bloqueio")
+        else:
+            try:
+                whatsapp.enviar_texto(tel, f"Olá! Segue a NF-e nº {n.numero} de {config.EMPRESA_NOME}, no valor de "
+                                           f"{financeiro_brl(n.valor_total)}.\nDANFE: {link_danfe(n, base)}")
+                feito.append("link do DANFE por WhatsApp")
+            except Exception as e:  # noqa: BLE001
+                feito.append(f"WhatsApp não enviado ({e})")
+    if any("para " in x or "por WhatsApp" in x for x in feito):
+        n.enviada_em = nfe.datetime.now(nfe.timezone.utc).replace(tzinfo=None)
+        db.commit()
+    return (" Envio ao cliente: " + "; ".join(feito) + ".") if feito else ""
+
+
+def financeiro_brl(c):
+    from .financeiro import brl
+    return brl(c)
+
+
+@app.get("/nfe-danfe/{chave}/{token}", dependencies=[Depends(limite_publico)])
+def nfe_danfe_publico(chave: str, token: str, db: Session = Depends(get_db)):
+    n = db.scalar(select(NotaProduto).where(NotaProduto.chave == chave))
+    if not n or n.status not in ("autorizada", "cancelada") or not hmac.compare_digest(token, token_danfe(n)):
+        raise HTTPException(404, "Documento não encontrado.")
+    from .pdf_danfe import pdf_danfe
+    return Response(pdf_danfe(n), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="DANFE_{n.numero}.pdf"'})
+
+
 # ------------------------------------------------------------------ telas
 @app.get("/financeiro/nfe", response_class=HTMLResponse)
 def nfe_lista(request: Request, status: str = "", u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
@@ -140,8 +212,40 @@ def nfe_lista(request: Request, status: str = "", u: Usuario = Depends(so_admin)
              if "cliente" not in x]
     sem_ncm = db.scalar(select(func.count(ItemCatalogo.id)).where(
         ItemCatalogo.tipo == "produto", ItemCatalogo.ativo.is_(True), ItemCatalogo.ncm.is_(None)))
-    return render(request, "fin_nfe.html", u=u, lista=lista, STATUS_NFE=STATUS_NFE, ambiente=nfe.ambiente(),
-                  falta=falta, sem_ncm=sem_ncm, f={"status": status})
+    inut = db.scalars(select(InutilizacaoNfe).order_by(InutilizacaoNfe.id.desc()).limit(50)).all()
+    amb = nfe.ambiente()
+    return render(request, "fin_nfe.html", u=u, lista=lista, STATUS_NFE=STATUS_NFE, ambiente=amb,
+                  falta=falta, sem_ncm=sem_ncm, f={"status": status}, inutilizacoes=inut,
+                  proximo=proximo_numero(db, amb, config.NFE_SERIE) if amb != "desligado" else None)
+
+
+@app.post("/financeiro/nfe/inutilizar", dependencies=[Depends(checar_csrf)])
+def nfe_inutilizar(request: Request, numero_ini: str = Form(""), numero_fim: str = Form(""),
+                   justificativa: str = Form(""), u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    amb, serie = nfe.ambiente(), config.NFE_SERIE
+    ini, fim = _int(numero_ini) or 0, _int(numero_fim) or _int(numero_ini) or 0
+    try:
+        usada = db.scalar(select(NotaProduto).where(
+            NotaProduto.ambiente == amb, NotaProduto.serie == serie, NotaProduto.numero.between(ini, fim),
+            NotaProduto.status.in_(("autorizada", "cancelada", "denegada", "processando"))))
+        if usada:
+            raise nfe.ErroNfe(f"O número {usada.numero} já é da {usada.rotulo} ({STATUS_NFE[usada.status][0].lower()}): "
+                              "não pode ser inutilizado.")
+        prot, xml = nfe.inutilizar(amb, serie, ini, fim, justificativa)
+    except nfe.ErroNfe as e:
+        flash(request, f"Inutilização não feita: {e}", "erro")
+        return voltar("/financeiro/nfe#inutilizar")
+    db.add(InutilizacaoNfe(ambiente=amb, serie=serie, numero_ini=ini, numero_fim=fim, protocolo=prot, xml=xml,
+                           justificativa=" ".join(justificativa.split())[:255], criado_por_id=u.id))
+    # as rejeitadas com esses números deixam de valer (o número não pode mais ser usado)
+    for r in db.scalars(select(NotaProduto).where(NotaProduto.ambiente == amb, NotaProduto.serie == serie,
+                                                  NotaProduto.numero.between(ini, fim),
+                                                  NotaProduto.status == "rejeitada")).all():
+        db.delete(r)
+    db.commit()
+    faixa = f"número {ini}" if ini == fim else f"números {ini} a {fim}"
+    flash(request, f"Inutilização homologada na SEFAZ: {faixa}, série {serie}. Protocolo {prot}.")
+    return voltar("/financeiro/nfe")
 
 
 @app.get("/financeiro/nfe/nova", response_class=HTMLResponse)
@@ -184,7 +288,7 @@ async def nfe_emitir(request: Request, u: Usuario = Depends(so_admin), db: Sessi
         flash(request, str(e), "erro")
         return voltar(volta)
     if n.status == "autorizada":
-        flash(request, f"{n.rotulo} autorizada. Protocolo {n.protocolo}.")
+        flash(request, f"{n.rotulo} autorizada. Protocolo {n.protocolo}." + enviar_ao_cliente(db, n, base_url(request)))
     elif n.status == "processando":
         flash(request, f"{n.rotulo}: {n.erro}", "aviso")
     else:
@@ -252,6 +356,53 @@ def nfe_cancelar(request: Request, nid: int, justificativa: str = Form(""), u: U
         flash(request, f"{n.rotulo} cancelada na SEFAZ.")
     except nfe.ErroNfe as e:
         flash(request, f"Cancelamento não feito: {e}", "erro")
+    return voltar(f"/financeiro/nfe/{nid}")
+
+
+@app.post("/financeiro/nfe/{nid}/carta", dependencies=[Depends(checar_csrf)])
+def nfe_carta(request: Request, nid: int, correcao: str = Form(""), u: Usuario = Depends(so_admin),
+              db: Session = Depends(get_db)):
+    n = _nota(db, nid)
+    try:
+        c = nfe.carta_correcao(n, correcao)
+        db.commit()
+        flash(request, f"Carta de correção nº {c['seq']} registrada na SEFAZ. Protocolo {c['protocolo']}.")
+    except nfe.ErroNfe as e:
+        flash(request, f"Carta de correção não registrada: {e}", "erro")
+    return voltar(f"/financeiro/nfe/{nid}")
+
+
+def _carta(n, seq):
+    c = next((x for x in (n.eventos or []) if x.get("seq") == seq), None)
+    if not c:
+        raise HTTPException(404, "Carta de correção não encontrada.")
+    return c
+
+
+@app.get("/financeiro/nfe/{nid}/carta/{seq}.pdf")
+def nfe_carta_pdf(nid: int, seq: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    n = _nota(db, nid)
+    from .pdf_cce import pdf_cce
+    return Response(pdf_cce(n, _carta(n, seq)), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="CCe_{n.numero}_{seq}.pdf"'})
+
+
+@app.get("/financeiro/nfe/{nid}/carta/{seq}.xml")
+def nfe_carta_xml(nid: int, seq: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    n = _nota(db, nid)
+    return Response(_carta(n, seq)["xml"], media_type="application/xml",
+                    headers={"Content-Disposition": f'attachment; filename="{n.chave}-cce-{seq:02d}.xml"'})
+
+
+@app.post("/financeiro/nfe/{nid}/enviar", dependencies=[Depends(checar_csrf)])
+def nfe_enviar(request: Request, nid: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    n = _nota(db, nid)
+    if n.status != "autorizada":
+        flash(request, "Só NF-e autorizada pode ser enviada ao cliente.", "erro")
+    else:
+        r = enviar_ao_cliente(db, n, base_url(request), manual=True)
+        flash(request, r.strip() or "Nada enviado: cadastre e-mail ou telefone no cliente e configure o envio.",
+              "ok" if ("para " in r or "por WhatsApp" in r) else "aviso")
     return voltar(f"/financeiro/nfe/{nid}")
 
 

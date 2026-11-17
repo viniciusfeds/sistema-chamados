@@ -1,5 +1,19 @@
 # Histórico de versões
 
+## 1.35.0 — 2026-11-17
+- **NF-e: inutilização de numeração** (Financeiro → NF-e → *Inutilizar numeração*): informa a faixa e o motivo, o
+  Nexus registra na SEFAZ, guarda o protocolo e a numeração seguinte pula a faixa. Número que já é de nota
+  autorizada, cancelada ou em envio é barrado
+- **NF-e: carta de correção (CC-e)** na tela da nota autorizada, com PDF e XML de cada carta (até 20; a última
+  substitui as anteriores)
+- **NF-e: envio ao cliente** — ao autorizar, o DANFE e o XML vão por e-mail para o cliente; opcionalmente o link do
+  DANFE vai por WhatsApp (respeita a lista de bloqueio). Botão *Enviar ao cliente* para reenviar. Liga/desliga em
+  Configurações → Nota fiscal de produto (o envio automático só vale em produção)
+- **NF-e: venda para outro estado** — o Nexus marca a operação como interestadual e troca o CFOP sozinho
+  (5102 → 6102 para contribuinte, 6108 para não contribuinte). Como a empresa é do Simples Nacional, não há
+  DIFAL a destacar
+- XML da inutilização e da carta de correção validados contra os esquemas oficiais da SEFAZ
+
 ## 1.34.6 — 2026-11-17
 - Menu lateral do Financeiro: incluída a opção **NF-e (produtos)** (só aparecia nas abas do celular); "Notas
   fiscais" passa a se chamar **NFS-e e recibos**, igual às abas

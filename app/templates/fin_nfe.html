@@ -27,4 +27,18 @@
 </table>
 {% else %}<p class="muted" style="padding:16px">Nenhuma NF-e ainda. Emita a partir de um orçamento com produtos (botão “Emitir NF-e”) ou aqui em “+ Emitir NF-e”.</p>{% endif %}
 </div>
+{% if ambiente != 'desligado' %}
+<details class="card" id="inutilizar" {{ 'open' if inutilizacoes }}><summary><b>Inutilizar numeração</b> <span class="muted">— números pulados que não vão virar nota</span></summary>
+  <p class="dica">Use quando um número da série {{ config.NFE_SERIE }} ficou sem nota (ex.: a próxima é a {{ proximo }} mas um número anterior nunca foi autorizado). A SEFAZ exige a inutilização até o dia 10 do mês seguinte. Nota rejeitada que você ainda vai reenviar <b>não</b> precisa disso — use “Corrigir e reenviar” ou “Descartar”.</p>
+  <form method="post" action="/financeiro/nfe/inutilizar" class="grid3" style="align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="campo"><label>Do número</label><input name="numero_ini" inputmode="numeric" required></div>
+    <div class="campo"><label>Até o número <span class="muted">(vazio = só um)</span></label><input name="numero_fim" inputmode="numeric"></div>
+    <div class="campo"><label>Motivo (mín. 15 caracteres)</label><input name="justificativa" minlength="15" maxlength="255" required placeholder="Ex.: Falha na numeração por erro de sistema"></div>
+    <div><button class="btn perigo" onclick="return confirm('Inutilizar na SEFAZ{{ ' (ambiente de teste)' if ambiente == 'homologacao' else ' em PRODUÇÃO' }}? Não dá para desfazer: esses números nunca mais poderão ser usados.')">Inutilizar</button></div>
+  </form>
+  {% if inutilizacoes %}<table class="resp" style="margin-top:12px"><thead><tr><th>Números</th><th>Série</th><th>Motivo</th><th>Protocolo</th><th>Quando</th></tr></thead>
+  <tbody>{% for i in inutilizacoes %}<tr><td data-l="Números"><b>{{ i.numero_ini }}{% if i.numero_fim != i.numero_ini %} a {{ i.numero_fim }}{% endif %}</b>{% if i.ambiente != 'producao' %} <span class="muted">(teste)</span>{% endif %}</td><td data-l="Série">{{ i.serie }}</td><td data-l="Motivo">{{ i.justificativa }}</td><td data-l="Protocolo">{{ i.protocolo }}</td><td data-l="Quando">{{ i.criado_em|local }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+</details>
+{% endif %}
 {% endblock %}

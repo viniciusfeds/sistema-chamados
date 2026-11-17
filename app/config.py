@@ -48,6 +48,8 @@ NFE_CSOSN_PADRAO = os.environ.get("NFE_CSOSN_PADRAO", "102")
 NFE_CFOP_PADRAO = os.environ.get("NFE_CFOP_PADRAO", "5102")
 NFE_NATUREZA = os.environ.get("NFE_NATUREZA", "Venda de mercadoria")
 NFE_TRIBUTOS_PCT = float(os.environ.get("NFE_TRIBUTOS_PCT", "0"))  # % aproximado (Lei da Transparência); 0 = não informa
+NFE_ENVIAR_EMAIL = os.environ.get("NFE_ENVIAR_EMAIL", "1") == "1"       # DANFE + XML por e-mail ao autorizar
+NFE_ENVIAR_WHATSAPP = os.environ.get("NFE_ENVIAR_WHATSAPP", "0") == "1"  # link do DANFE por WhatsApp ao autorizar
 NFE_SSL_VERIFICAR = os.environ.get("NFE_SSL_VERIFICAR", "1") == "1"   # conferir o certificado da SEFAZ (ICP-Brasil)
 NFE_INFO = os.environ.get("NFE_INFO", "Documento emitido por ME ou EPP optante pelo Simples Nacional. "
                                       "Não gera direito a crédito fiscal de IPI.")

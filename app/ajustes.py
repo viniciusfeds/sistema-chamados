@@ -134,11 +134,15 @@ SECOES = [
               "Vale para os produtos sem CSOSN no catálogo. Confirme com a contadora.",
               opcoes={"102": "102 – Tributada sem permissão de crédito", "103": "103 – Isenção por faixa de receita",
                       "300": "300 – Imune", "400": "400 – Não tributada", "500": "500 – ICMS cobrado por ST"}),
-        Campo("NFE_CFOP_PADRAO", "CFOP padrão", ajuda="5102 = venda de mercadoria adquirida de terceiros, dentro de SP."),
+        Campo("NFE_CFOP_PADRAO", "CFOP padrão", ajuda="5102 = venda de mercadoria adquirida de terceiros. Para cliente "
+              "de outro estado o Nexus troca sozinho para 6102 (contribuinte) ou 6108 (não contribuinte)."),
         Campo("NFE_NATUREZA", "Natureza da operação"),
         Campo("NFE_TRIBUTOS_PCT", "Tributos aproximados (%)", "num",
               "Lei da Transparência (IBPT). 0 = não informa.", minimo=0, maximo=60),
         Campo("NFE_INFO", "Informações complementares padrão", "texto"),
+        Campo("NFE_ENVIAR_EMAIL", "Enviar DANFE e XML por e-mail ao cliente quando autorizar", "bool"),
+        Campo("NFE_ENVIAR_WHATSAPP", "Enviar o link do DANFE por WhatsApp ao cliente quando autorizar", "bool",
+              "Usa o telefone do cadastro de faturamento. Números da lista de bloqueio não recebem."),
         Campo("NFE_SSL_VERIFICAR", "Conferir o certificado da SEFAZ (ICP-Brasil)", "bool",
               "Deixe ligado. O Nexus baixa sozinho a cadeia oficial da ICP-Brasil (ITI). Desligue só como último "
               "recurso, se o servidor não conseguir baixá-la.", avancado=True),

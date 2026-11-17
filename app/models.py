@@ -1415,6 +1415,8 @@ class NotaProduto(Base):
     autorizada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo_cancelamento: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    eventos: Mapped[list | None] = mapped_column(JSON, nullable=True)   # cartas de correção [{seq, texto, protocolo, em, xml}]
+    enviada_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # DANFE/XML enviados ao cliente
     criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     cliente_fiscal = relationship("ClienteFiscal")
@@ -1438,3 +1440,19 @@ class NotaProduto(Base):
     @property
     def chave_fmt(self):
         return " ".join(self.chave[i:i + 4] for i in range(0, 44, 4))
+
+
+class InutilizacaoNfe(Base):
+    """Faixa de números de NF-e inutilizada na SEFAZ (números pulados, que nunca viraram nota)."""
+    __tablename__ = "nfe_inutilizacoes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ambiente: Mapped[str] = mapped_column(String(12), index=True)
+    serie: Mapped[int] = mapped_column(Integer)
+    numero_ini: Mapped[int] = mapped_column(Integer)
+    numero_fim: Mapped[int] = mapped_column(Integer)
+    justificativa: Mapped[str] = mapped_column(String(255))
+    protocolo: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    xml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

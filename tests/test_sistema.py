@@ -3168,6 +3168,22 @@ def _sefaz_falsa(monkeypatch, pedidos, rejeitar=None):
                 f'</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><verAplic>SP_NFE</verAplic><chNFe>{chave}'
                 f'</chNFe><dhRecbto>2026-11-17T10:00:00-03:00</dhRecbto><nProt>135260000000001</nProt><digVal>bm9yZWFs</digVal>'
                 f'<cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>')
+        if servico == "inutilizacao":
+            _validar_xsd(r, "inutNFe_v4.00.xsd")
+            conferir_assinatura(r, r.find(f"{{{NS}}}infInut").get("Id"))
+            if rejeitar:
+                return etree.fromstring(f'<retInutNFe xmlns="{NS}" versao="4.00"><infInut><cStat>{rejeitar[0]}</cStat>'
+                                        f'<xMotivo>{rejeitar[1]}</xMotivo></infInut></retInutNFe>')
+            return etree.fromstring(f'<retInutNFe xmlns="{NS}" versao="4.00"><infInut><tpAmb>2</tpAmb><cStat>102</cStat>'
+                                    f'<xMotivo>Inutilizacao de numero homologado</xMotivo><nProt>135260000000009</nProt>'
+                                    f'</infInut></retInutNFe>')
+        if servico == "evento" and "<tpEvento>110110</tpEvento>" in texto:
+            _validar_xsd(r, "envCCe_v1.00.xsd")
+            ev = r.find(f"{{{NS}}}evento")
+            conferir_assinatura(ev, ev.find(f"{{{NS}}}infEvento").get("Id"))
+            return etree.fromstring(f'<retEnvEvento xmlns="{NS}" versao="1.00"><cStat>128</cStat><xMotivo>Lote</xMotivo>'
+                                    f'<retEvento versao="1.00"><infEvento><cStat>135</cStat><xMotivo>Evento registrado'
+                                    f'</xMotivo><nProt>135260000000003</nProt></infEvento></retEvento></retEnvEvento>')
         if servico == "evento":
             _validar_xsd(r, "envEventoCancNFe_v1.00.xsd")
             ev = r.find(f"{{{NS}}}evento")
@@ -3246,6 +3262,31 @@ def test_nfe_produtos_e_danfe(monkeypatch):
     assert "135260000000001" in pg and "Câmera IP 4MP" in pg
     assert "100" in adm.post(f"/financeiro/nfe/{nid}/consultar", data={"csrf": _csrf(pg)}).text
     assert "107" in adm.get("/financeiro/nfe/status-sefaz").text
+    # carta de correção (a 2ª substitui a 1ª) + PDF/XML
+    assert "pelo menos 15" in adm.post(f"/financeiro/nfe/{nid}/carta", data={"csrf": _csrf(pg), "correcao": "curta"}).text
+    r = adm.post(f"/financeiro/nfe/{nid}/carta", data={"csrf": _csrf(pg), "correcao": "Onde se lê Rua A, 10, leia-se Rua A, 100."})
+    assert "Carta de correção nº 1 registrada" in r.text and "135260000000003" in r.text
+    r = adm.post(f"/financeiro/nfe/{nid}/carta", data={"csrf": _csrf(pg), "correcao": "Endereço: Rua A, 100. Pedido de compra 55."})
+    assert "Carta de correção nº 2 registrada" in r.text and "(vale esta)" in r.text
+    assert adm.get(f"/financeiro/nfe/{nid}/carta/2.pdf").content.startswith(b"%PDF")
+    assert b"<procEventoNFe" in adm.get(f"/financeiro/nfe/{nid}/carta/2.xml").content
+    assert adm.get(f"/financeiro/nfe/{nid}/carta/9.pdf").status_code == 404
+    # link público do DANFE (enviado ao cliente por WhatsApp)
+    from app import rotas_nfe
+    with SessionLocal() as db:
+        lk = rotas_nfe.link_danfe(db.get(NotaProduto, nid), "")
+    assert TestClient(app).get(lk).content.startswith(b"%PDF")
+    assert TestClient(app).get(lk[:-4] + "0000").status_code == 404
+    # enviar ao cliente: e-mail com DANFE e XML
+    enviados = []
+    from app import rotas_financeiro
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.exemplo")
+    monkeypatch.setattr(rotas_financeiro, "enviar_email", lambda para, ass, corpo, anexos=(): enviados.append((para, [a[0] for a in anexos])))
+    with SessionLocal() as db:
+        db.get(ClienteFiscal, cfid).email = "compras@exemplo.com.br"; db.commit()
+    r = adm.post(f"/financeiro/nfe/{nid}/enviar", data={"csrf": _csrf(pg)})
+    assert "e-mail para compras@exemplo.com.br" in r.text and "Enviada ao cliente em" in r.text
+    assert enviados == [("compras@exemplo.com.br", ["DANFE_1.pdf", enviados[0][1][1]])] and enviados[0][1][1].endswith("-nfe.xml")
     assert "pelo menos 15" in adm.post(f"/financeiro/nfe/{nid}/cancelar", data={"csrf": _csrf(pg), "justificativa": "x"}).text
     r = adm.post(f"/financeiro/nfe/{nid}/cancelar", data={"csrf": _csrf(pg), "justificativa": "Pedido cancelado pelo cliente"})
     assert "cancelada na SEFAZ" in r.text
@@ -3273,6 +3314,29 @@ def test_nfe_produtos_e_danfe(monkeypatch):
     with SessionLocal() as db:
         assert db.get(NotaProduto, rid) is None and db.get(NotaProduto, nid) is not None
     _sefaz_falsa(monkeypatch, pedidos)
+    # inutilização: número já usado é barrado; faixa livre é homologada e a numeração pula
+    pg = adm.get("/financeiro/nfe").text
+    assert "Inutilizar numeração" in pg
+    r = adm.post("/financeiro/nfe/inutilizar", data={"csrf": _csrf(pg), "numero_ini": "2", "justificativa": "Falha na numeração do sistema"})
+    assert "não pode ser inutilizado" in r.text
+    r = adm.post("/financeiro/nfe/inutilizar", data={"csrf": _csrf(pg), "numero_ini": "3", "numero_fim": "5", "justificativa": "curto"})
+    assert "pelo menos 15" in r.text
+    r = adm.post("/financeiro/nfe/inutilizar", data={"csrf": _csrf(pg), "numero_ini": "3", "numero_fim": "5",
+                                                     "justificativa": "Falha na numeração do sistema"})
+    assert "Inutilização homologada na SEFAZ: números 3 a 5" in r.text and "135260000000009" in r.text
+    # venda para outro estado: idDest 2 e CFOP 6108 (não contribuinte) / 6102 (contribuinte)
+    with SessionLocal() as db:
+        fora = ClienteFiscal(documento="11222333000181", razao_social="Cliente do Rio", cep="20040002", logradouro="Av. B",
+                             numero="5", bairro="Centro", municipio="Rio de Janeiro", uf="RJ", ibge="3304557")
+        db.add(fora); db.commit(); fid = fora.id
+    r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", cliente_fiscal_id=fid))
+    assert "NF-e 6 (teste) autorizada" in r.text, re.findall(r'class="flash[^"]*">([^<]*)', r.text)
+    assert "<idDest>2</idDest>" in pedidos[-1][2] and "<CFOP>6108</CFOP>" in pedidos[-1][2]
+    with SessionLocal() as db:
+        db.get(ClienteFiscal, fid).ie = "12345678"; db.commit()
+    r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", cliente_fiscal_id=fid))
+    assert "NF-e 7 (teste) autorizada" in r.text and "<CFOP>6102</CFOP>" in pedidos[-1][2]
+    assert nfe.ajustar_cfop("6108", False, False) == "5102" and nfe.ajustar_cfop("5405", True, True) == "6405"
     # sem NCM não envia
     antes = len(pedidos)
     r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", item_ncm=""))

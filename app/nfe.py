@@ -31,7 +31,17 @@ SERVICOS = {  # nome do serviço: (arquivo .asmx, ação SOAP)
     "consulta": ("nfeconsultaprotocolo4.asmx", "NFeConsultaProtocolo4", "nfeConsultaNF"),
     "status": ("nfestatusservico4.asmx", "NFeStatusServico4", "nfeStatusServicoNF"),
     "evento": ("nferecepcaoevento4.asmx", "NFeRecepcaoEvento4", "nfeRecepcaoEvento"),
+    "inutilizacao": ("nfeinutilizacao4.asmx", "NFeInutilizacao4", "nfeInutilizacaoNF"),
 }
+UFS = ("AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR",
+       "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO")
+COND_USO_CCE = ("A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art. 7o do Convenio S/N, de 15 de dezembro "
+                "de 1970 e pode ser utilizada para regularizacao de erro ocorrido na emissao de documento fiscal, "
+                "desde que o erro nao esteja relacionado com: I - as variaveis que determinam o valor do imposto tais "
+                "como: base de calculo, aliquota, diferenca de preco, quantidade, valor da operacao ou da prestacao; "
+                "II - a correcao de dados cadastrais que implique mudanca do remetente ou do destinatario; III - a "
+                "data de emissao ou de saida.")
+CCE_MAX = 20
 DEST_HOMOLOGACAO = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
 CSOSN_OPCOES = {"102": "102 – Tributada pelo Simples sem permissão de crédito",
                 "103": "103 – Isenção do ICMS no Simples para faixa de receita",
@@ -123,8 +133,8 @@ def pendencias(cf, itens) -> list[str]:
             falta.append("CNPJ/CPF do cliente")
         if not cf.endereco_completo:
             falta.append("endereço completo do cliente (CEP, IBGE, rua, número, bairro)")
-        elif (cf.uf or "").upper() != "SP":
-            falta.append("cliente fora de SP (o Nexus emite por enquanto só venda dentro do estado)")
+        elif (cf.uf or "").upper() not in UFS:
+            falta.append("UF do cliente (venda para o exterior não é emitida pelo Nexus)")
     if not itens:
         falta.append("pelo menos um produto")
     for i, it in enumerate(itens, 1):
@@ -133,6 +143,25 @@ def pendencias(cf, itens) -> list[str]:
         if it.get("qtd", 0) <= 0 or it.get("vunit", 0) <= 0:
             falta.append(f"quantidade/valor do item {i}")
     return falta
+
+
+def fora_do_estado(cf) -> bool:
+    return bool(cf) and (cf.uf or "SP").upper() != (config.EMPRESA_UF or "SP").upper()
+
+
+def ajustar_cfop(cfop: str, fora: bool, contribuinte: bool) -> str:
+    """CFOP conforme o destino: 5xxx dentro do estado, 6xxx para outro estado (6107/6108 para não contribuinte)."""
+    c = _dig(cfop)[:4] or "5102"
+    if fora:
+        if c[0] == "5":
+            c = "6" + c[1:]
+        if not contribuinte:
+            c = {"6101": "6107", "6102": "6108"}.get(c, c)
+        else:
+            c = {"6107": "6101", "6108": "6102"}.get(c, c)
+    elif c[0] == "6":
+        c = {"6107": "5101", "6108": "5102"}.get(c, "5" + c[1:])
+    return c
 
 
 # ------------------------------------------------------------------ XML
@@ -179,7 +208,7 @@ def montar_nfe(n, agora=None) -> etree._Element:
     _sub(ide, "nNF", n.numero)
     _sub(ide, "dhEmi", agora.replace(microsecond=0).isoformat())
     _sub(ide, "tpNF", "1")
-    _sub(ide, "idDest", "1")
+    _sub(ide, "idDest", "2" if fora_do_estado(cf) else "1")
     _sub(ide, "cMunFG", _dig(config.EMPRESA_IBGE) or "3518800")
     _sub(ide, "tpImp", "1")
     _sub(ide, "tpEmis", "1")
@@ -470,14 +499,10 @@ def consultar(n):
     return cstat, _t(r, "xMotivo")
 
 
-def cancelar(n, justificativa: str):
-    just = _limpo(justificativa, 255)
-    if n.status != "autorizada" or not n.protocolo:
-        raise ErroNfe("Só dá para cancelar NF-e autorizada.")
-    if len(just) < MOTIVO_CANCELAMENTO_MIN:
-        raise ErroNfe("Explique o motivo com pelo menos 15 caracteres.")
+def _evento(n, tipo: str, seq: int, descricao: str, campos: list[tuple[str, str]]):
+    """Envia um evento da NF-e (cancelamento, carta de correção) e devolve o retEvento aceito."""
     agora = datetime.now(FUSO) - timedelta(minutes=1)
-    ident = f"ID110111{n.chave}01"
+    ident = f"ID{tipo}{n.chave}{seq:02d}"
     ev = etree.Element(f"{{{NS}}}evento", nsmap={None: NS}, versao="1.00")
     inf = _sub(ev, "infEvento", Id=ident)
     _sub(inf, "cOrgao", "35")
@@ -485,23 +510,88 @@ def cancelar(n, justificativa: str):
     _sub(inf, "CNPJ", _dig(config.EMPRESA_CNPJ))
     _sub(inf, "chNFe", n.chave)
     _sub(inf, "dhEvento", agora.replace(microsecond=0).isoformat())
-    _sub(inf, "tpEvento", "110111")
-    _sub(inf, "nSeqEvento", "1")
+    _sub(inf, "tpEvento", tipo)
+    _sub(inf, "nSeqEvento", str(seq))
     _sub(inf, "verEvento", "1.00")
     det = _sub(inf, "detEvento", versao="1.00")
-    _sub(det, "descEvento", "Cancelamento")
-    _sub(det, "nProt", n.protocolo)
-    _sub(det, "xJust", just)
+    _sub(det, "descEvento", descricao)
+    for tag, valor in campos:
+        _sub(det, tag, valor)
     ev = assinar(ev, ident)
-    env = (f'<envEvento xmlns="{NS}" versao="1.00"><idLote>{n.id or 1}</idLote>'
-           f'{etree.tostring(ev, encoding="unicode")}</envEvento>')
+    texto = etree.tostring(ev, encoding="unicode")
+    conferir_assinatura(texto)
+    env = f'<envEvento xmlns="{NS}" versao="1.00"><idLote>{n.id or 1}</idLote>{texto}</envEvento>'
     r = _soap("evento", n.ambiente, env)
-    ret = r.find(f".//{{{NS}}}retEvento") if r.find(f".//{{{NS}}}retEvento") is not None else r
-    cstat = _t(ret, "cStat") if ret is not r else ""
+    ret = r.find(f".//{{{NS}}}retEvento")
+    cstat = _t(ret, "cStat") if ret is not None else ""
     if cstat not in ("135", "136", "155"):
-        raise ErroNfe(f"{cstat or _t(r, 'cStat')}: {_t(ret, 'xMotivo') or _t(r, 'xMotivo')}")
+        raise ErroNfe(f"{cstat or _t(r, 'cStat')}: {(_t(ret, 'xMotivo') if ret is not None else '') or _t(r, 'xMotivo')}")
+    return ret, texto
+
+
+def cancelar(n, justificativa: str):
+    just = _limpo(justificativa, 255)
+    if n.status != "autorizada" or not n.protocolo:
+        raise ErroNfe("Só dá para cancelar NF-e autorizada.")
+    if len(just) < MOTIVO_CANCELAMENTO_MIN:
+        raise ErroNfe("Explique o motivo com pelo menos 15 caracteres.")
+    ret, _ = _evento(n, "110111", 1, "Cancelamento", [("nProt", n.protocolo), ("xJust", just)])
     n.status = "cancelada"
     n.cancelada_em = datetime.now(timezone.utc).replace(tzinfo=None)
     n.motivo_cancelamento = just
     n.xml_cancelamento = etree.tostring(ret, encoding="unicode")
     return n
+
+
+def carta_correcao(n, texto: str) -> dict:
+    """Carta de Correção Eletrônica (evento 110110). A última carta substitui as anteriores: escreva tudo nela."""
+    txt = _limpo(texto, 1000)
+    if n.status != "autorizada" or not n.protocolo:
+        raise ErroNfe("Só NF-e autorizada aceita carta de correção.")
+    if len(txt) < 15:
+        raise ErroNfe("Descreva a correção com pelo menos 15 caracteres.")
+    cartas = list(n.eventos or [])
+    seq = max([c.get("seq", 0) for c in cartas] or [0]) + 1
+    if seq > CCE_MAX:
+        raise ErroNfe("Esta NF-e já tem 20 cartas de correção (limite da SEFAZ).")
+    ret, ev_xml = _evento(n, "110110", seq, "Carta de Correcao", [("xCorrecao", txt), ("xCondUso", COND_USO_CCE)])
+    carta = {"seq": seq, "texto": txt, "protocolo": _t(ret, "nProt"),
+             "em": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+             "xml": (f'<procEventoNFe xmlns="{NS}" versao="1.00">{ev_xml}{_com_ns(ret)}</procEventoNFe>')}
+    n.eventos = cartas + [carta]
+    return carta
+
+
+def inutilizar(amb: str, serie: int, ini: int, fim: int, justificativa: str) -> tuple[str, str]:
+    """Inutiliza a faixa de números (pulados, nunca autorizados). Devolve (protocolo, XML de retorno)."""
+    just = _limpo(justificativa, 255)
+    if amb not in ("homologacao", "producao"):
+        raise ErroNfe("A emissão de NF-e está desligada.")
+    if not (1 <= ini <= fim <= 999999999):
+        raise ErroNfe("Confira os números: o inicial não pode ser maior que o final.")
+    if fim - ini > 999:
+        raise ErroNfe("Inutilize no máximo 1000 números por vez.")
+    if len(just) < 15:
+        raise ErroNfe("Explique o motivo com pelo menos 15 caracteres.")
+    cnpj = _dig(config.EMPRESA_CNPJ)
+    ano = datetime.now(FUSO).strftime("%y")
+    ident = f"ID35{ano}{cnpj}55{int(serie):03d}{ini:09d}{fim:09d}"
+    raiz = etree.Element(f"{{{NS}}}inutNFe", nsmap={None: NS}, versao="4.00")
+    inf = _sub(raiz, "infInut", Id=ident)
+    _sub(inf, "tpAmb", "1" if amb == "producao" else "2")
+    _sub(inf, "xServ", "INUTILIZAR")
+    _sub(inf, "cUF", "35")
+    _sub(inf, "ano", ano)
+    _sub(inf, "CNPJ", cnpj)
+    _sub(inf, "mod", "55")
+    _sub(inf, "serie", int(serie))
+    _sub(inf, "nNFIni", ini)
+    _sub(inf, "nNFFin", fim)
+    _sub(inf, "xJust", just)
+    texto = etree.tostring(assinar(raiz, ident), encoding="unicode")
+    conferir_assinatura(texto)
+    r = _soap("inutilizacao", amb, texto)
+    cstat = _t(r, "cStat")
+    if cstat != "102":
+        raise ErroNfe(f"{cstat}: {_t(r, 'xMotivo')}")
+    return _t(r, "nProt"), etree.tostring(r, encoding="unicode")
