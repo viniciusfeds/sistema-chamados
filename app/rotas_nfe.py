@@ -253,3 +253,30 @@ def nfe_cancelar(request: Request, nid: int, justificativa: str = Form(""), u: U
     except nfe.ErroNfe as e:
         flash(request, f"Cancelamento não feito: {e}", "erro")
     return voltar(f"/financeiro/nfe/{nid}")
+
+
+def pode_descartar(n: NotaProduto) -> bool:
+    """Só NF-e rejeitada (nunca autorizada) — e não as rejeições de duplicidade, que indicam nota já existente."""
+    return n.status == "rejeitada" and not n.protocolo and not any(
+        c in (n.erro or "") for c in ("204", "539", "uplicidade"))
+
+
+tpl.env.globals["nfe_pode_descartar"] = pode_descartar
+
+
+@app.post("/financeiro/nfe/{nid}/descartar", dependencies=[Depends(checar_csrf)])
+def nfe_descartar(request: Request, nid: int, u: Usuario = Depends(so_admin), db: Session = Depends(get_db)):
+    n = _nota(db, nid)
+    if not pode_descartar(n):
+        flash(request, "Só dá para descartar NF-e rejeitada que nunca foi autorizada.", "erro")
+        return voltar(f"/financeiro/nfe/{nid}")
+    rot, amb, serie, num = n.rotulo, n.ambiente, n.serie, n.numero
+    db.delete(n)
+    db.commit()
+    log.info("NF-e descartada: %s (amb %s série %s) por %s", num, amb, serie, u.id)
+    if proximo_numero(db, amb, serie) == num:
+        flash(request, f"{rot} descartada. O número {num} volta a ser usado na próxima NF-e.")
+    else:
+        flash(request, f"{rot} descartada. Já existem notas com número maior: o número {num} precisa ser "
+                       "inutilizado na SEFAZ para não ficar falha na numeração.", "erro")
+    return voltar("/financeiro/nfe")

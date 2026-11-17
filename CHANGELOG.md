@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 1.34.4 — 2026-11-17
+- NF-e: botão **Descartar** na NF-e rejeitada que não vai ser reenviada (nunca autorizada). O registro sai do
+  sistema e o número volta a ser usado na próxima NF-e, sem deixar falha na numeração. Se já houver nota com número
+  maior, o Nexus avisa que o número precisa ser inutilizado na SEFAZ. Rejeições de duplicidade não podem ser
+  descartadas
+
 ## 1.34.3 — 2026-11-17
 - NF-e: corrige de vez a rejeição **297 "Assinatura difere do calculado"**. O digest do `infNFe` era calculado
   sobre uma canonicalização em que os campos internos saíam com `xmlns=""` (comportamento do lxml ao canonicalizar

@@ -10,6 +10,7 @@
     {% if n.status in ('autorizada', 'cancelada') %}<a class="btn" href="/financeiro/nfe/{{ n.id }}/danfe" target="_blank">📄 DANFE</a>
     <a class="btn sec" href="/financeiro/nfe/{{ n.id }}/xml">⬇ XML</a>{% endif %}
     {% if n.status == 'rejeitada' %}<a class="btn" href="/financeiro/nfe/nova?refazer={{ n.id }}">Corrigir e reenviar</a>{% endif %}
+    {% if nfe_pode_descartar(n) %}<form method="post" action="/financeiro/nfe/{{ n.id }}/descartar" onsubmit="return confirm('Descartar {{ n.rotulo }}? Ela nunca foi autorizada; o número fica livre para a próxima NF-e.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">🗑 Descartar</button></form>{% endif %}
     <form method="post" action="/financeiro/nfe/{{ n.id }}/consultar"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sec">↻ Consultar</button></form>
     <a class="btn sec" href="/financeiro/nfe">Voltar</a>
   </div>

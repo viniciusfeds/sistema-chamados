@@ -3258,6 +3258,20 @@ def test_nfe_produtos_e_danfe(monkeypatch):
     _sefaz_falsa(monkeypatch, pedidos)
     r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", refazer_id=rid))
     assert "NF-e 2 (teste) autorizada" in r.text
+    # rejeitada que não vai ser usada: descartar libera o número
+    _sefaz_falsa(monkeypatch, pedidos, rejeitar=("225", "Falha no Schema XML"))
+    adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id=""))
+    with SessionLocal() as db:
+        rej = db.scalars(select(NotaProduto).where(NotaProduto.status == "rejeitada")).one()
+        assert rej.numero == 3; rid = rej.id
+    pg = adm.get(f"/financeiro/nfe/{rid}").text
+    assert "Descartar" in pg
+    r = adm.post(f"/financeiro/nfe/{rid}/descartar", data={"csrf": _csrf(pg)})
+    assert "número 3 volta a ser usado" in r.text
+    assert adm.post(f"/financeiro/nfe/{nid}/descartar", data={"csrf": _csrf(pg)}).status_code in (200, 303)
+    with SessionLocal() as db:
+        assert db.get(NotaProduto, rid) is None and db.get(NotaProduto, nid) is not None
+    _sefaz_falsa(monkeypatch, pedidos)
     # sem NCM não envia
     antes = len(pedidos)
     r = adm.post("/financeiro/nfe/emitir", data=dict(form, orcamento_id="", item_ncm=""))
